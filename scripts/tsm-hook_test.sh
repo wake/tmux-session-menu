@@ -15,6 +15,7 @@ FAIL_COUNT=0
 # --- Helpers ------------------------------------------------------------------
 
 setup_env() {
+  ORIG_PATH="$PATH"
   # Create a fresh temp dir for each test
   TEST_TMP="$(mktemp -d)"
   export TSM_STATUS_DIR="$TEST_TMP/status"
@@ -35,6 +36,7 @@ MOCK
 
 teardown_env() {
   rm -rf "$TEST_TMP"
+  export PATH="$ORIG_PATH"
 }
 
 assert_status() {

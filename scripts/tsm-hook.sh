@@ -54,8 +54,9 @@ esac
 # --- Write status JSON -------------------------------------------------------
 mkdir -p "$TSM_STATUS_DIR"
 
-TIMESTAMP="$(python3 -c 'import time; print(int(time.time()))')"
+TIMESTAMP="$(date +%s)"
 
+TMP_FILE="$(mktemp "$TSM_STATUS_DIR/.tsm-hook.XXXXXX")"
 printf '{"status":"%s","timestamp":%s,"event":"%s"}\n' \
-  "$STATUS" "$TIMESTAMP" "$HOOK_EVENT" \
-  > "$TSM_STATUS_DIR/$SESSION_NAME"
+  "$STATUS" "$TIMESTAMP" "$HOOK_EVENT" > "$TMP_FILE"
+mv "$TMP_FILE" "$TSM_STATUS_DIR/$SESSION_NAME"
