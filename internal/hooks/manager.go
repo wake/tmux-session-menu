@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // tsmEvents 是 tsm 管理的 6 個 Claude Code hook event
@@ -51,14 +52,30 @@ func (m *Manager) readSettings() (map[string]interface{}, error) {
 	return settings, nil
 }
 
-// writeSettings 將 settings 寫回 settings.json
+// writeSettings 將 settings 寫回 settings.json（atomic write）
 func (m *Manager) writeSettings(settings map[string]interface{}) error {
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return fmt.Errorf("序列化 settings 失敗: %w", err)
+		return fmt.Errorf("serialize settings: %w", err)
 	}
-	if err := os.WriteFile(m.settingsPath, data, 0644); err != nil {
-		return fmt.Errorf("寫入 settings.json 失敗: %w", err)
+	data = append(data, '\n') // trailing newline
+	tmp, err := os.CreateTemp(filepath.Dir(m.settingsPath), ".settings-*.json")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, m.settingsPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("rename settings: %w", err)
 	}
 	return nil
 }
@@ -141,6 +158,10 @@ func (m *Manager) Install(dryRun bool) (Result, error) {
 
 	changed := len(eventsAdded) > 0
 
+	if !changed {
+		return Result{Changed: false}, nil
+	}
+
 	// 產生 NewSettings JSON
 	newSettingsBytes, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
@@ -148,12 +169,12 @@ func (m *Manager) Install(dryRun bool) (Result, error) {
 	}
 
 	result := Result{
-		Changed:     changed,
+		Changed:     true,
 		EventsAdded: eventsAdded,
-		NewSettings: string(newSettingsBytes),
+		NewSettings: string(newSettingsBytes) + "\n",
 	}
 
-	if !dryRun && changed {
+	if !dryRun {
 		if err := m.writeSettings(settings); err != nil {
 			return Result{}, err
 		}
@@ -228,18 +249,22 @@ func (m *Manager) Uninstall(dryRun bool) (Result, error) {
 
 	changed := len(eventsRemoved) > 0
 
+	if !changed {
+		return Result{Changed: false}, nil
+	}
+
 	newSettingsBytes, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return Result{}, fmt.Errorf("序列化 settings 失敗: %w", err)
 	}
 
 	result := Result{
-		Changed:       changed,
+		Changed:       true,
 		EventsRemoved: eventsRemoved,
-		NewSettings:   string(newSettingsBytes),
+		NewSettings:   string(newSettingsBytes) + "\n",
 	}
 
-	if !dryRun && changed {
+	if !dryRun {
 		if err := m.writeSettings(settings); err != nil {
 			return Result{}, err
 		}
