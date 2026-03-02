@@ -47,7 +47,9 @@ func runTUI() {
 	}
 
 	dataDir := config.ExpandPath(cfg.DataDir)
-	os.MkdirAll(dataDir, 0o755)
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: 無法建立資料目錄 %s: %v\n", dataDir, err)
+	}
 
 	var st *store.Store
 	dbPath := filepath.Join(dataDir, "state.db")
@@ -83,14 +85,19 @@ func runTUI() {
 }
 
 func switchToSession(name string) {
+	var err error
 	if os.Getenv("TMUX") != "" {
-		osexec.Command("tmux", "switch-client", "-t", name).Run()
+		err = osexec.Command("tmux", "switch-client", "-t", name).Run()
 	} else {
 		cmd := osexec.Command("tmux", "attach-session", "-t", name)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		cmd.Run()
+		err = cmd.Run()
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 無法切換到 session %q: %v\n", name, err)
+		os.Exit(1)
 	}
 }
 

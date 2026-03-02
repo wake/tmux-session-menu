@@ -133,16 +133,21 @@ func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
 	return tmux.ResolveStatus(input)
 }
 
-// Init 實作 tea.Model 介面。
-func (m Model) Init() tea.Cmd {
+// pollInterval 回傳設定的輪詢間隔，若未設定則預設 2 秒。
+func (m Model) pollInterval() time.Duration {
 	interval := time.Duration(m.deps.Cfg.PollIntervalSec) * time.Second
 	if interval <= 0 {
-		interval = 2 * time.Second
+		return 2 * time.Second
 	}
+	return interval
+}
+
+// Init 實作 tea.Model 介面。
+func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.SetWindowTitle("tmux session menu"),
 		loadSessionsCmd(m.deps),
-		tickCmd(interval),
+		tickCmd(m.pollInterval()),
 	)
 }
 
@@ -164,11 +169,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case TickMsg:
-		interval := time.Duration(m.deps.Cfg.PollIntervalSec) * time.Second
-		if interval <= 0 {
-			interval = 2 * time.Second
-		}
-		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(interval))
+		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
@@ -198,7 +199,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor >= 0 && m.cursor < len(m.items) {
 				item := m.items[m.cursor]
 				if item.Type == ItemGroup && m.deps.Store != nil {
-					m.deps.Store.ToggleGroupCollapsed(item.Group.ID)
+					if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
+						m.err = err
+						return m, nil
+					}
 					return m, loadSessionsCmd(m.deps)
 				}
 			}
@@ -264,6 +268,11 @@ func (m Model) View() string {
 					cursor, name, styledIcon, relTime, aiModel))
 			}
 		}
+	}
+
+	// Error display
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf("\n  %s\n", statusErrorStyle.Render("Error: "+m.err.Error())))
 	}
 
 	// Help bar
