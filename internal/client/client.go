@@ -160,17 +160,22 @@ func (c *Client) DaemonStatus(ctx context.Context) (*tsmv1.DaemonStatusResponse,
 
 // tryConnect 嘗試連線到 unix socket。
 func tryConnect(sockPath string) (*grpc.ClientConn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx,
+	conn, err := grpc.NewClient(
 		"unix://"+sockPath,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("dial unix socket %s: %w", sockPath, err)
 	}
+
+	// 驗證連線是否可用（socket 是否存在）
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := tsmv1.NewSessionManagerClient(conn).DaemonStatus(ctx, &emptypb.Empty{}); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("connect to daemon at %s: %w", sockPath, err)
+	}
+
 	return conn, nil
 }
 

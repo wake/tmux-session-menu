@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -22,7 +23,9 @@ type StateManager struct {
 	cfg       config.Config
 	statusDir string
 	hub       *WatcherHub
-	last      *tsmv1.StateSnapshot
+
+	mu   sync.RWMutex
+	last *tsmv1.StateSnapshot
 }
 
 // NewStateManager 建立新的 StateManager。
@@ -66,14 +69,21 @@ func (sm *StateManager) scan() {
 	if snap == nil {
 		return
 	}
-	if sm.last == nil || !proto.Equal(sm.last, snap) {
+	sm.mu.Lock()
+	changed := sm.last == nil || !proto.Equal(sm.last, snap)
+	if changed {
 		sm.last = snap
+	}
+	sm.mu.Unlock()
+	if changed {
 		sm.hub.Broadcast(snap)
 	}
 }
 
 // Snapshot 回傳最近一次的快照（可能為 nil）。
 func (sm *StateManager) Snapshot() *tsmv1.StateSnapshot {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
 	return sm.last
 }
 
@@ -86,7 +96,7 @@ func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 
 	sessions, err := sm.tmuxMgr.ListSessions()
 	if err != nil {
-		return sm.last // 掃描失敗時保留上次快照
+		return sm.Snapshot() // 掃描失敗時保留上次快照
 	}
 
 	previewLines := sm.cfg.PreviewLines

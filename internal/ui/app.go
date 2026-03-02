@@ -198,6 +198,9 @@ type SnapshotMsg struct {
 	Err      error
 }
 
+// reconnectMsg 觸發 Watch stream 重連。
+type reconnectMsg struct{}
+
 // errMsg 封裝非同步操作回傳的錯誤。
 type errMsg struct{ err error }
 
@@ -288,6 +291,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SnapshotMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
+			// Watch stream 斷線後延遲 2 秒重連
+			if m.deps.Client != nil {
+				return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+					return reconnectMsg{}
+				})
+			}
 			return m, nil
 		}
 		sessions := ConvertProtoSessions(msg.Snapshot.Sessions)
@@ -309,6 +318,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.items = FlattenItems(msg.Groups, msg.Sessions)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
+		}
+		return m, nil
+	case reconnectMsg:
+		if m.deps.Client != nil {
+			m.err = nil
+			return m, watchCmd(m.deps.Client)
 		}
 		return m, nil
 	case errMsg:

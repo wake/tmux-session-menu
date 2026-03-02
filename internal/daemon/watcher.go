@@ -52,12 +52,16 @@ func (h *WatcherHub) Broadcast(snap *tsmv1.StateSnapshot) {
 	}
 
 	for _, ch := range h.watchers {
-		// 非阻塞：若 buffer 已滿，先排空再寫入新快照
+		// 非阻塞：先排空舊快照，再嘗試寫入新快照。
+		// 兩步都用 select 確保不會阻塞。
 		select {
 		case <-ch:
 		default:
 		}
-		ch <- snap
+		select {
+		case ch <- snap:
+		default:
+		}
 	}
 }
 

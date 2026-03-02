@@ -54,7 +54,7 @@ func (d *Daemon) Run() error {
 	os.Remove(sockPath)
 
 	// 寫入 PID 檔案
-	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 		return fmt.Errorf("write pid file: %w", err)
 	}
 	defer os.Remove(pidPath)
@@ -63,6 +63,11 @@ func (d *Daemon) Run() error {
 	lis, err := net.Listen("unix", sockPath)
 	if err != nil {
 		return fmt.Errorf("listen unix socket: %w", err)
+	}
+	// 限制 socket 權限為僅限本人存取
+	if err := os.Chmod(sockPath, 0o600); err != nil {
+		lis.Close()
+		return fmt.Errorf("chmod socket: %w", err)
 	}
 	defer func() {
 		lis.Close()
@@ -100,6 +105,7 @@ func (d *Daemon) Run() error {
 	// 監聽系統信號
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	defer signal.Stop(sigCh)
 
 	go func() {
 		<-sigCh
