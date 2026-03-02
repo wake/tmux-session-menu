@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/daemon"
 	"github.com/wake/tmux-session-menu/internal/hooks"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
@@ -60,6 +62,11 @@ func main() {
 		return
 	}
 
+	if args[0] == "daemon" {
+		runDaemon(args[1:])
+		return
+	}
+
 	printUsage()
 	os.Exit(1)
 }
@@ -91,7 +98,7 @@ func runWithMode(mode runMode) {
 	runTUI()
 }
 
-func runTUI() {
+func loadConfig() config.Config {
 	cfg := config.Default()
 	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
 	if data, err := os.ReadFile(cfgPath); err == nil {
@@ -99,7 +106,50 @@ func runTUI() {
 			cfg = loaded
 		}
 	}
+	return cfg
+}
 
+func runTUI() {
+	cfg := loadConfig()
+
+	// 嘗試連線 daemon（會自動啟動）
+	c, err := client.Dial(cfg)
+	if err == nil {
+		defer c.Close()
+		runTUIWithClient(c, cfg)
+		return
+	}
+
+	// Daemon 連線失敗，降級到直接模式
+	fmt.Fprintf(os.Stderr, "Warning: daemon 連線失敗，使用直接模式: %v\n", err)
+	runTUILegacy(cfg)
+}
+
+// runTUIWithClient 使用 gRPC daemon 模式啟動 TUI。
+func runTUIWithClient(c *client.Client, cfg config.Config) {
+	deps := ui.Deps{
+		Client: c,
+		Cfg:    cfg,
+	}
+
+	m := ui.NewModel(deps)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if m, ok := finalModel.(ui.Model); ok {
+		if selected := m.Selected(); selected != "" {
+			switchToSession(selected)
+		}
+	}
+}
+
+// runTUILegacy 使用舊的直接模式啟動 TUI（不透過 daemon）。
+func runTUILegacy(cfg config.Config) {
 	dataDir := config.ExpandPath(cfg.DataDir)
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: 無法建立資料目錄 %s: %v\n", dataDir, err)
@@ -260,7 +310,10 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: tsm [command] [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  (no args)          啟動 TUI 選單")
+	fmt.Fprintln(os.Stderr, "  (no args)          啟動 TUI 選單（自動管理 daemon）")
+	fmt.Fprintln(os.Stderr, "  daemon start       前景啟動 daemon")
+	fmt.Fprintln(os.Stderr, "  daemon stop        停止 daemon")
+	fmt.Fprintln(os.Stderr, "  daemon status      顯示 daemon 狀態")
 	fmt.Fprintln(os.Stderr, "  hooks install      安裝 tsm hooks 到 Claude Code settings")
 	fmt.Fprintln(os.Stderr, "  hooks uninstall    移除 tsm hooks")
 	fmt.Fprintln(os.Stderr, "")
@@ -268,6 +321,54 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  --inline           強制使用內嵌全螢幕模式")
 	fmt.Fprintln(os.Stderr, "  --popup            強制使用 tmux popup 模式")
 	fmt.Fprintln(os.Stderr, "  --dry-run          預覽變更，不實際寫入")
+}
+
+func runDaemon(args []string) {
+	if len(args) == 0 {
+		printDaemonUsage()
+		os.Exit(1)
+		return
+	}
+
+	if args[0] == "--help" || args[0] == "-h" {
+		printDaemonUsage()
+		return
+	}
+
+	cfg := loadConfig()
+
+	switch args[0] {
+	case "start":
+		d := daemon.NewDaemon(cfg)
+		if err := d.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case "stop":
+		if err := daemon.Stop(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case "status":
+		status, err := daemon.Status(cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(status)
+	default:
+		printDaemonUsage()
+		os.Exit(1)
+	}
+}
+
+func printDaemonUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: tsm daemon <command>")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Commands:")
+	fmt.Fprintln(os.Stderr, "  start      前景啟動 daemon")
+	fmt.Fprintln(os.Stderr, "  stop       停止 daemon（送 SIGTERM）")
+	fmt.Fprintln(os.Stderr, "  status     顯示 daemon 狀態")
 }
 
 func printHooksUsage() {
