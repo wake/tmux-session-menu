@@ -143,3 +143,16 @@ func TestManager_CapturePane(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "line 1\nline 2\nline 3", output)
 }
+
+func TestManager_ListPaneTitles(t *testing.T) {
+	mock := &mockExecutor{
+		outputs: map[string]string{
+			"list-panes -a -F #{session_name}:#{pane_title}": "dev:⠋ Working\nops:✓ Done\n",
+		},
+	}
+	mgr := tmux.NewManager(mock)
+	titles, err := mgr.ListPaneTitles()
+	assert.NoError(t, err)
+	assert.Equal(t, "⠋ Working", titles["dev"])
+	assert.Equal(t, "✓ Done", titles["ops"])
+}

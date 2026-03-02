@@ -89,3 +89,12 @@ func (m *Manager) NewSession(name, path string) error {
 func (m *Manager) CapturePane(name string, lines int) (string, error) {
 	return m.exec.Execute("capture-pane", "-t", name, "-p", "-S", fmt.Sprintf("-%d", lines))
 }
+
+// ListPaneTitles 列出所有 pane 的 title，回傳 session name → pane title 的對應。
+func (m *Manager) ListPaneTitles() (map[string]string, error) {
+	output, err := m.exec.Execute("list-panes", "-a", "-F", PaneTitleFormat)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListPaneTitles(output)
+}

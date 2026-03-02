@@ -432,3 +432,44 @@ func applyKey(m ui.Model, key string) (ui.Model, tea.Cmd) {
 	updated, cmd := m.Update(msg)
 	return updated.(ui.Model), cmd
 }
+
+// flexMockExecutor 使用 handler 函式處理所有 tmux 指令，方便彈性模擬。
+type flexMockExecutor struct {
+	handler func(args []string) (string, error)
+}
+
+func (e *flexMockExecutor) Execute(args ...string) (string, error) {
+	return e.handler(args)
+}
+
+func TestLoadSessions_UsesLayer2PaneTitle(t *testing.T) {
+	flex := &flexMockExecutor{
+		handler: func(args []string) (string, error) {
+			if len(args) == 0 {
+				return "", nil
+			}
+			switch args[0] {
+			case "list-sessions":
+				return "dev:$1:1:/home:0:1700000000\n", nil
+			case "list-panes":
+				// pane title 包含 Braille 旋轉指標
+				return "dev:⠋ Working on feature\n", nil
+			case "capture-pane":
+				// pane 內容為空（無第三層指標）
+				return "", nil
+			}
+			return "", nil
+		},
+	}
+	mgr := tmux.NewManager(flex)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
+
+	cmd := m.Init()
+	sessMsg := findSessionsMsg(t, cmd)
+
+	assert.Nil(t, sessMsg.Err)
+	assert.Equal(t, 1, len(sessMsg.Sessions))
+	// 第二層偵測：pane title 含 Braille 旋轉指標 → StatusRunning
+	assert.Equal(t, tmux.StatusRunning, sessMsg.Sessions[0].Status,
+		"pane title 含 Braille 旋轉指標，應偵測為 StatusRunning")
+}

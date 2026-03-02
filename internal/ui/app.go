@@ -73,6 +73,14 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 			previewLines = 150
 		}
 
+		// 第二層：一次取得所有 pane title
+		paneTitles := make(map[string]string)
+		if deps.TmuxMgr != nil {
+			if titles, err := deps.TmuxMgr.ListPaneTitles(); err == nil {
+				paneTitles = titles
+			}
+		}
+
 		// 狀態偵測與 AI 模型偵測
 		for i := range sessions {
 			var paneContent string
@@ -81,7 +89,8 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 					paneContent = content
 				}
 			}
-			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name, paneContent)
+			paneTitle := paneTitles[sessions[i].Name]
+			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name, paneTitle, paneContent)
 			sessions[i].AIModel = ai.DetectModel(paneContent)
 		}
 
@@ -125,7 +134,7 @@ func tickCmd(interval time.Duration) tea.Cmd {
 }
 
 // detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態。
-func detectSessionStatus(deps Deps, sessionName string, paneContent string) tmux.SessionStatus {
+func detectSessionStatus(deps Deps, sessionName, paneTitle, paneContent string) tmux.SessionStatus {
 	var input tmux.StatusInput
 
 	// 第一層：Hook 狀態檔案
@@ -137,6 +146,7 @@ func detectSessionStatus(deps Deps, sessionName string, paneContent string) tmux
 
 	// 第二層（pane title）+ 第三層（terminal content）：只在 hook 無效時執行
 	if input.HookStatus == nil || !input.HookStatus.IsValid() {
+		input.PaneTitle = paneTitle
 		input.PaneContent = paneContent
 	}
 
