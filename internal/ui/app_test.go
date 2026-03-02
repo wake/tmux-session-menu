@@ -1,6 +1,9 @@
 package ui_test
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -184,6 +187,41 @@ func TestModel_Enter_OnGroup_DoesNotSelect(t *testing.T) {
 
 	assert.Equal(t, "", model.Selected())
 	assert.Nil(t, cmd) // should NOT quit
+}
+
+func TestModel_LoadSessions_WithHookStatus(t *testing.T) {
+	// 建立暫時 status 目錄
+	statusDir := t.TempDir()
+	statusFile := filepath.Join(statusDir, "dev")
+	data := []byte(`{"status":"running","timestamp":` + fmt.Sprintf("%d", time.Now().Unix()) + `,"event":"UserPromptSubmit"}`)
+	os.WriteFile(statusFile, data, 0o644)
+
+	mockExec := &mockExecutor{
+		output: "dev:$1:1:/home:0:1700000000\n",
+	}
+	mgr := tmux.NewManager(mockExec)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr, StatusDir: statusDir})
+
+	cmd := m.Init()
+	msg := cmd()
+	// Handle tea.Batch — drill into BatchMsg to find SessionsMsg
+	batchMsg, ok := msg.(tea.BatchMsg)
+	if ok {
+		for _, c := range batchMsg {
+			if c == nil {
+				continue
+			}
+			inner := c()
+			if sessMsg, ok := inner.(ui.SessionsMsg); ok {
+				assert.Equal(t, tmux.StatusRunning, sessMsg.Sessions[0].Status)
+				return
+			}
+		}
+		t.Fatal("no SessionsMsg found in batch")
+	}
+	sessMsg, ok := msg.(ui.SessionsMsg)
+	assert.True(t, ok)
+	assert.Equal(t, tmux.StatusRunning, sessMsg.Sessions[0].Status)
 }
 
 func applyKey(m ui.Model, key string) (ui.Model, tea.Cmd) {

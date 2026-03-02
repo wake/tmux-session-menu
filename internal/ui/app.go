@@ -64,8 +64,37 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 		if err != nil {
 			return SessionsMsg{Err: err}
 		}
+
+		// 狀態偵測
+		for i := range sessions {
+			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name)
+		}
+
 		return SessionsMsg{Sessions: sessions}
 	}
+}
+
+// detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態。
+func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
+	var input tmux.StatusInput
+
+	// 第一層：Hook 狀態檔案
+	if deps.StatusDir != "" {
+		if hs, err := tmux.ReadHookStatus(deps.StatusDir, sessionName); err == nil {
+			input.HookStatus = &hs
+		}
+	}
+
+	// 第二層 + 第三層：只在 hook 無效時執行
+	if input.HookStatus == nil || !input.HookStatus.IsValid() {
+		if deps.TmuxMgr != nil {
+			if content, err := deps.TmuxMgr.CapturePane(sessionName, 50); err == nil {
+				input.PaneContent = content
+			}
+		}
+	}
+
+	return tmux.ResolveStatus(input)
 }
 
 // Init 實作 tea.Model 介面。
