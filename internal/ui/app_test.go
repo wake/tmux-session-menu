@@ -442,6 +442,129 @@ func (e *flexMockExecutor) Execute(args ...string) (string, error) {
 	return e.handler(args)
 }
 
+// --- Mode 相關測試 ---
+
+func TestModel_ModeInput_EscCancels(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 按 n 進入 ModeInput
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	// 按 Esc 回到 ModeNormal
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+}
+
+func TestModel_ModeInput_RenderPrompt(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 按 n 進入 ModeInput
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	view := m.View()
+	assert.Contains(t, view, "Session 名稱")
+	assert.Contains(t, view, "\u2588") // 游標方塊字元
+}
+
+func TestModel_ModeInput_BackspaceWorks(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 進入 ModeInput
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	// 輸入 "abc"
+	m, _ = applyKey(m, "a")
+	m, _ = applyKey(m, "b")
+	m, _ = applyKey(m, "c")
+	assert.Equal(t, "abc", m.InputValue())
+
+	// 按 Backspace 刪除一個字元
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	model := updated.(ui.Model)
+	assert.Equal(t, "ab", model.InputValue())
+}
+
+func TestModel_ModeConfirm_YConfirms(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 進入 ModeConfirm
+	called := false
+	m.SetConfirm("確定要刪除？", func() tea.Cmd {
+		called = true
+		return nil
+	})
+	assert.Equal(t, ui.ModeConfirm, m.Mode())
+
+	// 按 y 確認
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.True(t, called, "confirmAction 應被呼叫")
+}
+
+func TestModel_ModeConfirm_EscCancels(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 進入 ModeConfirm
+	called := false
+	m.SetConfirm("確定要刪除？", func() tea.Cmd {
+		called = true
+		return nil
+	})
+	assert.Equal(t, ui.ModeConfirm, m.Mode())
+
+	// 按 Esc 取消
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.False(t, called, "confirmAction 不應被呼叫")
+}
+
+func TestModel_ModeInput_EnterReturnsToNormal(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 進入 ModeInput
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	// 輸入一些文字再按 Enter
+	m, _ = applyKey(m, "t")
+	m, _ = applyKey(m, "e")
+	m, _ = applyKey(m, "s")
+	m, _ = applyKey(m, "t")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.Equal(t, "", model.InputValue()) // 輸入值應被清空
+}
+
+func TestModel_ModeConfirm_RenderPrompt(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetConfirm("確定要刪除？", func() tea.Cmd { return nil })
+
+	view := m.View()
+	assert.Contains(t, view, "確定要刪除？")
+	assert.Contains(t, view, "確認")
+	assert.Contains(t, view, "取消")
+}
+
+func TestModel_ModeInput_EscDoesNotQuit(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 按 n 進入 ModeInput
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	// 按 Esc 不應退出程式，只應回到 ModeNormal
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	assert.Nil(t, cmd, "ModeInput 中按 Esc 不應回傳 tea.Quit")
+}
+
 func TestLoadSessions_UsesLayer2PaneTitle(t *testing.T) {
 	flex := &flexMockExecutor{
 		handler: func(args []string) (string, error) {

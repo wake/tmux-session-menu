@@ -32,6 +32,15 @@ type Model struct {
 	deps     Deps
 	selected string // Enter 選取的 session name
 	err      error
+
+	// Mode 相關
+	mode        Mode
+	inputTarget InputTarget
+	inputPrompt string
+	inputValue  string
+
+	confirmPrompt string
+	confirmAction func() tea.Cmd
 }
 
 // NewModel 建立初始 Model。
@@ -54,6 +63,16 @@ func (m Model) Items() []ListItem {
 // Selected 回傳使用者按 Enter 選取的 session name（空字串表示未選取）。
 func (m Model) Selected() string {
 	return m.selected
+}
+
+// Mode 回傳目前的互動模式。
+func (m Model) Mode() Mode {
+	return m.mode
+}
+
+// InputValue 回傳目前的輸入值（主要用於測試）。
+func (m Model) InputValue() string {
+	return m.inputValue
 }
 
 // loadSessionsCmd 建立一個 tea.Cmd，透過 TmuxMgr 載入 session 列表。
@@ -191,45 +210,132 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TickMsg:
 		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			m.quitting = true
-			return m, tea.Quit
-		case "j", "down":
-			if m.cursor < len(m.items)-1 {
-				m.cursor++
-			}
-			return m, nil
-		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-			return m, nil
-		case "enter":
-			if m.cursor >= 0 && m.cursor < len(m.items) {
-				item := m.items[m.cursor]
-				if item.Type == ItemSession {
-					m.selected = item.Session.Name
-					m.quitting = true
-					return m, tea.Quit
-				}
-			}
-			return m, nil
-		case "tab":
-			if m.cursor >= 0 && m.cursor < len(m.items) {
-				item := m.items[m.cursor]
-				if item.Type == ItemGroup && m.deps.Store != nil {
-					if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
-						m.err = err
-						return m, nil
-					}
-					return m, loadSessionsCmd(m.deps)
-				}
-			}
-			return m, nil
+		switch m.mode {
+		case ModeInput:
+			return m.updateInput(msg)
+		case ModeConfirm:
+			return m.updateConfirm(msg)
+		default:
+			return m.updateNormal(msg)
 		}
 	}
 	return m, nil
+}
+
+// updateNormal 處理一般瀏覽模式的按鍵。
+func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "esc", "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "j", "down":
+		if m.cursor < len(m.items)-1 {
+			m.cursor++
+		}
+		return m, nil
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+		return m, nil
+	case "enter":
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession {
+				m.selected = item.Session.Name
+				m.quitting = true
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+	case "tab":
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemGroup && m.deps.Store != nil {
+				if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
+					m.err = err
+					return m, nil
+				}
+				return m, loadSessionsCmd(m.deps)
+			}
+		}
+		return m, nil
+	case "n":
+		m.mode = ModeInput
+		m.inputTarget = InputNewSession
+		m.inputPrompt = "Session 名稱"
+		m.inputValue = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+// updateInput 處理文字輸入模式的按鍵。
+func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		// 取消輸入，回到一般模式
+		m.mode = ModeNormal
+		m.inputValue = ""
+		m.inputPrompt = ""
+		return m, nil
+	case tea.KeyBackspace:
+		// 刪除最後一個字元
+		if len(m.inputValue) > 0 {
+			runes := []rune(m.inputValue)
+			m.inputValue = string(runes[:len(runes)-1])
+		}
+		return m, nil
+	case tea.KeyEnter:
+		// 提交輸入（目前所有 target 都只回到一般模式，實際動作在後續 Task 實作）
+		switch m.inputTarget {
+		case InputNewSession:
+			// Task 4 將實作新建 session
+		case InputRenameSession:
+			// Task 6 將實作重命名 session
+		case InputNewGroup:
+			// Task 8 將實作新建群組
+		}
+		m.mode = ModeNormal
+		m.inputValue = ""
+		m.inputPrompt = ""
+		return m, nil
+	case tea.KeyRunes:
+		// 附加輸入字元
+		m.inputValue += string(msg.Runes)
+		return m, nil
+	}
+	return m, nil
+}
+
+// updateConfirm 處理確認對話框模式的按鍵。
+func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y", "enter":
+		// 執行確認動作
+		var cmd tea.Cmd
+		if m.confirmAction != nil {
+			cmd = m.confirmAction()
+			m.confirmAction = nil
+		}
+		m.mode = ModeNormal
+		m.confirmPrompt = ""
+		return m, cmd
+	case "n", "N", "esc":
+		// 取消確認
+		m.mode = ModeNormal
+		m.confirmPrompt = ""
+		m.confirmAction = nil
+		return m, nil
+	}
+	return m, nil
+}
+
+// SetConfirm 設定確認模式（主要用於測試）。
+func (m *Model) SetConfirm(prompt string, action func() tea.Cmd) {
+	m.mode = ModeConfirm
+	m.confirmPrompt = prompt
+	m.confirmAction = action
 }
 
 // View 渲染 TUI 畫面。
@@ -295,11 +401,25 @@ func (m Model) View() string {
 		b.WriteString(fmt.Sprintf("\n  %s\n", statusErrorStyle.Render("Error: "+m.err.Error())))
 	}
 
-	// Help bar
-	b.WriteString(fmt.Sprintf("\n  %s  %s  %s\n",
-		dimStyle.Render("[n] 新建"),
-		dimStyle.Render("[g] 新群組"),
-		dimStyle.Render("[q] 離開")))
+	// 模式相關的底部列
+	switch m.mode {
+	case ModeInput:
+		b.WriteString(fmt.Sprintf("\n  %s: %s%s\n",
+			selectedStyle.Render(m.inputPrompt),
+			m.inputValue,
+			selectedStyle.Render("\u2588"))) // 游標方塊字元
+		b.WriteString(fmt.Sprintf("  %s\n",
+			dimStyle.Render("[Esc] 取消")))
+	case ModeConfirm:
+		b.WriteString(fmt.Sprintf("\n  %s  %s\n",
+			selectedStyle.Render(m.confirmPrompt),
+			dimStyle.Render("[y] 確認  [n/Esc] 取消")))
+	default:
+		b.WriteString(fmt.Sprintf("\n  %s  %s  %s\n",
+			dimStyle.Render("[n] 新建"),
+			dimStyle.Render("[g] 新群組"),
+			dimStyle.Render("[q] 離開")))
+	}
 
 	// Preview section
 	if len(m.items) > 0 && m.cursor >= 0 && m.cursor < len(m.items) {
