@@ -1067,3 +1067,156 @@ func TestModel_MoveSession_NoGroups_NoOp(t *testing.T) {
 	m, _ = applyKey(m, "m")
 	assert.Equal(t, ui.ModeNormal, m.Mode(), "無群組時按 m 應保持 ModeNormal")
 }
+
+// --- 搜尋模式 (/ key) 相關測試 ---
+
+func TestModel_Search_FiltersItems(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha-1"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha-2"}},
+	})
+
+	// 按 / 進入搜尋模式
+	m, _ = applyKey(m, "/")
+	assert.Equal(t, ui.ModeSearch, m.Mode(), "按 / 後應進入 ModeSearch")
+
+	// 輸入 "alpha"
+	for _, ch := range "alpha" {
+		m, _ = applyKey(m, string(ch))
+	}
+	assert.Equal(t, "alpha", m.SearchQuery())
+
+	// View 應只包含 alpha 相關的 session
+	view := m.View()
+	assert.Contains(t, view, "alpha-1", "搜尋 alpha 後應顯示 alpha-1")
+	assert.Contains(t, view, "alpha-2", "搜尋 alpha 後應顯示 alpha-2")
+	assert.NotContains(t, view, "beta", "搜尋 alpha 後不應顯示 beta")
+	// 群組也不應出現
+	assert.NotContains(t, view, "▼", "搜尋時不應顯示群組標頭")
+}
+
+func TestModel_Search_EscClears(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "gamma"}},
+	})
+
+	// 進入搜尋模式並輸入
+	m, _ = applyKey(m, "/")
+	for _, ch := range "alpha" {
+		m, _ = applyKey(m, string(ch))
+	}
+	assert.Equal(t, ui.ModeSearch, m.Mode())
+
+	// 按 Esc 取消搜尋
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	model := updated.(ui.Model)
+
+	assert.Equal(t, ui.ModeNormal, model.Mode(), "Esc 後應回到 ModeNormal")
+	assert.Equal(t, "", model.SearchQuery(), "Esc 後 searchQuery 應清空")
+
+	// View 應顯示所有項目
+	view := model.View()
+	assert.Contains(t, view, "alpha")
+	assert.Contains(t, view, "beta")
+	assert.Contains(t, view, "gamma")
+}
+
+func TestModel_Search_EnterSelectsFiltered(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "gamma"}},
+	})
+
+	// 進入搜尋模式並輸入 "beta"
+	m, _ = applyKey(m, "/")
+	for _, ch := range "beta" {
+		m, _ = applyKey(m, string(ch))
+	}
+
+	// 按 Enter 選擇（cursor 應在第一個過濾結果上）
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	assert.Equal(t, "beta", model.Selected(), "Enter 應選取過濾結果中的 beta")
+	assert.NotNil(t, cmd, "應回傳 tea.Quit")
+}
+
+func TestModel_Search_NavigationInResults(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha-1"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha-2"}},
+	})
+
+	// 進入搜尋模式並輸入 "alpha"
+	m, _ = applyKey(m, "/")
+	for _, ch := range "alpha" {
+		m, _ = applyKey(m, string(ch))
+	}
+	// cursor 應重設為 0
+	assert.Equal(t, 0, m.Cursor())
+
+	// 按 down 向下移動（搜尋模式中用方向鍵導航）
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.Cursor(), "按 down 後 cursor 應為 1")
+
+	// 按 down 不能超過底部（只有 2 個過濾結果）
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.Cursor(), "不能超過底部")
+
+	// 按 up 向上移動
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.Cursor(), "按 up 後 cursor 應為 0")
+
+	// 按 up 不能超過頂部
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.Cursor(), "不能超過頂部")
+
+	// 按 down 再按 Enter 應選取 alpha-2
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+	assert.Equal(t, "alpha-2", model.Selected(), "Enter 應選取 alpha-2")
+	assert.NotNil(t, cmd)
+}
+
+func TestModel_Search_BackspaceWorks(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "abc"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "abd"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "xyz"}},
+	})
+
+	// 進入搜尋模式並輸入 "abc"
+	m, _ = applyKey(m, "/")
+	for _, ch := range "abc" {
+		m, _ = applyKey(m, string(ch))
+	}
+	assert.Equal(t, "abc", m.SearchQuery())
+
+	// 按 Backspace 刪除最後一個字元
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = updated.(ui.Model)
+	assert.Equal(t, "ab", m.SearchQuery(), "Backspace 後 query 應為 ab")
+
+	// View 應顯示 abc 和 abd（都包含 "ab"），不顯示 xyz
+	view := m.View()
+	assert.Contains(t, view, "abc")
+	assert.Contains(t, view, "abd")
+	assert.NotContains(t, view, "xyz")
+}

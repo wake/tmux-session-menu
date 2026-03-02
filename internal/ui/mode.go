@@ -8,6 +8,7 @@ const (
 	ModeInput               // 文字輸入
 	ModeConfirm             // 確認對話框
 	ModePicker              // 選擇器（例如選擇群組）
+	ModeSearch              // 搜尋模式
 )
 
 // InputTarget 標識文字輸入的目的。

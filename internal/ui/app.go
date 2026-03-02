@@ -46,6 +46,9 @@ type Model struct {
 	pickerGroups []store.Group
 	pickerCursor int
 	pickerTarget string // 被移動的 session name
+
+	// Search mode（搜尋）
+	searchQuery string
 }
 
 // NewModel 建立初始 Model。
@@ -83,6 +86,30 @@ func (m Model) InputValue() string {
 // Err 回傳目前的錯誤（主要用於測試）。
 func (m Model) Err() error {
 	return m.err
+}
+
+// SearchQuery 回傳目前的搜尋字串（主要用於測試）。
+func (m Model) SearchQuery() string {
+	return m.searchQuery
+}
+
+// visibleItems 回傳目前可見的項目（搜尋時過濾）。
+func (m Model) visibleItems() []ListItem {
+	if m.mode != ModeSearch || m.searchQuery == "" {
+		return m.items
+	}
+	query := strings.ToLower(m.searchQuery)
+	var filtered []ListItem
+	for _, item := range m.items {
+		if item.Type == ItemGroup {
+			continue
+		}
+		if strings.Contains(strings.ToLower(item.Session.DisplayName()), query) ||
+			strings.Contains(strings.ToLower(item.Session.Name), query) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 // loadSessionsCmd 建立一個 tea.Cmd，透過 TmuxMgr 載入 session 列表。
@@ -234,6 +261,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateConfirm(msg)
 		case ModePicker:
 			return m.updatePicker(msg)
+		case ModeSearch:
+			return m.updateSearch(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -321,6 +350,12 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pickerTarget = item.Session.Name
 			}
 		}
+		return m, nil
+	case "/":
+		// 進入搜尋模式
+		m.mode = ModeSearch
+		m.searchQuery = ""
+		m.cursor = 0
 		return m, nil
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
@@ -464,6 +499,51 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// updateSearch 處理搜尋模式的按鍵。
+func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEscape:
+		m.mode = ModeNormal
+		m.searchQuery = ""
+		m.cursor = 0
+	case tea.KeyEnter:
+		visible := m.visibleItems()
+		if m.cursor >= 0 && m.cursor < len(visible) {
+			item := visible[m.cursor]
+			if item.Type == ItemSession {
+				m.selected = item.Session.Name
+				m.quitting = true
+				return m, tea.Quit
+			}
+		}
+	case tea.KeyBackspace:
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+		}
+		visible := m.visibleItems()
+		if m.cursor >= len(visible) && len(visible) > 0 {
+			m.cursor = len(visible) - 1
+		}
+	case tea.KeyRunes:
+		m.searchQuery += string(msg.Runes)
+		m.cursor = 0
+	default:
+		// j/k 導航
+		switch msg.String() {
+		case "j", "down":
+			visible := m.visibleItems()
+			if m.cursor < len(visible)-1 {
+				m.cursor++
+			}
+		case "k", "up":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		}
+	}
+	return m, nil
+}
+
 // SetConfirm 設定確認模式（主要用於測試）。
 func (m *Model) SetConfirm(prompt string, action func() tea.Cmd) {
 	m.mode = ModeConfirm
@@ -485,9 +565,10 @@ func (m Model) View() string {
 	b.WriteString("\n")
 
 	// Items list
-	if len(m.items) > 0 {
+	displayItems := m.visibleItems()
+	if len(displayItems) > 0 {
 		b.WriteString("\n")
-		for i, item := range m.items {
+		for i, item := range displayItems {
 			cursor := "  "
 			if i == m.cursor {
 				cursor = selectedStyle.Render("► ")
@@ -557,6 +638,11 @@ func (m Model) View() string {
 			b.WriteString(fmt.Sprintf("  %s%s\n", cursor, g.Name))
 		}
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 確認  [Esc] 取消")))
+	case ModeSearch:
+		b.WriteString(fmt.Sprintf("\n  %s: %s█\n",
+			selectedStyle.Render("/"),
+			m.searchQuery))
+		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	default:
 		b.WriteString(fmt.Sprintf("\n  %s  %s  %s\n",
 			dimStyle.Render("[n] 新建"),
@@ -565,8 +651,9 @@ func (m Model) View() string {
 	}
 
 	// Preview section
-	if len(m.items) > 0 && m.cursor >= 0 && m.cursor < len(m.items) {
-		selected := m.items[m.cursor]
+	visible := m.visibleItems()
+	if len(visible) > 0 && m.cursor >= 0 && m.cursor < len(visible) {
+		selected := visible[m.cursor]
 		if selected.Type == ItemSession && selected.Session.AISummary != "" {
 			b.WriteString("\n")
 			b.WriteString(previewBorderStyle.Render(
