@@ -129,6 +129,29 @@ func (s *Store) ListSessionMetas(groupID int64) ([]SessionMeta, error) {
 	return metas, rows.Err()
 }
 
+func (s *Store) ToggleGroupCollapsed(id int64) error {
+	_, err := s.db.Exec("UPDATE groups SET collapsed = NOT collapsed WHERE id = ?", id)
+	return err
+}
+
+func (s *Store) ListAllSessionMetas() ([]SessionMeta, error) {
+	rows, err := s.db.Query(
+		"SELECT session_name, group_id, sort_order, custom_name FROM session_meta ORDER BY sort_order, session_name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var metas []SessionMeta
+	for rows.Next() {
+		var m SessionMeta
+		if err := rows.Scan(&m.SessionName, &m.GroupID, &m.SortOrder, &m.CustomName); err != nil {
+			return nil, err
+		}
+		metas = append(metas, m)
+	}
+	return metas, rows.Err()
+}
+
 func (s *Store) SetGroupOrder(id int64, sortOrder int) error {
 	_, err := s.db.Exec("UPDATE groups SET sort_order = ? WHERE id = ?", sortOrder, id)
 	return err
