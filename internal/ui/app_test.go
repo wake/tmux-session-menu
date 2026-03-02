@@ -848,6 +848,53 @@ func TestModel_Rename_PrefillsCurrentCustomName(t *testing.T) {
 	assert.Equal(t, "原本名稱", m.InputValue(), "應預填目前的自訂名稱")
 }
 
+// --- 新建群組 (g key) 相關測試 ---
+
+func TestModel_CreateGroup(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+
+	// 按 g 進入 ModeInput（InputNewGroup）
+	m, _ = applyKey(m, "g")
+	assert.Equal(t, ui.ModeInput, m.Mode(), "按 g 後應進入 ModeInput")
+
+	// 輸入 "工作"
+	for _, ch := range "工作" {
+		m, _ = applyKey(m, string(ch))
+	}
+	assert.Equal(t, "工作", m.InputValue())
+
+	// 按 Enter 送出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	// 驗證：inputValue 被清空
+	assert.Equal(t, "", model.InputValue())
+	// 驗證：store 中已建立群組
+	groups, err := st.ListGroups()
+	assert.NoError(t, err)
+	if assert.Len(t, groups, 1) {
+		assert.Equal(t, "工作", groups[0].Name)
+	}
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+	// 驗證：無錯誤
+	assert.Nil(t, model.Err())
+}
+
+func TestModel_CreateGroup_NoStore_NoOp(t *testing.T) {
+	// 無 Store 的 deps
+	m := ui.NewModel(ui.Deps{})
+
+	// 按 g 應保持 ModeNormal（因為沒有 Store）
+	m, _ = applyKey(m, "g")
+	assert.Equal(t, ui.ModeNormal, m.Mode(), "無 Store 時按 g 應保持 ModeNormal")
+}
+
 func TestLoadSessions_UsesLayer2PaneTitle(t *testing.T) {
 	flex := &flexMockExecutor{
 		handler: func(args []string) (string, error) {

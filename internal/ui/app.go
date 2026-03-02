@@ -290,6 +290,15 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case "g":
+		// 新建群組：需要 Store
+		if m.deps.Store != nil {
+			m.mode = ModeInput
+			m.inputTarget = InputNewGroup
+			m.inputPrompt = "群組名稱"
+			m.inputValue = ""
+		}
+		return m, nil
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
 		if m.cursor >= 0 && m.cursor < len(m.items) {
@@ -357,8 +366,14 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, loadSessionsCmd(m.deps)
 		case InputNewGroup:
-			// Task 8 將實作新建群組
 			m.mode = ModeNormal
+			if m.deps.Store != nil {
+				if err := m.deps.Store.CreateGroup(value, 0); err != nil {
+					m.err = err
+					return m, nil
+				}
+			}
+			return m, loadSessionsCmd(m.deps)
 		default:
 			m.mode = ModeNormal
 		}
