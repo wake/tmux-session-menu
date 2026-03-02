@@ -59,9 +59,14 @@ func NewManager(exec Executor) *Manager {
 }
 
 // ListSessions 列出所有 tmux session。
+// 當沒有任何 session 時（tmux server 未啟動），回傳空切片而非錯誤。
 func (m *Manager) ListSessions() ([]Session, error) {
 	output, err := m.exec.Execute("list-sessions", "-F", ListSessionsFormat)
 	if err != nil {
+		if strings.Contains(err.Error(), "no server running") ||
+			strings.Contains(err.Error(), "no sessions") {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return ParseListSessions(output)
