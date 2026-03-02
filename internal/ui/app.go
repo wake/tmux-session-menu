@@ -71,7 +71,32 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name)
 		}
 
-		return SessionsMsg{Sessions: sessions}
+		// 從 store 載入 groups 和 session metas
+		var groups []store.Group
+		if deps.Store != nil {
+			groups, _ = deps.Store.ListGroups()
+			metas, _ := deps.Store.ListAllSessionMetas()
+
+			groupMap := make(map[int64]string)
+			for _, g := range groups {
+				groupMap[g.ID] = g.Name
+			}
+
+			metaMap := make(map[string]int64)
+			for _, meta := range metas {
+				metaMap[meta.SessionName] = meta.GroupID
+			}
+
+			for i := range sessions {
+				if gid, ok := metaMap[sessions[i].Name]; ok {
+					if name, ok := groupMap[gid]; ok {
+						sessions[i].GroupName = name
+					}
+				}
+			}
+		}
+
+		return SessionsMsg{Sessions: sessions, Groups: groups}
 	}
 }
 

@@ -244,6 +244,76 @@ func TestModel_Tick_ReloadsSessions(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 
+func TestModel_LoadSessions_WithStore(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+	groups, _ := st.ListGroups()
+	st.SetSessionGroup("alpha", groups[0].ID, 0)
+
+	mockExec := &mockExecutor{
+		output: "alpha:$1:1:/home:0:1700000000\nbeta:$2:1:/tmp:0:1700000000\n",
+	}
+	mgr := tmux.NewManager(mockExec)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr, Store: st})
+
+	cmd := m.Init()
+	msg := cmd()
+	// Drill into BatchMsg to find SessionsMsg
+	batchMsg, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatal("expected BatchMsg")
+	}
+	var sessMsg ui.SessionsMsg
+	found := false
+	for _, c := range batchMsg {
+		if c == nil {
+			continue
+		}
+		inner := c()
+		if sm, ok := inner.(ui.SessionsMsg); ok {
+			sessMsg = sm
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("no SessionsMsg found in batch")
+	}
+
+	assert.Len(t, sessMsg.Groups, 1)
+	assert.Equal(t, "dev", sessMsg.Groups[0].Name)
+
+	// alpha should have GroupName "dev"
+	var alphaGroup string
+	for _, s := range sessMsg.Sessions {
+		if s.Name == "alpha" {
+			alphaGroup = s.GroupName
+		}
+	}
+	assert.Equal(t, "dev", alphaGroup)
+
+	// beta should have no group
+	var betaGroup string
+	for _, s := range sessMsg.Sessions {
+		if s.Name == "beta" {
+			betaGroup = s.GroupName
+		}
+	}
+	assert.Equal(t, "", betaGroup)
+}
+
+func openUITestDB(t *testing.T) *store.Store {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
 func applyKey(m ui.Model, key string) (ui.Model, tea.Cmd) {
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 	updated, cmd := m.Update(msg)
