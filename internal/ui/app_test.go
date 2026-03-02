@@ -328,6 +328,95 @@ func TestModel_Tab_TogglesGroupCollapse(t *testing.T) {
 	assert.True(t, groups[0].Collapsed)
 }
 
+// recordingExecutor 記錄每次呼叫的參數，並根據指令回傳不同輸出。
+type recordingExecutor struct {
+	calls [][]string
+	// listSessionsOutput 是 list-sessions 指令的回傳值
+	listSessionsOutput string
+	// capturePaneOutput 是 capture-pane 指令的回傳值
+	capturePaneOutput string
+}
+
+func (e *recordingExecutor) Execute(args ...string) (string, error) {
+	e.calls = append(e.calls, args)
+	if len(args) > 0 {
+		switch args[0] {
+		case "list-sessions":
+			return e.listSessionsOutput, nil
+		case "capture-pane":
+			return e.capturePaneOutput, nil
+		}
+	}
+	return "", nil
+}
+
+// findSessionsMsg 從 Init() 回傳的 BatchMsg 中找出 SessionsMsg。
+func findSessionsMsg(t *testing.T, cmd tea.Cmd) ui.SessionsMsg {
+	t.Helper()
+	result := cmd()
+	batchMsg, ok := result.(tea.BatchMsg)
+	if !ok {
+		t.Fatal("預期為 BatchMsg")
+	}
+	for _, c := range batchMsg {
+		if c == nil {
+			continue
+		}
+		inner := c()
+		if sm, ok := inner.(ui.SessionsMsg); ok {
+			return sm
+		}
+	}
+	t.Fatal("BatchMsg 中找不到 SessionsMsg")
+	return ui.SessionsMsg{}
+}
+
+func TestLoadSessions_DetectsAIModel(t *testing.T) {
+	rec := &recordingExecutor{
+		listSessionsOutput: "dev:$1:1:/home:0:1700000000\n",
+		capturePaneOutput:  "Using claude-sonnet-4-6 model\n> some prompt",
+	}
+	mgr := tmux.NewManager(rec)
+	m := ui.NewModel(ui.Deps{
+		TmuxMgr: mgr,
+		Cfg:     config.Config{PreviewLines: 100},
+	})
+
+	cmd := m.Init()
+	sessMsg := findSessionsMsg(t, cmd)
+
+	assert.Nil(t, sessMsg.Err)
+	assert.Equal(t, 1, len(sessMsg.Sessions))
+	// 驗證 AI 模型從 pane 內容偵測出來
+	assert.Equal(t, "claude-sonnet-4-6", sessMsg.Sessions[0].AIModel)
+}
+
+func TestLoadSessions_UsesPreviewLines(t *testing.T) {
+	rec := &recordingExecutor{
+		listSessionsOutput: "dev:$1:1:/home:0:1700000000\n",
+		capturePaneOutput:  "some output",
+	}
+	mgr := tmux.NewManager(rec)
+	m := ui.NewModel(ui.Deps{
+		TmuxMgr: mgr,
+		Cfg:     config.Config{PreviewLines: 200},
+	})
+
+	cmd := m.Init()
+	_ = findSessionsMsg(t, cmd)
+
+	// 找到 capture-pane 呼叫，驗證使用了設定的 PreviewLines 值
+	found := false
+	for _, call := range rec.calls {
+		if len(call) > 0 && call[0] == "capture-pane" {
+			found = true
+			// capture-pane -t dev -p -S -200
+			assert.Contains(t, call, "-200", "CapturePane 應使用設定的 PreviewLines 值 200")
+		}
+	}
+	assert.True(t, found, "應有 capture-pane 呼叫")
+}
+
 func openUITestDB(t *testing.T) *store.Store {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")

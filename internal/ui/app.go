@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/wake/tmux-session-menu/internal/ai"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
@@ -66,9 +67,22 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 			return SessionsMsg{Err: err}
 		}
 
-		// 狀態偵測
+		// 擷取 pane 內容的行數，預設 150
+		previewLines := deps.Cfg.PreviewLines
+		if previewLines <= 0 {
+			previewLines = 150
+		}
+
+		// 狀態偵測與 AI 模型偵測
 		for i := range sessions {
-			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name)
+			var paneContent string
+			if deps.TmuxMgr != nil {
+				if content, err := deps.TmuxMgr.CapturePane(sessions[i].Name, previewLines); err == nil {
+					paneContent = content
+				}
+			}
+			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name, paneContent)
+			sessions[i].AIModel = ai.DetectModel(paneContent)
 		}
 
 		// 從 store 載入 groups 和 session metas
@@ -111,7 +125,7 @@ func tickCmd(interval time.Duration) tea.Cmd {
 }
 
 // detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態。
-func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
+func detectSessionStatus(deps Deps, sessionName string, paneContent string) tmux.SessionStatus {
 	var input tmux.StatusInput
 
 	// 第一層：Hook 狀態檔案
@@ -122,13 +136,8 @@ func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
 	}
 
 	// 第二層（pane title）+ 第三層（terminal content）：只在 hook 無效時執行
-	// TODO: Layer 2 pane title 尚未整合，需加入 ListPaneTitles 呼叫填入 input.PaneTitle
 	if input.HookStatus == nil || !input.HookStatus.IsValid() {
-		if deps.TmuxMgr != nil {
-			if content, err := deps.TmuxMgr.CapturePane(sessionName, 50); err == nil {
-				input.PaneContent = content
-			}
-		}
+		input.PaneContent = paneContent
 	}
 
 	return tmux.ResolveStatus(input)
