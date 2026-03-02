@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -74,6 +75,16 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 	}
 }
 
+// TickMsg 表示定時更新觸發。
+type TickMsg struct{}
+
+// tickCmd 排程下一次 tick。
+func tickCmd(interval time.Duration) tea.Cmd {
+	return tea.Tick(interval, func(t time.Time) tea.Msg {
+		return TickMsg{}
+	})
+}
+
 // detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態。
 func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
 	var input tmux.StatusInput
@@ -99,9 +110,14 @@ func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
 
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
+	interval := time.Duration(m.deps.Cfg.PollIntervalSec) * time.Second
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
 	return tea.Batch(
 		tea.SetWindowTitle("tmux session menu"),
 		loadSessionsCmd(m.deps),
+		tickCmd(interval),
 	)
 }
 
@@ -122,6 +138,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = len(m.items) - 1
 		}
 		return m, nil
+	case TickMsg:
+		interval := time.Duration(m.deps.Cfg.PollIntervalSec) * time.Second
+		if interval <= 0 {
+			interval = 2 * time.Second
+		}
+		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(interval))
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":

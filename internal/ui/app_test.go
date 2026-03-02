@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
@@ -222,6 +223,25 @@ func TestModel_LoadSessions_WithHookStatus(t *testing.T) {
 	sessMsg, ok := msg.(ui.SessionsMsg)
 	assert.True(t, ok)
 	assert.Equal(t, tmux.StatusRunning, sessMsg.Sessions[0].Status)
+}
+
+func TestModel_Tick_ReloadsSessions(t *testing.T) {
+	mockExec := &mockExecutor{
+		output: "dev:$1:1:/home:0:1700000000\n",
+	}
+	mgr := tmux.NewManager(mockExec)
+
+	m := ui.NewModel(ui.Deps{
+		TmuxMgr: mgr,
+		Cfg:     config.Config{PollIntervalSec: 2},
+	})
+
+	// 模擬 tickMsg
+	updated, cmd := m.Update(ui.TickMsg{})
+	_ = updated
+
+	// tickMsg 應產生新的 Cmd（loadSessions + 下一個 tick）
+	assert.NotNil(t, cmd)
 }
 
 func applyKey(m ui.Model, key string) (ui.Model, tea.Cmd) {
