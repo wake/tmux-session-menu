@@ -34,7 +34,7 @@ func main() {
 }
 
 func runTUI() {
-	m := ui.NewModel()
+	m := ui.NewModel(ui.Deps{})
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {

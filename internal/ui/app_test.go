@@ -11,27 +11,27 @@ import (
 	"github.com/wake/tmux-session-menu/internal/ui"
 )
 
-func TestModel_Init(t *testing.T) {
-	m := ui.NewModel()
+func TestModel_Init_WithDeps(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
 	cmd := m.Init()
 	assert.NotNil(t, cmd)
 }
 
 func TestModel_View_ShowsHeader(t *testing.T) {
-	m := ui.NewModel()
+	m := ui.NewModel(ui.Deps{})
 	view := m.View()
 	assert.Contains(t, view, "tmux session menu")
 }
 
 func TestModel_Quit(t *testing.T) {
-	m := ui.NewModel()
+	m := ui.NewModel(ui.Deps{})
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	_ = updated
 	assert.NotNil(t, cmd)
 }
 
 func TestModel_Navigation(t *testing.T) {
-	m := ui.NewModel()
+	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{
 		{Type: ui.ItemSession},
 		{Type: ui.ItemSession},
@@ -58,7 +58,7 @@ func TestModel_Navigation(t *testing.T) {
 }
 
 func TestModel_View_RendersSessions(t *testing.T) {
-	m := ui.NewModel()
+	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{
 		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
 		{Type: ui.ItemSession, Session: tmux.Session{
@@ -85,7 +85,7 @@ func TestModel_View_RendersSessions(t *testing.T) {
 }
 
 func TestModel_View_Preview(t *testing.T) {
-	m := ui.NewModel()
+	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{
 		{Type: ui.ItemSession, Session: tmux.Session{
 			Name:      "my-project",

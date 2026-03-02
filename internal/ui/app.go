@@ -6,8 +6,18 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 )
+
+// Deps 封裝 Model 的外部依賴。
+type Deps struct {
+	TmuxMgr   *tmux.Manager
+	Store     *store.Store
+	Cfg       config.Config
+	StatusDir string
+}
 
 // Model 是 Bubble Tea 的主要模型。
 type Model struct {
@@ -16,11 +26,20 @@ type Model struct {
 	cursor   int
 	items    []ListItem
 	quitting bool
+
+	deps     Deps
+	selected string // Enter 選取的 session name
+	err      error
 }
 
 // NewModel 建立初始 Model。
-func NewModel() Model {
-	return Model{}
+func NewModel(deps Deps) Model {
+	return Model{deps: deps}
+}
+
+// Selected 回傳使用者按 Enter 選取的 session name（空字串表示未選取）。
+func (m Model) Selected() string {
+	return m.selected
 }
 
 // Init 實作 tea.Model 介面。
