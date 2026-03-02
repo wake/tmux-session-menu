@@ -1,22 +1,28 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/ai"
+	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 )
 
 // Deps 封裝 Model 的外部依賴。
+// 當 Client 不為 nil 時使用 gRPC daemon 模式；
+// 否則使用舊的 TmuxMgr+Store 直接模式（主要用於測試）。
 type Deps struct {
-	TmuxMgr   *tmux.Manager
-	Store     *store.Store
+	Client    *client.Client // gRPC client（daemon 模式）
+	TmuxMgr   *tmux.Manager  // 舊模式：直接 tmux 操作
+	Store     *store.Store   // 舊模式：直接 SQLite 操作
 	Cfg       config.Config
 	StatusDir string
 }
@@ -186,10 +192,19 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 	}
 }
 
+// SnapshotMsg 是從 gRPC Watch stream 接收的快照訊息。
+type SnapshotMsg struct {
+	Snapshot *tsmv1.StateSnapshot
+	Err      error
+}
+
+// reconnectMsg 觸發 Watch stream 重連。
+type reconnectMsg struct{}
+
 // errMsg 封裝非同步操作回傳的錯誤。
 type errMsg struct{ err error }
 
-// TickMsg 表示定時更新觸發。
+// TickMsg 表示定時更新觸發（舊模式使用）。
 type TickMsg struct{}
 
 // tickCmd 排程下一次 tick。
@@ -197,6 +212,27 @@ func tickCmd(interval time.Duration) tea.Cmd {
 	return tea.Tick(interval, func(t time.Time) tea.Msg {
 		return TickMsg{}
 	})
+}
+
+// watchCmd 啟動 Watch stream 並持續接收快照。
+func watchCmd(c *client.Client) tea.Cmd {
+	return func() tea.Msg {
+		if err := c.Watch(context.Background()); err != nil {
+			return SnapshotMsg{Err: err}
+		}
+		return recvSnapshotCmd(c)()
+	}
+}
+
+// recvSnapshotCmd 從 Watch stream 接收下一個快照。
+func recvSnapshotCmd(c *client.Client) tea.Cmd {
+	return func() tea.Msg {
+		snap, err := c.RecvSnapshot()
+		if err != nil {
+			return SnapshotMsg{Err: err}
+		}
+		return SnapshotMsg{Snapshot: snap}
+	}
 }
 
 // detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態。
@@ -230,6 +266,14 @@ func (m Model) pollInterval() time.Duration {
 
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
+	if m.deps.Client != nil {
+		// gRPC daemon 模式：啟動 Watch stream
+		return tea.Batch(
+			tea.SetWindowTitle("tmux session menu"),
+			watchCmd(m.deps.Client),
+		)
+	}
+	// 舊模式：直接輪詢
 	return tea.Batch(
 		tea.SetWindowTitle("tmux session menu"),
 		loadSessionsCmd(m.deps),
@@ -244,6 +288,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+	case SnapshotMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+			// Watch stream 斷線後延遲 2 秒重連
+			if m.deps.Client != nil {
+				return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+					return reconnectMsg{}
+				})
+			}
+			return m, nil
+		}
+		sessions := ConvertProtoSessions(msg.Snapshot.Sessions)
+		groups := ConvertProtoGroups(msg.Snapshot.Groups)
+		m.items = FlattenItems(groups, sessions)
+		if m.cursor >= len(m.items) && len(m.items) > 0 {
+			m.cursor = len(m.items) - 1
+		}
+		// 繼續接收下一個快照
+		if m.deps.Client != nil {
+			return m, recvSnapshotCmd(m.deps.Client)
+		}
+		return m, nil
 	case SessionsMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
@@ -252,6 +318,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.items = FlattenItems(msg.Groups, msg.Sessions)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
+		}
+		return m, nil
+	case reconnectMsg:
+		if m.deps.Client != nil {
+			m.err = nil
+			return m, watchCmd(m.deps.Client)
 		}
 		return m, nil
 	case errMsg:
@@ -305,12 +377,20 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			item := m.items[m.cursor]
-			if item.Type == ItemGroup && m.deps.Store != nil {
-				if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
-					m.err = err
-					return m, nil
+			if item.Type == ItemGroup {
+				if m.deps.Client != nil {
+					if err := m.deps.Client.ToggleCollapse(context.Background(), item.Group.ID); err != nil {
+						m.err = err
+					}
+					return m, nil // 變更透過 Watch stream 自動推送
 				}
-				return m, loadSessionsCmd(m.deps)
+				if m.deps.Store != nil {
+					if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
+						m.err = err
+						return m, nil
+					}
+					return m, loadSessionsCmd(m.deps)
+				}
 			}
 		}
 		return m, nil
@@ -333,8 +413,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "g":
-		// 新建群組：需要 Store
-		if m.deps.Store != nil {
+		// 新建群組：需要 Store 或 Client
+		if m.deps.Client != nil || m.deps.Store != nil {
 			m.mode = ModeInput
 			m.inputTarget = InputNewGroup
 			m.inputPrompt = "群組名稱"
@@ -343,10 +423,10 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "m":
 		// 移動 session 到群組：僅對 ItemSession 生效
-		if m.cursor >= 0 && m.cursor < len(m.items) && m.deps.Store != nil {
+		if m.cursor >= 0 && m.cursor < len(m.items) && (m.deps.Client != nil || m.deps.Store != nil) {
 			item := m.items[m.cursor]
 			if item.Type == ItemSession {
-				groups, _ := m.deps.Store.ListGroups()
+				groups := m.collectGroups()
 				if len(groups) == 0 {
 					return m, nil
 				}
@@ -377,6 +457,12 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.mode = ModeConfirm
 				m.confirmPrompt = fmt.Sprintf("確定要刪除 session %q？", name)
 				m.confirmAction = func() tea.Cmd {
+					if deps.Client != nil {
+						if err := deps.Client.KillSession(context.Background(), name); err != nil {
+							return func() tea.Msg { return errMsg{err} }
+						}
+						return nil // 變更透過 Watch stream 自動推送
+					}
 					if deps.TmuxMgr != nil {
 						if err := deps.TmuxMgr.KillSession(name); err != nil {
 							return func() tea.Msg { return errMsg{err} }
@@ -418,6 +504,13 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.inputTarget {
 		case InputNewSession:
 			m.mode = ModeNormal
+			if m.deps.Client != nil {
+				if err := m.deps.Client.CreateSession(context.Background(), value, ""); err != nil {
+					m.err = err
+					return m, nil
+				}
+				return m, nil // 變更透過 Watch stream 自動推送
+			}
 			if m.deps.TmuxMgr != nil {
 				if err := m.deps.TmuxMgr.NewSession(value, ""); err != nil {
 					m.err = err
@@ -427,6 +520,16 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, loadSessionsCmd(m.deps)
 		case InputRenameSession:
 			m.mode = ModeNormal
+			if m.deps.Client != nil {
+				if m.cursor >= 0 && m.cursor < len(m.items) {
+					name := m.items[m.cursor].Session.Name
+					if err := m.deps.Client.RenameSession(context.Background(), name, value); err != nil {
+						m.err = err
+						return m, nil
+					}
+				}
+				return m, nil // 變更透過 Watch stream 自動推送
+			}
 			if m.deps.Store != nil && m.cursor >= 0 && m.cursor < len(m.items) {
 				name := m.items[m.cursor].Session.Name
 				if err := m.deps.Store.SetCustomName(name, value); err != nil {
@@ -437,6 +540,13 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, loadSessionsCmd(m.deps)
 		case InputNewGroup:
 			m.mode = ModeNormal
+			if m.deps.Client != nil {
+				if err := m.deps.Client.CreateGroup(context.Background(), value, 0); err != nil {
+					m.err = err
+					return m, nil
+				}
+				return m, nil // 變更透過 Watch stream 自動推送
+			}
 			if m.deps.Store != nil {
 				if err := m.deps.Store.CreateGroup(value, 0); err != nil {
 					m.err = err
@@ -493,7 +603,11 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.pickerCursor >= 0 && m.pickerCursor < len(m.pickerGroups) {
 			group := m.pickerGroups[m.pickerCursor]
-			if m.deps.Store != nil {
+			if m.deps.Client != nil {
+				if err := m.deps.Client.MoveSession(context.Background(), m.pickerTarget, group.ID, 0); err != nil {
+					m.err = err
+				}
+			} else if m.deps.Store != nil {
 				if err := m.deps.Store.SetSessionGroup(m.pickerTarget, group.ID, 0); err != nil {
 					m.err = err
 				}
@@ -502,6 +616,9 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeNormal
 		m.pickerGroups = nil
 		m.pickerTarget = ""
+		if m.deps.Client != nil {
+			return m, nil // 變更透過 Watch stream 自動推送
+		}
 		return m, loadSessionsCmd(m.deps)
 	case "esc":
 		m.mode = ModeNormal
@@ -557,9 +674,28 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// collectGroups 從目前的 items 中收集所有群組。
+func (m Model) collectGroups() []store.Group {
+	if m.deps.Store != nil {
+		groups, _ := m.deps.Store.ListGroups()
+		return groups
+	}
+	// 從已有的 items 中提取
+	var groups []store.Group
+	for _, item := range m.items {
+		if item.Type == ItemGroup {
+			groups = append(groups, item.Group)
+		}
+	}
+	return groups
+}
+
 // moveItem 根據方向移動目前選取的項目（群組或 session）。
 func (m Model) moveItem(direction int) (tea.Model, tea.Cmd) {
-	if m.deps.Store == nil || m.cursor < 0 || m.cursor >= len(m.items) {
+	if m.deps.Client == nil && m.deps.Store == nil {
+		return m, nil
+	}
+	if m.cursor < 0 || m.cursor >= len(m.items) {
 		return m, nil
 	}
 	item := m.items[m.cursor]
@@ -574,11 +710,7 @@ func (m Model) moveItem(direction int) (tea.Model, tea.Cmd) {
 
 // moveGroup 將群組在排序中上移或下移，交換 sort_order。
 func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) {
-	groups, err := m.deps.Store.ListGroups()
-	if err != nil {
-		m.err = err
-		return m, nil
-	}
+	groups := m.collectGroups()
 	idx := -1
 	for i, g := range groups {
 		if g.ID == group.ID {
@@ -593,7 +725,22 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 	if newIdx < 0 || newIdx >= len(groups) {
 		return m, nil
 	}
-	// 交換 sort_order
+
+	if m.deps.Client != nil {
+		// gRPC 模式：交換 sort_order
+		if err := m.deps.Client.ReorderGroup(context.Background(), groups[idx].ID, groups[newIdx].SortOrder); err != nil {
+			m.err = err
+			return m, nil
+		}
+		if err := m.deps.Client.ReorderGroup(context.Background(), groups[newIdx].ID, groups[idx].SortOrder); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.cursor += direction
+		return m, nil // 變更透過 Watch stream 自動推送
+	}
+
+	// 舊模式
 	if err := m.deps.Store.SetGroupOrder(groups[idx].ID, groups[newIdx].SortOrder); err != nil {
 		m.err = err
 		return m, nil
@@ -611,11 +758,7 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 	if session.GroupName == "" {
 		return m, nil // 未分組 session 不支援排序
 	}
-	groups, err := m.deps.Store.ListGroups()
-	if err != nil {
-		m.err = err
-		return m, nil
-	}
+	groups := m.collectGroups()
 	var groupID int64
 	for _, g := range groups {
 		if g.Name == session.GroupName {
@@ -626,6 +769,42 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 	if groupID == 0 {
 		return m, nil
 	}
+
+	if m.deps.Client != nil {
+		// gRPC 模式：需要從 items 中找同群組的 session 來計算排序
+		var siblings []tmux.Session
+		for _, item := range m.items {
+			if item.Type == ItemSession && item.Session.GroupName == session.GroupName {
+				siblings = append(siblings, item.Session)
+			}
+		}
+		idx := -1
+		for i, s := range siblings {
+			if s.Name == session.Name {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return m, nil
+		}
+		newIdx := idx + direction
+		if newIdx < 0 || newIdx >= len(siblings) {
+			return m, nil
+		}
+		if err := m.deps.Client.ReorderSession(context.Background(), siblings[idx].Name, groupID, siblings[newIdx].SortOrder); err != nil {
+			m.err = err
+			return m, nil
+		}
+		if err := m.deps.Client.ReorderSession(context.Background(), siblings[newIdx].Name, groupID, siblings[idx].SortOrder); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.cursor += direction
+		return m, nil // 變更透過 Watch stream 自動推送
+	}
+
+	// 舊模式
 	metas, err := m.deps.Store.ListSessionMetas(groupID)
 	if err != nil {
 		m.err = err

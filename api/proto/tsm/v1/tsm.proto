@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package tsm.v1;
+
+option go_package = "github.com/wake/tmux-session-menu/api/tsm/v1;tsmv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// SessionStatus 對應 tmux.SessionStatus。
+enum SessionStatus {
+  SESSION_STATUS_IDLE = 0;
+  SESSION_STATUS_RUNNING = 1;
+  SESSION_STATUS_WAITING = 2;
+  SESSION_STATUS_ERROR = 3;
+}
+
+// Session 對應 tmux.Session。
+message Session {
+  string name = 1;
+  string id = 2;
+  string path = 3;
+  bool attached = 4;
+  google.protobuf.Timestamp activity = 5;
+  SessionStatus status = 6;
+  string ai_model = 7;
+  string ai_summary = 8;
+  string group_name = 9;
+  int32 sort_order = 10;
+  string custom_name = 11;
+}
+
+// Group 對應 store.Group。
+message Group {
+  int64 id = 1;
+  string name = 2;
+  int32 sort_order = 3;
+  bool collapsed = 4;
+}
+
+// StateSnapshot 是 Watch stream 推送的全量快照。
+message StateSnapshot {
+  repeated Session sessions = 1;
+  repeated Group groups = 2;
+}
+
+// WatchRequest 是 Watch RPC 的請求（目前為空，未來可擴充過濾條件）。
+message WatchRequest {}
+
+// CreateSessionRequest 建立新的 tmux session。
+message CreateSessionRequest {
+  string name = 1;
+  string path = 2;
+}
+
+// KillSessionRequest 刪除指定的 tmux session。
+message KillSessionRequest {
+  string name = 1;
+}
+
+// RenameSessionRequest 設定 session 的自訂顯示名稱。
+message RenameSessionRequest {
+  string session_name = 1;
+  string custom_name = 2;
+}
+
+// CreateGroupRequest 建立新的群組。
+message CreateGroupRequest {
+  string name = 1;
+  int32 sort_order = 2;
+}
+
+// MoveSessionRequest 將 session 移動到指定群組。
+message MoveSessionRequest {
+  string session_name = 1;
+  int64 group_id = 2;
+  int32 sort_order = 3;
+}
+
+// ReorderRequest 重新排序群組或群組內的 session。
+message ReorderRequest {
+  // 被排序的對象類型
+  oneof target {
+    GroupReorder group = 1;
+    SessionReorder session = 2;
+  }
+}
+
+message GroupReorder {
+  int64 group_id = 1;
+  int32 new_sort_order = 2;
+}
+
+message SessionReorder {
+  string session_name = 1;
+  int64 group_id = 2;
+  int32 new_sort_order = 3;
+}
+
+// ToggleCollapseRequest 切換群組的展開/收合狀態。
+message ToggleCollapseRequest {
+  int64 group_id = 1;
+}
+
+// DaemonStatusResponse 回傳 daemon 的狀態資訊。
+message DaemonStatusResponse {
+  int32 pid = 1;
+  google.protobuf.Timestamp started_at = 2;
+  int32 watcher_count = 3;
+}
+
+// SessionManager 是 tsm daemon 的核心 gRPC service。
+service SessionManager {
+  // Watch 建立 server streaming，持續推送 StateSnapshot。
+  // 連線後立即推送一次初始快照，之後每當狀態變更時推送差異快照。
+  rpc Watch(WatchRequest) returns (stream StateSnapshot);
+
+  // 操作型 unary RPCs — 操作完成後變更透過 Watch stream 自動推送。
+  rpc CreateSession(CreateSessionRequest) returns (google.protobuf.Empty);
+  rpc KillSession(KillSessionRequest) returns (google.protobuf.Empty);
+  rpc RenameSession(RenameSessionRequest) returns (google.protobuf.Empty);
+  rpc CreateGroup(CreateGroupRequest) returns (google.protobuf.Empty);
+  rpc MoveSession(MoveSessionRequest) returns (google.protobuf.Empty);
+  rpc Reorder(ReorderRequest) returns (google.protobuf.Empty);
+  rpc ToggleCollapse(ToggleCollapseRequest) returns (google.protobuf.Empty);
+
+  // DaemonStatus 回傳 daemon 的狀態資訊。
+  rpc DaemonStatus(google.protobuf.Empty) returns (DaemonStatusResponse);
+}

@@ -1,0 +1,214 @@
+package daemon
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"testing"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/emptypb"
+
+	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
+	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/store"
+	"github.com/wake/tmux-session-menu/internal/tmux"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+const bufSize = 1024 * 1024
+
+// setupTestService 建立一個 bufconn-based 的測試環境。
+func setupTestService(t *testing.T, exec tmux.Executor) (tsmv1.SessionManagerClient, *StateManager, func()) {
+	t.Helper()
+
+	lis := bufconn.Listen(bufSize)
+	hub := NewWatcherHub()
+	mgr := tmux.NewManager(exec)
+
+	// 使用 temp DB
+	tmpDB := t.TempDir() + "/test.db"
+	st, err := store.Open(tmpDB)
+	require.NoError(t, err)
+
+	sm := NewStateManager(mgr, st, config.Default(), "", hub)
+	// 立即做一次 scan，確保有初始快照
+	sm.Scan()
+
+	svc := NewService(mgr, st, hub, sm)
+	srv := grpc.NewServer()
+	tsmv1.RegisterSessionManagerServer(srv, svc)
+
+	go func() { _ = srv.Serve(lis) }()
+
+	conn, err := grpc.NewClient("passthrough:///bufconn",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+
+	client := tsmv1.NewSessionManagerClient(conn)
+
+	cleanup := func() {
+		conn.Close()
+		srv.GracefulStop()
+		hub.Close()
+		st.Close()
+	}
+
+	return client, sm, cleanup
+}
+
+func TestService_Watch_InitialSnapshot(t *testing.T) {
+	now := time.Now().Unix()
+	exec := &fakeExecutor{
+		listOutput: fmt.Sprintf("dev:$1:1:/home:0:%d\ntest:$2:1:/tmp:1:%d", now, now),
+	}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	stream, err := client.Watch(ctx, &tsmv1.WatchRequest{})
+	require.NoError(t, err)
+
+	// 應收到初始快照
+	snap, err := stream.Recv()
+	require.NoError(t, err)
+	require.Len(t, snap.Sessions, 2)
+	assert.Equal(t, "dev", snap.Sessions[0].Name)
+	assert.Equal(t, "test", snap.Sessions[1].Name)
+}
+
+func TestService_Watch_PushOnChange(t *testing.T) {
+	now := time.Now().Unix()
+	exec := &fakeExecutor{
+		listOutput: fmt.Sprintf("dev:$1:1:/home:0:%d", now),
+	}
+	client, sm, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	stream, err := client.Watch(ctx, &tsmv1.WatchRequest{})
+	require.NoError(t, err)
+
+	// 初始快照
+	snap, err := stream.Recv()
+	require.NoError(t, err)
+	require.Len(t, snap.Sessions, 1)
+
+	// 模擬變更
+	exec.listOutput = fmt.Sprintf("dev:$1:1:/home:0:%d\nnew:$3:1:/tmp:0:%d", now, now)
+	sm.Scan()
+
+	// 應收到變更快照
+	snap, err = stream.Recv()
+	require.NoError(t, err)
+	require.Len(t, snap.Sessions, 2)
+}
+
+func TestService_CreateGroup(t *testing.T) {
+	exec := &fakeExecutor{listOutput: ""}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, err := client.CreateGroup(ctx, &tsmv1.CreateGroupRequest{Name: "work", SortOrder: 0})
+	require.NoError(t, err)
+}
+
+func TestService_MoveSession(t *testing.T) {
+	now := time.Now().Unix()
+	exec := &fakeExecutor{
+		listOutput: fmt.Sprintf("dev:$1:1:/home:0:%d", now),
+	}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 建立群組
+	_, err := client.CreateGroup(ctx, &tsmv1.CreateGroupRequest{Name: "work"})
+	require.NoError(t, err)
+
+	// 移動 session 到群組
+	_, err = client.MoveSession(ctx, &tsmv1.MoveSessionRequest{
+		SessionName: "dev",
+		GroupId:     1,
+	})
+	require.NoError(t, err)
+}
+
+func TestService_ToggleCollapse(t *testing.T) {
+	exec := &fakeExecutor{listOutput: ""}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 建立群組
+	_, err := client.CreateGroup(ctx, &tsmv1.CreateGroupRequest{Name: "work"})
+	require.NoError(t, err)
+
+	// 切換收合
+	_, err = client.ToggleCollapse(ctx, &tsmv1.ToggleCollapseRequest{GroupId: 1})
+	require.NoError(t, err)
+}
+
+func TestService_RenameSession(t *testing.T) {
+	now := time.Now().Unix()
+	exec := &fakeExecutor{
+		listOutput: fmt.Sprintf("dev:$1:1:/home:0:%d", now),
+	}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, err := client.RenameSession(ctx, &tsmv1.RenameSessionRequest{
+		SessionName: "dev",
+		CustomName:  "Development",
+	})
+	require.NoError(t, err)
+}
+
+func TestService_DaemonStatus(t *testing.T) {
+	exec := &fakeExecutor{listOutput: ""}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx := context.Background()
+	resp, err := client.DaemonStatus(ctx, &emptypb.Empty{})
+	require.NoError(t, err)
+	assert.True(t, resp.Pid > 0)
+	assert.NotNil(t, resp.StartedAt)
+}
+
+func TestService_Reorder_Group(t *testing.T) {
+	exec := &fakeExecutor{listOutput: ""}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, err := client.CreateGroup(ctx, &tsmv1.CreateGroupRequest{Name: "a", SortOrder: 0})
+	require.NoError(t, err)
+	_, err = client.CreateGroup(ctx, &tsmv1.CreateGroupRequest{Name: "b", SortOrder: 1})
+	require.NoError(t, err)
+
+	// 把 group 1 的排序改成 10
+	_, err = client.Reorder(ctx, &tsmv1.ReorderRequest{
+		Target: &tsmv1.ReorderRequest_Group{
+			Group: &tsmv1.GroupReorder{GroupId: 1, NewSortOrder: 10},
+		},
+	})
+	require.NoError(t, err)
+}
