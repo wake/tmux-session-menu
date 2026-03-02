@@ -41,6 +41,32 @@ func readSettings(t *testing.T, path string) map[string]interface{} {
 	return m
 }
 
+// ─── Task 7: EnsureScript ───────────────────────────────────
+
+func TestEnsureScript_CreatesFile(t *testing.T) {
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "hooks", "tsm-hook.sh")
+	settingsPath := filepath.Join(dir, "settings.json")
+	os.WriteFile(settingsPath, []byte(`{}`), 0644)
+
+	m := hooks.NewManager(settingsPath, scriptPath)
+	err := m.EnsureScript()
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(scriptPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(hooks.HookScript), string(data))
+
+	// 驗證檔案權限為 0755
+	info, err := os.Stat(scriptPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0755), info.Mode().Perm())
+
+	// 冪等性 — 第二次呼叫也應成功且不報錯
+	err = m.EnsureScript()
+	require.NoError(t, err)
+}
+
 // ─── Task 3: Install ────────────────────────────────────────
 
 func TestInstall_EmptySettings(t *testing.T) {

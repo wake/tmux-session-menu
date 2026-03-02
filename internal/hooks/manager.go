@@ -129,6 +129,25 @@ func (m *Manager) newMatcherGroup() map[string]interface{} {
 	}
 }
 
+// EnsureScript 確保 scriptPath 上存在最新版的 hook script
+// 如果目錄不存在會自動建立，如果檔案內容相同則跳過寫入
+func (m *Manager) EnsureScript() error {
+	dir := filepath.Dir(m.scriptPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("建立目錄 %s 失敗: %w", dir, err)
+	}
+
+	existing, err := os.ReadFile(m.scriptPath)
+	if err == nil && string(existing) == string(HookScript) {
+		return nil // 內容相同，跳過
+	}
+
+	if err := os.WriteFile(m.scriptPath, HookScript, 0755); err != nil {
+		return fmt.Errorf("寫入 hook script 失敗: %w", err)
+	}
+	return nil
+}
+
 // Install 將 tsm hook 加入 Claude Code settings.json 的 6 個 event
 func (m *Manager) Install(dryRun bool) (Result, error) {
 	settings, err := m.readSettings()

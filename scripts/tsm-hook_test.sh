@@ -7,7 +7,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK_SCRIPT="$SCRIPT_DIR/tsm-hook.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+HOOK_SCRIPT="$REPO_ROOT/internal/hooks/tsm-hook.sh"
 
 PASS_COUNT=0
 FAIL_COUNT=0
