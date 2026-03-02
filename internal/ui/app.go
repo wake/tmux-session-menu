@@ -75,6 +75,11 @@ func (m Model) InputValue() string {
 	return m.inputValue
 }
 
+// Err 回傳目前的錯誤（主要用於測試）。
+func (m Model) Err() error {
+	return m.err
+}
+
 // loadSessionsCmd 建立一個 tea.Cmd，透過 TmuxMgr 載入 session 列表。
 func loadSessionsCmd(deps Deps) tea.Cmd {
 	return func() tea.Msg {
@@ -287,18 +292,32 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyEnter:
-		// 提交輸入（目前所有 target 都只回到一般模式，實際動作在後續 Task 實作）
-		switch m.inputTarget {
-		case InputNewSession:
-			// Task 4 將實作新建 session
-		case InputRenameSession:
-			// Task 6 將實作重命名 session
-		case InputNewGroup:
-			// Task 8 將實作新建群組
-		}
-		m.mode = ModeNormal
+		value := strings.TrimSpace(m.inputValue)
 		m.inputValue = ""
 		m.inputPrompt = ""
+		if value == "" {
+			m.mode = ModeNormal
+			return m, nil
+		}
+		switch m.inputTarget {
+		case InputNewSession:
+			m.mode = ModeNormal
+			if m.deps.TmuxMgr != nil {
+				if err := m.deps.TmuxMgr.NewSession(value, ""); err != nil {
+					m.err = err
+					return m, nil
+				}
+			}
+			return m, loadSessionsCmd(m.deps)
+		case InputRenameSession:
+			// Task 6 將實作重命名 session
+			m.mode = ModeNormal
+		case InputNewGroup:
+			// Task 8 將實作新建群組
+			m.mode = ModeNormal
+		default:
+			m.mode = ModeNormal
+		}
 		return m, nil
 	case tea.KeyRunes:
 		// 附加輸入字元

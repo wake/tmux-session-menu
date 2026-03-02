@@ -565,6 +565,119 @@ func TestModel_ModeInput_EscDoesNotQuit(t *testing.T) {
 	assert.Nil(t, cmd, "ModeInput 中按 Esc 不應回傳 tea.Quit")
 }
 
+func TestModel_NewSession_CreatesAndReloads(t *testing.T) {
+	// 追蹤 new-session 呼叫
+	var newSessionCalls [][]string
+	flex := &flexMockExecutor{
+		handler: func(args []string) (string, error) {
+			if len(args) == 0 {
+				return "", nil
+			}
+			switch args[0] {
+			case "new-session":
+				newSessionCalls = append(newSessionCalls, args)
+				return "", nil
+			case "list-sessions":
+				return "my-new:$1:1:/home:0:1700000000\n", nil
+			case "list-panes":
+				return "", nil
+			case "capture-pane":
+				return "", nil
+			}
+			return "", nil
+		},
+	}
+	mgr := tmux.NewManager(flex)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
+
+	// 按 'n' 進入 ModeInput
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	// 輸入 "my-new"
+	for _, ch := range "my-new" {
+		m, _ = applyKey(m, string(ch))
+	}
+	assert.Equal(t, "my-new", m.InputValue())
+
+	// 按 Enter 送出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	// 驗證：inputValue 被清空
+	assert.Equal(t, "", model.InputValue())
+	// 驗證：NewSession 被呼叫
+	assert.Len(t, newSessionCalls, 1, "NewSession 應被呼叫一次")
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+	// 驗證：無錯誤
+	assert.Nil(t, model.Err())
+}
+
+func TestModel_NewSession_EmptyInput_NoOp(t *testing.T) {
+	var newSessionCalls [][]string
+	flex := &flexMockExecutor{
+		handler: func(args []string) (string, error) {
+			if len(args) > 0 && args[0] == "new-session" {
+				newSessionCalls = append(newSessionCalls, args)
+			}
+			return "", nil
+		},
+	}
+	mgr := tmux.NewManager(flex)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
+
+	// 按 'n' 進入 ModeInput
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	// 直接按 Enter（空輸入）
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	// 驗證：NewSession 未被呼叫
+	assert.Len(t, newSessionCalls, 0, "空輸入不應呼叫 NewSession")
+	// 驗證：cmd 為 nil（不觸發 reload）
+	assert.Nil(t, cmd, "空輸入不應觸發 reload")
+}
+
+func TestModel_NewSession_Error_SetsErr(t *testing.T) {
+	flex := &flexMockExecutor{
+		handler: func(args []string) (string, error) {
+			if len(args) > 0 && args[0] == "new-session" {
+				return "", fmt.Errorf("tmux: duplicate session")
+			}
+			return "", nil
+		},
+	}
+	mgr := tmux.NewManager(flex)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
+
+	// 按 'n' 進入 ModeInput
+	m, _ = applyKey(m, "n")
+
+	// 輸入名稱
+	for _, ch := range "dup" {
+		m, _ = applyKey(m, string(ch))
+	}
+
+	// 按 Enter 送出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	// 驗證：err 被設定
+	assert.NotNil(t, model.Err(), "NewSession 失敗時應設定 err")
+	assert.Contains(t, model.Err().Error(), "duplicate session")
+	// 驗證：cmd 為 nil（不觸發 reload）
+	assert.Nil(t, cmd, "錯誤時不應觸發 reload")
+}
+
 func TestLoadSessions_UsesLayer2PaneTitle(t *testing.T) {
 	flex := &flexMockExecutor{
 		handler: func(args []string) (string, error) {
