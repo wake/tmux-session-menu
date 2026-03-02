@@ -95,6 +95,22 @@ func TestSessionMeta_Reorder(t *testing.T) {
 	assert.Equal(t, "b", metas[2].SessionName)
 }
 
+func TestToggleGroupCollapsed(t *testing.T) {
+	s := newTestStore(t)
+
+	s.CreateGroup("dev", 0)
+	groups, _ := s.ListGroups()
+	assert.False(t, groups[0].Collapsed)
+
+	s.ToggleGroupCollapsed(groups[0].ID)
+	groups, _ = s.ListGroups()
+	assert.True(t, groups[0].Collapsed)
+
+	s.ToggleGroupCollapsed(groups[0].ID)
+	groups, _ = s.ListGroups()
+	assert.False(t, groups[0].Collapsed)
+}
+
 func TestGroup_Reorder(t *testing.T) {
 	s := newTestStore(t)
 
@@ -112,4 +128,17 @@ func TestGroup_Reorder(t *testing.T) {
 	assert.Equal(t, "third", groups[0].Name)
 	assert.Equal(t, "first", groups[1].Name)
 	assert.Equal(t, "second", groups[2].Name)
+}
+
+func TestListAllSessionMetas(t *testing.T) {
+	s := newTestStore(t)
+
+	s.CreateGroup("dev", 0)
+	groups, _ := s.ListGroups()
+	s.SetSessionGroup("alpha", groups[0].ID, 0)
+	s.SetSessionGroup("beta", groups[0].ID, 1)
+
+	metas, err := s.ListAllSessionMetas()
+	assert.NoError(t, err)
+	assert.Len(t, metas, 2)
 }
