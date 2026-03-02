@@ -97,6 +97,67 @@ func TestModel_View_Preview(t *testing.T) {
 	assert.Contains(t, view, "正在重構 auth 模組")
 }
 
+func TestModel_SessionsMsg_PopulatesItems(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	msg := ui.SessionsMsg{
+		Sessions: []tmux.Session{
+			{Name: "alpha", Activity: time.Now()},
+			{Name: "beta", Activity: time.Now()},
+		},
+	}
+
+	updated, _ := m.Update(msg)
+	model := updated.(ui.Model)
+
+	assert.Equal(t, 2, len(model.Items()))
+	assert.Equal(t, "alpha", model.Items()[0].Session.Name)
+}
+
+func TestModel_Init_TriggersLoad(t *testing.T) {
+	mockExec := &mockExecutor{
+		output: "dev:$1:1:/home:0:1700000000\nops:$2:1:/tmp:0:1700000000\n",
+	}
+	mgr := tmux.NewManager(mockExec)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
+
+	cmd := m.Init()
+	assert.NotNil(t, cmd)
+
+	// Execute the batch and collect messages
+	result := cmd()
+	// tea.Batch returns a BatchMsg ([]tea.Cmd)
+	// We need to find and execute the loadSessionsCmd among them
+	batchMsg, ok := result.(tea.BatchMsg)
+	if ok {
+		for _, c := range batchMsg {
+			if c == nil {
+				continue
+			}
+			msg := c()
+			if sessMsg, ok := msg.(ui.SessionsMsg); ok {
+				assert.Nil(t, sessMsg.Err)
+				assert.Equal(t, 2, len(sessMsg.Sessions))
+				assert.Equal(t, "dev", sessMsg.Sessions[0].Name)
+				return
+			}
+		}
+		t.Fatal("no SessionsMsg found in batch")
+	}
+	// If not a batch, check direct
+	sessMsg, ok := result.(ui.SessionsMsg)
+	assert.True(t, ok)
+	assert.Equal(t, 2, len(sessMsg.Sessions))
+}
+
+type mockExecutor struct {
+	output string
+	err    error
+}
+
+func (e *mockExecutor) Execute(args ...string) (string, error) {
+	return e.output, e.err
+}
+
 func applyKey(m ui.Model, key string) (ui.Model, tea.Cmd) {
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 	updated, cmd := m.Update(msg)

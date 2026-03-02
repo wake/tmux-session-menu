@@ -37,14 +37,43 @@ func NewModel(deps Deps) Model {
 	return Model{deps: deps}
 }
 
+// SessionsMsg 是 loadSessions 完成後的回傳訊息。
+type SessionsMsg struct {
+	Sessions []tmux.Session
+	Groups   []store.Group
+	Err      error
+}
+
+// Items 回傳目前的列表項目。
+func (m Model) Items() []ListItem {
+	return m.items
+}
+
 // Selected 回傳使用者按 Enter 選取的 session name（空字串表示未選取）。
 func (m Model) Selected() string {
 	return m.selected
 }
 
+// loadSessionsCmd 建立一個 tea.Cmd，透過 TmuxMgr 載入 session 列表。
+func loadSessionsCmd(deps Deps) tea.Cmd {
+	return func() tea.Msg {
+		if deps.TmuxMgr == nil {
+			return SessionsMsg{}
+		}
+		sessions, err := deps.TmuxMgr.ListSessions()
+		if err != nil {
+			return SessionsMsg{Err: err}
+		}
+		return SessionsMsg{Sessions: sessions}
+	}
+}
+
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
-	return tea.SetWindowTitle("tmux session menu")
+	return tea.Batch(
+		tea.SetWindowTitle("tmux session menu"),
+		loadSessionsCmd(m.deps),
+	)
 }
 
 // Update 處理訊息並更新模型狀態。
@@ -53,6 +82,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, nil
+	case SessionsMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+			return m, nil
+		}
+		m.items = FlattenItems(msg.Groups, msg.Sessions)
+		if m.cursor >= len(m.items) && len(m.items) > 0 {
+			m.cursor = len(m.items) - 1
+		}
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
