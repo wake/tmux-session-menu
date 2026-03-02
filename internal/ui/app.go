@@ -186,6 +186,9 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 	}
 }
 
+// errMsg 封裝非同步操作回傳的錯誤。
+type errMsg struct{ err error }
+
 // TickMsg 表示定時更新觸發。
 type TickMsg struct{}
 
@@ -250,6 +253,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
 		}
+		return m, nil
+	case errMsg:
+		m.err = msg.err
 		return m, nil
 	case TickMsg:
 		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
@@ -372,7 +378,9 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.confirmPrompt = fmt.Sprintf("確定要刪除 session %q？", name)
 				m.confirmAction = func() tea.Cmd {
 					if deps.TmuxMgr != nil {
-						deps.TmuxMgr.KillSession(name)
+						if err := deps.TmuxMgr.KillSession(name); err != nil {
+							return func() tea.Msg { return errMsg{err} }
+						}
 					}
 					return loadSessionsCmd(deps)
 				}
@@ -522,7 +530,8 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyBackspace:
 		if len(m.searchQuery) > 0 {
-			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			runes := []rune(m.searchQuery)
+			m.searchQuery = string(runes[:len(runes)-1])
 		}
 		visible := m.visibleItems()
 		if m.cursor >= len(visible) && len(visible) > 0 {
@@ -602,7 +611,11 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 	if session.GroupName == "" {
 		return m, nil // 未分組 session 不支援排序
 	}
-	groups, _ := m.deps.Store.ListGroups()
+	groups, err := m.deps.Store.ListGroups()
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
 	var groupID int64
 	for _, g := range groups {
 		if g.Name == session.GroupName {
