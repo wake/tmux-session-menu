@@ -7,6 +7,7 @@ const (
 	ModeNormal  Mode = iota // 一般瀏覽
 	ModeInput               // 文字輸入
 	ModeConfirm             // 確認對話框
+	ModePicker              // 選擇器（例如選擇群組）
 )
 
 // InputTarget 標識文字輸入的目的。

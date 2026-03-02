@@ -926,3 +926,144 @@ func TestLoadSessions_UsesLayer2PaneTitle(t *testing.T) {
 	assert.Equal(t, tmux.StatusRunning, sessMsg.Sessions[0].Status,
 		"pane title 含 Braille 旋轉指標，應偵測為 StatusRunning")
 }
+
+// --- 移動 session 到群組 (m key) 相關測試 ---
+
+func TestModel_MoveSessionToGroup(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 建立兩個群組
+	st.CreateGroup("工作", 0)
+	st.CreateGroup("個人", 1)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 m 應進入 ModePicker
+	m, _ = applyKey(m, "m")
+	assert.Equal(t, ui.ModePicker, m.Mode(), "按 m 後應進入 ModePicker")
+
+	// 按 Enter 選擇第一個群組（工作）
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode(), "確認後應回到 ModeNormal")
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+
+	// 驗證：store 中 session 已被移動到第一個群組
+	groups, _ := st.ListGroups()
+	metas, _ := st.ListAllSessionMetas()
+	assert.Len(t, metas, 1)
+	assert.Equal(t, "dev", metas[0].SessionName)
+	assert.Equal(t, groups[0].ID, metas[0].GroupID, "session 應被移動到第一個群組")
+}
+
+func TestModel_MoveSession_PickerNavigation(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 建立三個群組
+	st.CreateGroup("工作", 0)
+	st.CreateGroup("個人", 1)
+	st.CreateGroup("測試", 2)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 m 進入 ModePicker
+	m, _ = applyKey(m, "m")
+	assert.Equal(t, ui.ModePicker, m.Mode())
+	assert.Equal(t, 0, m.PickerCursor(), "初始 pickerCursor 應為 0")
+
+	// 按 j 向下移動
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 1, m.PickerCursor(), "按 j 後 pickerCursor 應為 1")
+
+	// 按 j 再向下
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 2, m.PickerCursor(), "按 j 後 pickerCursor 應為 2")
+
+	// 按 j 不能超過底部
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 2, m.PickerCursor(), "不能超過底部")
+
+	// 按 k 向上移動
+	m, _ = applyKey(m, "k")
+	assert.Equal(t, 1, m.PickerCursor(), "按 k 後 pickerCursor 應為 1")
+
+	// 按 k 回到頂部
+	m, _ = applyKey(m, "k")
+	assert.Equal(t, 0, m.PickerCursor(), "按 k 後 pickerCursor 應為 0")
+
+	// 按 k 不能超過頂部
+	m, _ = applyKey(m, "k")
+	assert.Equal(t, 0, m.PickerCursor(), "不能超過頂部")
+}
+
+func TestModel_MoveSession_OnGroup_NoOp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("工作", 0)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "工作"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// cursor 在群組上，按 m 應保持 ModeNormal
+	m, _ = applyKey(m, "m")
+	assert.Equal(t, ui.ModeNormal, m.Mode(), "群組上按 m 應保持 ModeNormal")
+}
+
+func TestModel_MoveSession_EscCancels(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("工作", 0)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 m 進入 ModePicker
+	m, _ = applyKey(m, "m")
+	assert.Equal(t, ui.ModePicker, m.Mode())
+
+	// 按 Esc 取消
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode(), "Esc 後應回到 ModeNormal")
+	// 驗證：cmd 為 nil（不觸發 reload）
+	assert.Nil(t, cmd, "取消後不應觸發 reload")
+
+	// 驗證：store 中無任何 session meta 變更
+	metas, _ := st.ListAllSessionMetas()
+	assert.Len(t, metas, 0, "取消後不應有任何 session meta 變更")
+}
+
+func TestModel_MoveSession_NoGroups_NoOp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 不建立任何群組
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 m 應保持 ModeNormal（因為沒有群組可選）
+	m, _ = applyKey(m, "m")
+	assert.Equal(t, ui.ModeNormal, m.Mode(), "無群組時按 m 應保持 ModeNormal")
+}

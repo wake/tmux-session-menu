@@ -41,6 +41,11 @@ type Model struct {
 
 	confirmPrompt string
 	confirmAction func() tea.Cmd
+
+	// Picker mode（選擇群組）
+	pickerGroups []store.Group
+	pickerCursor int
+	pickerTarget string // 被移動的 session name
 }
 
 // NewModel 建立初始 Model。
@@ -227,6 +232,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateInput(msg)
 		case ModeConfirm:
 			return m.updateConfirm(msg)
+		case ModePicker:
+			return m.updatePicker(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -297,6 +304,22 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.inputTarget = InputNewGroup
 			m.inputPrompt = "群組名稱"
 			m.inputValue = ""
+		}
+		return m, nil
+	case "m":
+		// 移動 session 到群組：僅對 ItemSession 生效
+		if m.cursor >= 0 && m.cursor < len(m.items) && m.deps.Store != nil {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession {
+				groups, _ := m.deps.Store.ListGroups()
+				if len(groups) == 0 {
+					return m, nil
+				}
+				m.mode = ModePicker
+				m.pickerGroups = groups
+				m.pickerCursor = 0
+				m.pickerTarget = item.Session.Name
+			}
 		}
 		return m, nil
 	case "d":
@@ -409,6 +432,38 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// updatePicker 處理群組選擇器模式的按鍵。
+func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		if m.pickerCursor < len(m.pickerGroups)-1 {
+			m.pickerCursor++
+		}
+	case "k", "up":
+		if m.pickerCursor > 0 {
+			m.pickerCursor--
+		}
+	case "enter":
+		if m.pickerCursor >= 0 && m.pickerCursor < len(m.pickerGroups) {
+			group := m.pickerGroups[m.pickerCursor]
+			if m.deps.Store != nil {
+				if err := m.deps.Store.SetSessionGroup(m.pickerTarget, group.ID, 0); err != nil {
+					m.err = err
+				}
+			}
+		}
+		m.mode = ModeNormal
+		m.pickerGroups = nil
+		m.pickerTarget = ""
+		return m, loadSessionsCmd(m.deps)
+	case "esc":
+		m.mode = ModeNormal
+		m.pickerGroups = nil
+		m.pickerTarget = ""
+	}
+	return m, nil
+}
+
 // SetConfirm 設定確認模式（主要用於測試）。
 func (m *Model) SetConfirm(prompt string, action func() tea.Cmd) {
 	m.mode = ModeConfirm
@@ -492,6 +547,16 @@ func (m Model) View() string {
 		b.WriteString(fmt.Sprintf("\n  %s  %s\n",
 			selectedStyle.Render(m.confirmPrompt),
 			dimStyle.Render("[y] 確認  [n/Esc] 取消")))
+	case ModePicker:
+		b.WriteString(fmt.Sprintf("\n  %s\n", selectedStyle.Render("移動到群組：")))
+		for i, g := range m.pickerGroups {
+			cursor := "  "
+			if i == m.pickerCursor {
+				cursor = selectedStyle.Render("► ")
+			}
+			b.WriteString(fmt.Sprintf("  %s%s\n", cursor, g.Name))
+		}
+		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 確認  [Esc] 取消")))
 	default:
 		b.WriteString(fmt.Sprintf("\n  %s  %s  %s\n",
 			dimStyle.Render("[n] 新建"),
@@ -538,4 +603,9 @@ func (m *Model) SetItems(items []ListItem) {
 // Cursor 回傳目前游標位置。
 func (m Model) Cursor() int {
 	return m.cursor
+}
+
+// PickerCursor 回傳 picker 模式的游標位置（主要用於測試）。
+func (m Model) PickerCursor() int {
+	return m.pickerCursor
 }
