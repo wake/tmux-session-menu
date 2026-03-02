@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wake/tmux-session-menu/internal/bind"
 	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/daemon"
@@ -54,6 +55,11 @@ func main() {
 
 	if args[0] == "--inline" || args[0] == "--popup" {
 		runWithMode(parseRunMode(args))
+		return
+	}
+
+	if args[0] == "bind" {
+		runBind(args[1:])
 		return
 	}
 
@@ -311,6 +317,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  (no args)          啟動 TUI 選單（自動管理 daemon）")
+	fmt.Fprintln(os.Stderr, "  bind install       安裝 Ctrl+Q 快捷鍵到 ~/.tmux.conf")
+	fmt.Fprintln(os.Stderr, "  bind uninstall     移除 Ctrl+Q 快捷鍵")
 	fmt.Fprintln(os.Stderr, "  daemon start       前景啟動 daemon")
 	fmt.Fprintln(os.Stderr, "  daemon stop        停止 daemon")
 	fmt.Fprintln(os.Stderr, "  daemon status      顯示 daemon 狀態")
@@ -369,6 +377,72 @@ func printDaemonUsage() {
 	fmt.Fprintln(os.Stderr, "  start      前景啟動 daemon")
 	fmt.Fprintln(os.Stderr, "  stop       停止 daemon（送 SIGTERM）")
 	fmt.Fprintln(os.Stderr, "  status     顯示 daemon 狀態")
+}
+
+func runBind(args []string) {
+	if len(args) == 0 {
+		printBindUsage()
+		os.Exit(1)
+		return
+	}
+
+	if args[0] == "--help" || args[0] == "-h" {
+		printBindUsage()
+		return
+	}
+
+	action := args[0]
+	dryRun := containsFlag(args[1:], "--dry-run")
+
+	switch action {
+	case "install":
+		result, err := bind.Install(dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if !result.Changed {
+			fmt.Println(result.Message)
+			return
+		}
+		if dryRun {
+			fmt.Printf("(dry-run) %s\n", result.Message)
+		} else {
+			fmt.Println(result.Message)
+			fmt.Println("Ctrl+Q 快捷鍵已安裝，按 Ctrl+Q 即可開啟 tsm。")
+		}
+
+	case "uninstall":
+		result, err := bind.Uninstall(dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if !result.Changed {
+			fmt.Println(result.Message)
+			return
+		}
+		if dryRun {
+			fmt.Printf("(dry-run) %s\n", result.Message)
+		} else {
+			fmt.Println(result.Message)
+		}
+
+	default:
+		printBindUsage()
+		os.Exit(1)
+	}
+}
+
+func printBindUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: tsm bind <action> [--dry-run]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Actions:")
+	fmt.Fprintln(os.Stderr, "  install      安裝 Ctrl+Q 快捷鍵到 ~/.tmux.conf")
+	fmt.Fprintln(os.Stderr, "  uninstall    從 ~/.tmux.conf 移除 Ctrl+Q 快捷鍵")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags:")
+	fmt.Fprintln(os.Stderr, "  --dry-run    預覽變更，不實際寫入")
 }
 
 func printHooksUsage() {
