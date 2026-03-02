@@ -15,17 +15,44 @@ import (
 	"github.com/wake/tmux-session-menu/internal/ui"
 )
 
+// runMode 表示 TUI 的啟動模式
+type runMode int
+
+const (
+	modeAuto   runMode = iota // 自動偵測：在 tmux 內使用 popup，否則使用 inline
+	modeInline                // 強制使用內嵌全螢幕模式
+	modePopup                 // 強制使用 tmux popup 模式
+)
+
+// parseRunMode 從命令列參數中解析啟動模式
+func parseRunMode(args []string) runMode {
+	for _, a := range args {
+		switch a {
+		case "--inline":
+			return modeInline
+		case "--popup":
+			return modePopup
+		}
+	}
+	return modeAuto
+}
+
 func main() {
 	args := os.Args[1:]
 
 	if len(args) == 0 {
-		runTUI()
+		runWithMode(modeAuto)
 		return
 	}
 
 	if args[0] == "--help" || args[0] == "-h" {
 		printUsage()
 		return // exit 0
+	}
+
+	if args[0] == "--inline" || args[0] == "--popup" {
+		runWithMode(parseRunMode(args))
+		return
 	}
 
 	if args[0] == "hooks" {
@@ -35,6 +62,33 @@ func main() {
 
 	printUsage()
 	os.Exit(1)
+}
+
+// runWithMode 根據指定模式啟動 TUI
+func runWithMode(mode runMode) {
+	// 自動偵測：若在 tmux 內，使用 popup 模式
+	if mode == modeAuto && os.Getenv("TMUX") != "" {
+		mode = modePopup
+	}
+
+	if mode == modePopup {
+		exe, err := os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		cmd := osexec.Command("tmux", "display-popup", "-E", "-w", "80%", "-h", "80%", exe, "--inline")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			// Popup 被使用者關閉（正常退出）
+			os.Exit(0)
+		}
+		return
+	}
+
+	runTUI()
 }
 
 func runTUI() {
@@ -203,7 +257,7 @@ func containsFlag(args []string, flag string) bool {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: tsm [command]")
+	fmt.Fprintln(os.Stderr, "Usage: tsm [command] [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  (no args)          啟動 TUI 選單")
@@ -211,6 +265,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  hooks uninstall    移除 tsm hooks")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
+	fmt.Fprintln(os.Stderr, "  --inline           強制使用內嵌全螢幕模式")
+	fmt.Fprintln(os.Stderr, "  --popup            強制使用 tmux popup 模式")
 	fmt.Fprintln(os.Stderr, "  --dry-run          預覽變更，不實際寫入")
 }
 

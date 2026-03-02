@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/wake/tmux-session-menu/internal/ai"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
@@ -31,6 +32,23 @@ type Model struct {
 	deps     Deps
 	selected string // Enter 選取的 session name
 	err      error
+
+	// Mode 相關
+	mode        Mode
+	inputTarget InputTarget
+	inputPrompt string
+	inputValue  string
+
+	confirmPrompt string
+	confirmAction func() tea.Cmd
+
+	// Picker mode（選擇群組）
+	pickerGroups []store.Group
+	pickerCursor int
+	pickerTarget string // 被移動的 session name
+
+	// Search mode（搜尋）
+	searchQuery string
 }
 
 // NewModel 建立初始 Model。
@@ -55,6 +73,45 @@ func (m Model) Selected() string {
 	return m.selected
 }
 
+// Mode 回傳目前的互動模式。
+func (m Model) Mode() Mode {
+	return m.mode
+}
+
+// InputValue 回傳目前的輸入值（主要用於測試）。
+func (m Model) InputValue() string {
+	return m.inputValue
+}
+
+// Err 回傳目前的錯誤（主要用於測試）。
+func (m Model) Err() error {
+	return m.err
+}
+
+// SearchQuery 回傳目前的搜尋字串（主要用於測試）。
+func (m Model) SearchQuery() string {
+	return m.searchQuery
+}
+
+// visibleItems 回傳目前可見的項目（搜尋時過濾）。
+func (m Model) visibleItems() []ListItem {
+	if m.mode != ModeSearch || m.searchQuery == "" {
+		return m.items
+	}
+	query := strings.ToLower(m.searchQuery)
+	var filtered []ListItem
+	for _, item := range m.items {
+		if item.Type == ItemGroup {
+			continue
+		}
+		if strings.Contains(strings.ToLower(item.Session.DisplayName()), query) ||
+			strings.Contains(strings.ToLower(item.Session.Name), query) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
 // loadSessionsCmd 建立一個 tea.Cmd，透過 TmuxMgr 載入 session 列表。
 func loadSessionsCmd(deps Deps) tea.Cmd {
 	return func() tea.Msg {
@@ -66,9 +123,31 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 			return SessionsMsg{Err: err}
 		}
 
-		// 狀態偵測
+		// 擷取 pane 內容的行數，預設 150
+		previewLines := deps.Cfg.PreviewLines
+		if previewLines <= 0 {
+			previewLines = 150
+		}
+
+		// 第二層：一次取得所有 pane title
+		paneTitles := make(map[string]string)
+		if deps.TmuxMgr != nil {
+			if titles, err := deps.TmuxMgr.ListPaneTitles(); err == nil {
+				paneTitles = titles
+			}
+		}
+
+		// 狀態偵測與 AI 模型偵測
 		for i := range sessions {
-			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name)
+			var paneContent string
+			if deps.TmuxMgr != nil {
+				if content, err := deps.TmuxMgr.CapturePane(sessions[i].Name, previewLines); err == nil {
+					paneContent = content
+				}
+			}
+			paneTitle := paneTitles[sessions[i].Name]
+			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name, paneTitle, paneContent)
+			sessions[i].AIModel = ai.DetectModel(paneContent)
 		}
 
 		// 從 store 載入 groups 和 session metas
@@ -83,8 +162,12 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 			}
 
 			metaMap := make(map[string]int64)
+			customNameMap := make(map[string]string)
 			for _, meta := range metas {
 				metaMap[meta.SessionName] = meta.GroupID
+				if meta.CustomName != "" {
+					customNameMap[meta.SessionName] = meta.CustomName
+				}
 			}
 
 			for i := range sessions {
@@ -93,12 +176,18 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 						sessions[i].GroupName = name
 					}
 				}
+				if cn, ok := customNameMap[sessions[i].Name]; ok {
+					sessions[i].CustomName = cn
+				}
 			}
 		}
 
 		return SessionsMsg{Sessions: sessions, Groups: groups}
 	}
 }
+
+// errMsg 封裝非同步操作回傳的錯誤。
+type errMsg struct{ err error }
 
 // TickMsg 表示定時更新觸發。
 type TickMsg struct{}
@@ -111,7 +200,7 @@ func tickCmd(interval time.Duration) tea.Cmd {
 }
 
 // detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態。
-func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
+func detectSessionStatus(deps Deps, sessionName, paneTitle, paneContent string) tmux.SessionStatus {
 	var input tmux.StatusInput
 
 	// 第一層：Hook 狀態檔案
@@ -122,13 +211,9 @@ func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
 	}
 
 	// 第二層（pane title）+ 第三層（terminal content）：只在 hook 無效時執行
-	// TODO: Layer 2 pane title 尚未整合，需加入 ListPaneTitles 呼叫填入 input.PaneTitle
 	if input.HookStatus == nil || !input.HookStatus.IsValid() {
-		if deps.TmuxMgr != nil {
-			if content, err := deps.TmuxMgr.CapturePane(sessionName, 50); err == nil {
-				input.PaneContent = content
-			}
-		}
+		input.PaneTitle = paneTitle
+		input.PaneContent = paneContent
 	}
 
 	return tmux.ResolveStatus(input)
@@ -169,48 +254,415 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = len(m.items) - 1
 		}
 		return m, nil
+	case errMsg:
+		m.err = msg.err
+		return m, nil
 	case TickMsg:
 		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
 	case tea.KeyMsg:
+		switch m.mode {
+		case ModeInput:
+			return m.updateInput(msg)
+		case ModeConfirm:
+			return m.updateConfirm(msg)
+		case ModePicker:
+			return m.updatePicker(msg)
+		case ModeSearch:
+			return m.updateSearch(msg)
+		default:
+			return m.updateNormal(msg)
+		}
+	}
+	return m, nil
+}
+
+// updateNormal 處理一般瀏覽模式的按鍵。
+func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "esc", "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "j", "down":
+		if m.cursor < len(m.items)-1 {
+			m.cursor++
+		}
+		return m, nil
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+		return m, nil
+	case "enter":
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession {
+				m.selected = item.Session.Name
+				m.quitting = true
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+	case "tab":
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemGroup && m.deps.Store != nil {
+				if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
+					m.err = err
+					return m, nil
+				}
+				return m, loadSessionsCmd(m.deps)
+			}
+		}
+		return m, nil
+	case "n":
+		m.mode = ModeInput
+		m.inputTarget = InputNewSession
+		m.inputPrompt = "Session 名稱"
+		m.inputValue = ""
+		return m, nil
+	case "r":
+		// 重命名 session（自訂名稱）：僅對 ItemSession 生效
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession {
+				m.mode = ModeInput
+				m.inputTarget = InputRenameSession
+				m.inputPrompt = "自訂名稱"
+				m.inputValue = item.Session.CustomName
+			}
+		}
+		return m, nil
+	case "g":
+		// 新建群組：需要 Store
+		if m.deps.Store != nil {
+			m.mode = ModeInput
+			m.inputTarget = InputNewGroup
+			m.inputPrompt = "群組名稱"
+			m.inputValue = ""
+		}
+		return m, nil
+	case "m":
+		// 移動 session 到群組：僅對 ItemSession 生效
+		if m.cursor >= 0 && m.cursor < len(m.items) && m.deps.Store != nil {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession {
+				groups, _ := m.deps.Store.ListGroups()
+				if len(groups) == 0 {
+					return m, nil
+				}
+				m.mode = ModePicker
+				m.pickerGroups = groups
+				m.pickerCursor = 0
+				m.pickerTarget = item.Session.Name
+			}
+		}
+		return m, nil
+	case "/":
+		// 進入搜尋模式
+		m.mode = ModeSearch
+		m.searchQuery = ""
+		m.cursor = 0
+		return m, nil
+	case "J":
+		return m.moveItem(1) // 下移
+	case "K":
+		return m.moveItem(-1) // 上移
+	case "d":
+		// 刪除 session：僅對 ItemSession 生效
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession {
+				name := item.Session.Name
+				deps := m.deps
+				m.mode = ModeConfirm
+				m.confirmPrompt = fmt.Sprintf("確定要刪除 session %q？", name)
+				m.confirmAction = func() tea.Cmd {
+					if deps.TmuxMgr != nil {
+						if err := deps.TmuxMgr.KillSession(name); err != nil {
+							return func() tea.Msg { return errMsg{err} }
+						}
+					}
+					return loadSessionsCmd(deps)
+				}
+			}
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+// updateInput 處理文字輸入模式的按鍵。
+func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		// 取消輸入，回到一般模式
+		m.mode = ModeNormal
+		m.inputValue = ""
+		m.inputPrompt = ""
+		return m, nil
+	case tea.KeyBackspace:
+		// 刪除最後一個字元
+		if len(m.inputValue) > 0 {
+			runes := []rune(m.inputValue)
+			m.inputValue = string(runes[:len(runes)-1])
+		}
+		return m, nil
+	case tea.KeyEnter:
+		value := strings.TrimSpace(m.inputValue)
+		m.inputValue = ""
+		m.inputPrompt = ""
+		if value == "" {
+			m.mode = ModeNormal
+			return m, nil
+		}
+		switch m.inputTarget {
+		case InputNewSession:
+			m.mode = ModeNormal
+			if m.deps.TmuxMgr != nil {
+				if err := m.deps.TmuxMgr.NewSession(value, ""); err != nil {
+					m.err = err
+					return m, nil
+				}
+			}
+			return m, loadSessionsCmd(m.deps)
+		case InputRenameSession:
+			m.mode = ModeNormal
+			if m.deps.Store != nil && m.cursor >= 0 && m.cursor < len(m.items) {
+				name := m.items[m.cursor].Session.Name
+				if err := m.deps.Store.SetCustomName(name, value); err != nil {
+					m.err = err
+					return m, nil
+				}
+			}
+			return m, loadSessionsCmd(m.deps)
+		case InputNewGroup:
+			m.mode = ModeNormal
+			if m.deps.Store != nil {
+				if err := m.deps.Store.CreateGroup(value, 0); err != nil {
+					m.err = err
+					return m, nil
+				}
+			}
+			return m, loadSessionsCmd(m.deps)
+		default:
+			m.mode = ModeNormal
+		}
+		return m, nil
+	case tea.KeyRunes:
+		// 附加輸入字元
+		m.inputValue += string(msg.Runes)
+		return m, nil
+	}
+	return m, nil
+}
+
+// updateConfirm 處理確認對話框模式的按鍵。
+func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y", "enter":
+		// 執行確認動作
+		var cmd tea.Cmd
+		if m.confirmAction != nil {
+			cmd = m.confirmAction()
+			m.confirmAction = nil
+		}
+		m.mode = ModeNormal
+		m.confirmPrompt = ""
+		return m, cmd
+	case "n", "N", "esc":
+		// 取消確認
+		m.mode = ModeNormal
+		m.confirmPrompt = ""
+		m.confirmAction = nil
+		return m, nil
+	}
+	return m, nil
+}
+
+// updatePicker 處理群組選擇器模式的按鍵。
+func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		if m.pickerCursor < len(m.pickerGroups)-1 {
+			m.pickerCursor++
+		}
+	case "k", "up":
+		if m.pickerCursor > 0 {
+			m.pickerCursor--
+		}
+	case "enter":
+		if m.pickerCursor >= 0 && m.pickerCursor < len(m.pickerGroups) {
+			group := m.pickerGroups[m.pickerCursor]
+			if m.deps.Store != nil {
+				if err := m.deps.Store.SetSessionGroup(m.pickerTarget, group.ID, 0); err != nil {
+					m.err = err
+				}
+			}
+		}
+		m.mode = ModeNormal
+		m.pickerGroups = nil
+		m.pickerTarget = ""
+		return m, loadSessionsCmd(m.deps)
+	case "esc":
+		m.mode = ModeNormal
+		m.pickerGroups = nil
+		m.pickerTarget = ""
+	}
+	return m, nil
+}
+
+// updateSearch 處理搜尋模式的按鍵。
+func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEscape:
+		m.mode = ModeNormal
+		m.searchQuery = ""
+		m.cursor = 0
+	case tea.KeyEnter:
+		visible := m.visibleItems()
+		if m.cursor >= 0 && m.cursor < len(visible) {
+			item := visible[m.cursor]
+			if item.Type == ItemSession {
+				m.selected = item.Session.Name
+				m.quitting = true
+				return m, tea.Quit
+			}
+		}
+	case tea.KeyBackspace:
+		if len(m.searchQuery) > 0 {
+			runes := []rune(m.searchQuery)
+			m.searchQuery = string(runes[:len(runes)-1])
+		}
+		visible := m.visibleItems()
+		if m.cursor >= len(visible) && len(visible) > 0 {
+			m.cursor = len(visible) - 1
+		}
+	case tea.KeyRunes:
+		m.searchQuery += string(msg.Runes)
+		m.cursor = 0
+	default:
+		// j/k 導航
 		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			m.quitting = true
-			return m, tea.Quit
 		case "j", "down":
-			if m.cursor < len(m.items)-1 {
+			visible := m.visibleItems()
+			if m.cursor < len(visible)-1 {
 				m.cursor++
 			}
-			return m, nil
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
-			return m, nil
-		case "enter":
-			if m.cursor >= 0 && m.cursor < len(m.items) {
-				item := m.items[m.cursor]
-				if item.Type == ItemSession {
-					m.selected = item.Session.Name
-					m.quitting = true
-					return m, tea.Quit
-				}
-			}
-			return m, nil
-		case "tab":
-			if m.cursor >= 0 && m.cursor < len(m.items) {
-				item := m.items[m.cursor]
-				if item.Type == ItemGroup && m.deps.Store != nil {
-					if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
-						m.err = err
-						return m, nil
-					}
-					return m, loadSessionsCmd(m.deps)
-				}
-			}
-			return m, nil
 		}
 	}
 	return m, nil
+}
+
+// moveItem 根據方向移動目前選取的項目（群組或 session）。
+func (m Model) moveItem(direction int) (tea.Model, tea.Cmd) {
+	if m.deps.Store == nil || m.cursor < 0 || m.cursor >= len(m.items) {
+		return m, nil
+	}
+	item := m.items[m.cursor]
+	switch item.Type {
+	case ItemGroup:
+		return m.moveGroup(item.Group, direction)
+	case ItemSession:
+		return m.moveSession(item.Session, direction)
+	}
+	return m, nil
+}
+
+// moveGroup 將群組在排序中上移或下移，交換 sort_order。
+func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) {
+	groups, err := m.deps.Store.ListGroups()
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	idx := -1
+	for i, g := range groups {
+		if g.ID == group.ID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return m, nil
+	}
+	newIdx := idx + direction
+	if newIdx < 0 || newIdx >= len(groups) {
+		return m, nil
+	}
+	// 交換 sort_order
+	if err := m.deps.Store.SetGroupOrder(groups[idx].ID, groups[newIdx].SortOrder); err != nil {
+		m.err = err
+		return m, nil
+	}
+	if err := m.deps.Store.SetGroupOrder(groups[newIdx].ID, groups[idx].SortOrder); err != nil {
+		m.err = err
+		return m, nil
+	}
+	m.cursor += direction
+	return m, loadSessionsCmd(m.deps)
+}
+
+// moveSession 將 session 在群組內排序中上移或下移，交換 sort_order。
+func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.Cmd) {
+	if session.GroupName == "" {
+		return m, nil // 未分組 session 不支援排序
+	}
+	groups, err := m.deps.Store.ListGroups()
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	var groupID int64
+	for _, g := range groups {
+		if g.Name == session.GroupName {
+			groupID = g.ID
+			break
+		}
+	}
+	if groupID == 0 {
+		return m, nil
+	}
+	metas, err := m.deps.Store.ListSessionMetas(groupID)
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	idx := -1
+	for i, meta := range metas {
+		if meta.SessionName == session.Name {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return m, nil
+	}
+	newIdx := idx + direction
+	if newIdx < 0 || newIdx >= len(metas) {
+		return m, nil
+	}
+	// 交換 sort_order
+	if err := m.deps.Store.SetSessionGroup(metas[idx].SessionName, groupID, metas[newIdx].SortOrder); err != nil {
+		m.err = err
+		return m, nil
+	}
+	if err := m.deps.Store.SetSessionGroup(metas[newIdx].SessionName, groupID, metas[idx].SortOrder); err != nil {
+		m.err = err
+		return m, nil
+	}
+	m.cursor += direction
+	return m, loadSessionsCmd(m.deps)
+}
+
+// SetConfirm 設定確認模式（主要用於測試）。
+func (m *Model) SetConfirm(prompt string, action func() tea.Cmd) {
+	m.mode = ModeConfirm
+	m.confirmPrompt = prompt
+	m.confirmAction = action
 }
 
 // View 渲染 TUI 畫面。
@@ -227,9 +679,10 @@ func (m Model) View() string {
 	b.WriteString("\n")
 
 	// Items list
-	if len(m.items) > 0 {
+	displayItems := m.visibleItems()
+	if len(displayItems) > 0 {
 		b.WriteString("\n")
-		for i, item := range m.items {
+		for i, item := range displayItems {
 			cursor := "  "
 			if i == m.cursor {
 				cursor = selectedStyle.Render("► ")
@@ -260,7 +713,7 @@ func (m Model) View() string {
 					aiModel = "  " + dimStyle.Render(item.Session.AIModel)
 				}
 
-				name := item.Session.Name
+				name := item.Session.DisplayName()
 				if i == m.cursor {
 					name = selectedStyle.Render(name)
 				}
@@ -276,15 +729,49 @@ func (m Model) View() string {
 		b.WriteString(fmt.Sprintf("\n  %s\n", statusErrorStyle.Render("Error: "+m.err.Error())))
 	}
 
-	// Help bar
-	b.WriteString(fmt.Sprintf("\n  %s  %s  %s\n",
-		dimStyle.Render("[n] 新建"),
-		dimStyle.Render("[g] 新群組"),
-		dimStyle.Render("[q] 離開")))
+	// 模式相關的底部列
+	switch m.mode {
+	case ModeInput:
+		b.WriteString(fmt.Sprintf("\n  %s: %s%s\n",
+			selectedStyle.Render(m.inputPrompt),
+			m.inputValue,
+			selectedStyle.Render("\u2588"))) // 游標方塊字元
+		b.WriteString(fmt.Sprintf("  %s\n",
+			dimStyle.Render("[Esc] 取消")))
+	case ModeConfirm:
+		b.WriteString(fmt.Sprintf("\n  %s  %s\n",
+			selectedStyle.Render(m.confirmPrompt),
+			dimStyle.Render("[y] 確認  [n/Esc] 取消")))
+	case ModePicker:
+		b.WriteString(fmt.Sprintf("\n  %s\n", selectedStyle.Render("移動到群組：")))
+		for i, g := range m.pickerGroups {
+			cursor := "  "
+			if i == m.pickerCursor {
+				cursor = selectedStyle.Render("► ")
+			}
+			b.WriteString(fmt.Sprintf("  %s%s\n", cursor, g.Name))
+		}
+		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 確認  [Esc] 取消")))
+	case ModeSearch:
+		b.WriteString(fmt.Sprintf("\n  %s: %s█\n",
+			selectedStyle.Render("/"),
+			m.searchQuery))
+		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
+	default:
+		b.WriteString(fmt.Sprintf("\n  %s  %s  %s  %s  %s  %s  %s\n",
+			dimStyle.Render("[n] 新建"),
+			dimStyle.Render("[d] 刪除"),
+			dimStyle.Render("[r] 更名"),
+			dimStyle.Render("[g] 群組"),
+			dimStyle.Render("[m] 移動"),
+			dimStyle.Render("[/] 搜尋"),
+			dimStyle.Render("[q] 離開")))
+	}
 
 	// Preview section
-	if len(m.items) > 0 && m.cursor >= 0 && m.cursor < len(m.items) {
-		selected := m.items[m.cursor]
+	visible := m.visibleItems()
+	if len(visible) > 0 && m.cursor >= 0 && m.cursor < len(visible) {
+		selected := visible[m.cursor]
 		if selected.Type == ItemSession && selected.Session.AISummary != "" {
 			b.WriteString("\n")
 			b.WriteString(previewBorderStyle.Render(
@@ -321,4 +808,9 @@ func (m *Model) SetItems(items []ListItem) {
 // Cursor 回傳目前游標位置。
 func (m Model) Cursor() int {
 	return m.cursor
+}
+
+// PickerCursor 回傳 picker 模式的游標位置（主要用於測試）。
+func (m Model) PickerCursor() int {
+	return m.pickerCursor
 }
