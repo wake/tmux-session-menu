@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -138,7 +139,7 @@ func (m *Manager) EnsureScript() error {
 	}
 
 	existing, err := os.ReadFile(m.scriptPath)
-	if err == nil && string(existing) == string(HookScript) {
+	if err == nil && bytes.Equal(existing, HookScript) {
 		return nil // 內容相同，跳過
 	}
 

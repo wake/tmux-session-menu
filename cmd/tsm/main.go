@@ -19,6 +19,11 @@ func main() {
 		return
 	}
 
+	if args[0] == "--help" || args[0] == "-h" {
+		printUsage()
+		return // exit 0
+	}
+
 	if args[0] == "hooks" {
 		runHooks(args[1:])
 		return
@@ -45,6 +50,11 @@ func runHooks(args []string) {
 		return
 	}
 
+	if args[0] == "--help" || args[0] == "-h" {
+		printHooksUsage()
+		return
+	}
+
 	action := args[0]
 	dryRun := containsFlag(args[1:], "--dry-run")
 
@@ -66,6 +76,10 @@ func runHooks(args []string) {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
+		}
+
+		if dryRun {
+			fmt.Printf("(dry-run) 將寫入 hook script: %s\n", scriptPath)
 		}
 
 		result, err := mgr.Install(dryRun)
