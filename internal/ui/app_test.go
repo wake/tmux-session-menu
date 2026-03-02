@@ -678,6 +678,97 @@ func TestModel_NewSession_Error_SetsErr(t *testing.T) {
 	assert.Nil(t, cmd, "錯誤時不應觸發 reload")
 }
 
+// --- 刪除 session (d key) 相關測試 ---
+
+func TestModel_DeleteSession_WithConfirm(t *testing.T) {
+	// 追蹤 kill-session 呼叫
+	var killSessionCalls [][]string
+	flex := &flexMockExecutor{
+		handler: func(args []string) (string, error) {
+			if len(args) == 0 {
+				return "", nil
+			}
+			switch args[0] {
+			case "kill-session":
+				killSessionCalls = append(killSessionCalls, args)
+				return "", nil
+			case "list-sessions":
+				return "other:$2:1:/tmp:0:1700000000\n", nil
+			case "list-panes":
+				return "", nil
+			case "capture-pane":
+				return "", nil
+			}
+			return "", nil
+		},
+	}
+	mgr := tmux.NewManager(flex)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "other"}},
+	})
+
+	// cursor 在 session 上，按 d 應進入 ModeConfirm
+	m, _ = applyKey(m, "d")
+	assert.Equal(t, ui.ModeConfirm, m.Mode(), "按 d 後應進入 ModeConfirm")
+
+	// 按 y 確認刪除
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode(), "確認後應回到 ModeNormal")
+	// 驗證：KillSession 被呼叫
+	assert.Len(t, killSessionCalls, 1, "KillSession 應被呼叫一次")
+	assert.Contains(t, killSessionCalls[0], "dev", "應刪除名為 dev 的 session")
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+}
+
+func TestModel_DeleteSession_CancelWithEsc(t *testing.T) {
+	// 追蹤 kill-session 呼叫
+	var killSessionCalls [][]string
+	flex := &flexMockExecutor{
+		handler: func(args []string) (string, error) {
+			if len(args) > 0 && args[0] == "kill-session" {
+				killSessionCalls = append(killSessionCalls, args)
+			}
+			return "", nil
+		},
+	}
+	mgr := tmux.NewManager(flex)
+	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 d 進入 ModeConfirm
+	m, _ = applyKey(m, "d")
+	assert.Equal(t, ui.ModeConfirm, m.Mode(), "按 d 後應進入 ModeConfirm")
+
+	// 按 Esc 取消
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode(), "取消後應回到 ModeNormal")
+	// 驗證：KillSession 未被呼叫
+	assert.Len(t, killSessionCalls, 0, "取消後 KillSession 不應被呼叫")
+}
+
+func TestModel_DeleteSession_OnGroup_NoOp(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+	})
+
+	// cursor 在群組上，按 d 不應進入 ModeConfirm
+	m, _ = applyKey(m, "d")
+	assert.Equal(t, ui.ModeNormal, m.Mode(), "群組上按 d 應保持 ModeNormal")
+}
+
 func TestLoadSessions_UsesLayer2PaneTitle(t *testing.T) {
 	flex := &flexMockExecutor{
 		handler: func(args []string) (string, error) {

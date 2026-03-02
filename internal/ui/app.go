@@ -271,6 +271,24 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.inputPrompt = "Session 名稱"
 		m.inputValue = ""
 		return m, nil
+	case "d":
+		// 刪除 session：僅對 ItemSession 生效
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession {
+				name := item.Session.Name
+				deps := m.deps
+				m.mode = ModeConfirm
+				m.confirmPrompt = fmt.Sprintf("確定要刪除 session %q？", name)
+				m.confirmAction = func() tea.Cmd {
+					if deps.TmuxMgr != nil {
+						deps.TmuxMgr.KillSession(name)
+					}
+					return loadSessionsCmd(deps)
+				}
+			}
+		}
+		return m, nil
 	}
 	return m, nil
 }
