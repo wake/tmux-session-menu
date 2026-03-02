@@ -745,9 +745,13 @@ func (m Model) View() string {
 			m.searchQuery))
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	default:
-		b.WriteString(fmt.Sprintf("\n  %s  %s  %s\n",
+		b.WriteString(fmt.Sprintf("\n  %s  %s  %s  %s  %s  %s  %s\n",
 			dimStyle.Render("[n] 新建"),
-			dimStyle.Render("[g] 新群組"),
+			dimStyle.Render("[d] 刪除"),
+			dimStyle.Render("[r] 更名"),
+			dimStyle.Render("[g] 群組"),
+			dimStyle.Render("[m] 移動"),
+			dimStyle.Render("[/] 搜尋"),
 			dimStyle.Render("[q] 離開")))
 	}
 
