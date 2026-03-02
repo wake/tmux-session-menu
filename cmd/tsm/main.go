@@ -56,6 +56,8 @@ func runTUI() {
 	if s, err := store.Open(dbPath); err == nil {
 		st = s
 		defer st.Close()
+	} else {
+		fmt.Fprintf(os.Stderr, "Warning: 無法開啟資料庫 %s: %v\n", dbPath, err)
 	}
 
 	exec := tmux.NewRealExecutor()
@@ -79,8 +81,10 @@ func runTUI() {
 		os.Exit(1)
 	}
 
-	if selected := finalModel.(ui.Model).Selected(); selected != "" {
-		switchToSession(selected)
+	if m, ok := finalModel.(ui.Model); ok {
+		if selected := m.Selected(); selected != "" {
+			switchToSession(selected)
+		}
 	}
 }
 

@@ -121,7 +121,8 @@ func detectSessionStatus(deps Deps, sessionName string) tmux.SessionStatus {
 		}
 	}
 
-	// 第二層 + 第三層：只在 hook 無效時執行
+	// 第二層（pane title）+ 第三層（terminal content）：只在 hook 無效時執行
+	// TODO: Layer 2 pane title 尚未整合，需加入 ListPaneTitles 呼叫填入 input.PaneTitle
 	if input.HookStatus == nil || !input.HookStatus.IsValid() {
 		if deps.TmuxMgr != nil {
 			if content, err := deps.TmuxMgr.CapturePane(sessionName, 50); err == nil {
