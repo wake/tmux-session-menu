@@ -194,6 +194,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+		case "tab":
+			if m.cursor >= 0 && m.cursor < len(m.items) {
+				item := m.items[m.cursor]
+				if item.Type == ItemGroup && m.deps.Store != nil {
+					m.deps.Store.ToggleGroupCollapsed(item.Group.ID)
+					return m, loadSessionsCmd(m.deps)
+				}
+			}
+			return m, nil
 		}
 	}
 	return m, nil

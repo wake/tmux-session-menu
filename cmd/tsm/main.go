@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hooks"
+	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
 )
@@ -48,6 +49,13 @@ func runTUI() {
 	dataDir := config.ExpandPath(cfg.DataDir)
 	os.MkdirAll(dataDir, 0o755)
 
+	var st *store.Store
+	dbPath := filepath.Join(dataDir, "state.db")
+	if s, err := store.Open(dbPath); err == nil {
+		st = s
+		defer st.Close()
+	}
+
 	exec := tmux.NewRealExecutor()
 	mgr := tmux.NewManager(exec)
 
@@ -55,6 +63,7 @@ func runTUI() {
 
 	deps := ui.Deps{
 		TmuxMgr:   mgr,
+		Store:     st,
 		Cfg:       cfg,
 		StatusDir: statusDir,
 	}

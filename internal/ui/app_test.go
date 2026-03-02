@@ -304,6 +304,30 @@ func TestModel_LoadSessions_WithStore(t *testing.T) {
 	assert.Equal(t, "", betaGroup)
 }
 
+func TestModel_Tab_TogglesGroupCollapse(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	groups, _ := st.ListGroups()
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", GroupName: "dev"}},
+	})
+
+	// cursor 在群組上，按 Tab
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	_ = updated
+	// 應觸發重新載入（cmd 不為 nil）
+	assert.NotNil(t, cmd)
+
+	// 驗證 store 中 collapsed 已切換
+	groups, _ = st.ListGroups()
+	assert.True(t, groups[0].Collapsed)
+}
+
 func openUITestDB(t *testing.T) *store.Store {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
