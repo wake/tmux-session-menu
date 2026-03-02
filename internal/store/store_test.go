@@ -142,3 +142,36 @@ func TestListAllSessionMetas(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, metas, 2)
 }
+
+func TestSetCustomName(t *testing.T) {
+	s := newTestStore(t)
+
+	// 設定自訂名稱
+	err := s.SetCustomName("my-session", "我的開發環境")
+	require.NoError(t, err)
+
+	// 透過 ListAllSessionMetas 驗證
+	metas, err := s.ListAllSessionMetas()
+	require.NoError(t, err)
+	require.Len(t, metas, 1)
+	assert.Equal(t, "my-session", metas[0].SessionName)
+	assert.Equal(t, "我的開發環境", metas[0].CustomName)
+}
+
+func TestSetCustomName_Update(t *testing.T) {
+	s := newTestStore(t)
+
+	// 第一次設定
+	err := s.SetCustomName("my-session", "第一版名稱")
+	require.NoError(t, err)
+
+	// 第二次設定（應覆蓋）
+	err = s.SetCustomName("my-session", "第二版名稱")
+	require.NoError(t, err)
+
+	// 驗證只有一筆且值為第二次的
+	metas, err := s.ListAllSessionMetas()
+	require.NoError(t, err)
+	require.Len(t, metas, 1)
+	assert.Equal(t, "第二版名稱", metas[0].CustomName)
+}

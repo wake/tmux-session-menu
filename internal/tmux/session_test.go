@@ -144,6 +144,16 @@ func TestManager_CapturePane(t *testing.T) {
 	assert.Equal(t, "line 1\nline 2\nline 3", output)
 }
 
+func TestSession_DisplayName(t *testing.T) {
+	// 無自訂名稱 → 回傳 Name
+	s := tmux.Session{Name: "my-project"}
+	assert.Equal(t, "my-project", s.DisplayName())
+
+	// 有自訂名稱 → 回傳 CustomName
+	s.CustomName = "我的專案"
+	assert.Equal(t, "我的專案", s.DisplayName())
+}
+
 func TestManager_ListPaneTitles(t *testing.T) {
 	mock := &mockExecutor{
 		outputs: map[string]string{

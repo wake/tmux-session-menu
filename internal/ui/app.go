@@ -130,8 +130,12 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 			}
 
 			metaMap := make(map[string]int64)
+			customNameMap := make(map[string]string)
 			for _, meta := range metas {
 				metaMap[meta.SessionName] = meta.GroupID
+				if meta.CustomName != "" {
+					customNameMap[meta.SessionName] = meta.CustomName
+				}
 			}
 
 			for i := range sessions {
@@ -139,6 +143,9 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 					if name, ok := groupMap[gid]; ok {
 						sessions[i].GroupName = name
 					}
+				}
+				if cn, ok := customNameMap[sessions[i].Name]; ok {
+					sessions[i].CustomName = cn
 				}
 			}
 		}
@@ -271,6 +278,18 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.inputPrompt = "Session 名稱"
 		m.inputValue = ""
 		return m, nil
+	case "r":
+		// 重命名 session（自訂名稱）：僅對 ItemSession 生效
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession {
+				m.mode = ModeInput
+				m.inputTarget = InputRenameSession
+				m.inputPrompt = "自訂名稱"
+				m.inputValue = item.Session.CustomName
+			}
+		}
+		return m, nil
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
 		if m.cursor >= 0 && m.cursor < len(m.items) {
@@ -328,8 +347,15 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, loadSessionsCmd(m.deps)
 		case InputRenameSession:
-			// Task 6 將實作重命名 session
 			m.mode = ModeNormal
+			if m.deps.Store != nil && m.cursor >= 0 && m.cursor < len(m.items) {
+				name := m.items[m.cursor].Session.Name
+				if err := m.deps.Store.SetCustomName(name, value); err != nil {
+					m.err = err
+					return m, nil
+				}
+			}
+			return m, loadSessionsCmd(m.deps)
 		case InputNewGroup:
 			// Task 8 將實作新建群組
 			m.mode = ModeNormal
@@ -422,7 +448,7 @@ func (m Model) View() string {
 					aiModel = "  " + dimStyle.Render(item.Session.AIModel)
 				}
 
-				name := item.Session.Name
+				name := item.Session.DisplayName()
 				if i == m.cursor {
 					name = selectedStyle.Render(name)
 				}

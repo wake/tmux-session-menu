@@ -17,16 +17,25 @@ const (
 
 // Session 代表一個 tmux session。
 type Session struct {
-	Name      string
-	ID        string        // tmux session id
-	Path      string        // 工作目錄
-	Attached  bool
-	Activity  time.Time     // 最後活動時間
-	Status    SessionStatus
-	AIModel   string        // 偵測到的 AI 模型（空字串表示非 AI session）
-	AISummary string        // AI 摘要
-	GroupName string        // 所屬群組
-	SortOrder int           // 排序順序
+	Name       string
+	ID         string        // tmux session id
+	Path       string        // 工作目錄
+	Attached   bool
+	Activity   time.Time     // 最後活動時間
+	Status     SessionStatus
+	AIModel    string        // 偵測到的 AI 模型（空字串表示非 AI session）
+	AISummary  string        // AI 摘要
+	GroupName  string        // 所屬群組
+	SortOrder  int           // 排序順序
+	CustomName string        // 自訂顯示名稱（from SQLite，空字串表示使用 Name）
+}
+
+// DisplayName 回傳顯示名稱：有自訂名稱時回傳 CustomName，否則回傳 Name。
+func (s Session) DisplayName() string {
+	if s.CustomName != "" {
+		return s.CustomName
+	}
+	return s.Name
 }
 
 // RelativeTime 回傳相對於現在的時間字串（例如 "30s", "5m", "3h", "2d"）。

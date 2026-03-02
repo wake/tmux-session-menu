@@ -769,6 +769,85 @@ func TestModel_DeleteSession_OnGroup_NoOp(t *testing.T) {
 	assert.Equal(t, ui.ModeNormal, m.Mode(), "群組上按 d 應保持 ModeNormal")
 }
 
+// --- 重命名 session (r key) 相關測試 ---
+
+func TestModel_Rename_SetsCustomName(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 r 進入 ModeInput（InputRenameSession）
+	m, _ = applyKey(m, "r")
+	assert.Equal(t, ui.ModeInput, m.Mode(), "按 r 後應進入 ModeInput")
+
+	// 輸入 "My Dev"
+	for _, ch := range "My Dev" {
+		m, _ = applyKey(m, string(ch))
+	}
+	assert.Equal(t, "My Dev", m.InputValue())
+
+	// 按 Enter 送出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	// 驗證：mode 回到 Normal
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+	// 驗證：store 中 custom_name 已設定
+	metas, err := st.ListAllSessionMetas()
+	assert.NoError(t, err)
+	if assert.Len(t, metas, 1) {
+		assert.Equal(t, "My Dev", metas[0].CustomName)
+	}
+}
+
+func TestModel_Rename_OnGroup_NoOp(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+	})
+
+	// cursor 在群組上，按 r 應保持 ModeNormal
+	m, _ = applyKey(m, "r")
+	assert.Equal(t, ui.ModeNormal, m.Mode(), "群組上按 r 應保持 ModeNormal")
+}
+
+func TestModel_View_ShowsCustomName(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:       "dev",
+			CustomName: "開發伺服器",
+			Status:     tmux.StatusIdle,
+		}},
+	})
+
+	view := m.View()
+	assert.Contains(t, view, "開發伺服器", "View 應顯示自訂名稱")
+	assert.NotContains(t, view, "  dev  ", "View 不應顯示原始名稱（當有自訂名稱時）")
+}
+
+func TestModel_Rename_PrefillsCurrentCustomName(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:       "dev",
+			CustomName: "原本名稱",
+		}},
+	})
+
+	// 按 r 應預填目前的 CustomName
+	m, _ = applyKey(m, "r")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+	assert.Equal(t, "原本名稱", m.InputValue(), "應預填目前的自訂名稱")
+}
+
 func TestLoadSessions_UsesLayer2PaneTitle(t *testing.T) {
 	flex := &flexMockExecutor{
 		handler: func(args []string) (string, error) {

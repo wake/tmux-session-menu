@@ -156,3 +156,13 @@ func (s *Store) SetGroupOrder(id int64, sortOrder int) error {
 	_, err := s.db.Exec("UPDATE groups SET sort_order = ? WHERE id = ?", sortOrder, id)
 	return err
 }
+
+// SetCustomName 設定 session 的自訂顯示名稱（UPSERT）。
+func (s *Store) SetCustomName(sessionName, customName string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO session_meta (session_name, custom_name)
+		VALUES (?, ?)
+		ON CONFLICT(session_name) DO UPDATE SET custom_name = ?`,
+		sessionName, customName, customName)
+	return err
+}
