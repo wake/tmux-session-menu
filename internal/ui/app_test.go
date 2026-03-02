@@ -158,6 +158,34 @@ func (e *mockExecutor) Execute(args ...string) (string, error) {
 	return e.output, e.err
 }
 
+func TestModel_Enter_SelectsSession(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "target"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "other"}},
+	})
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	assert.Equal(t, "target", model.Selected())
+	assert.NotNil(t, cmd) // should return tea.Quit
+}
+
+func TestModel_Enter_OnGroup_DoesNotSelect(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "target"}},
+	})
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	assert.Equal(t, "", model.Selected())
+	assert.Nil(t, cmd) // should NOT quit
+}
+
 func applyKey(m ui.Model, key string) (ui.Model, tea.Cmd) {
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 	updated, cmd := m.Update(msg)

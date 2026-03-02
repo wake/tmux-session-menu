@@ -3,11 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hooks"
+	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
 )
 
@@ -34,12 +37,51 @@ func main() {
 }
 
 func runTUI() {
-	m := ui.NewModel(ui.Deps{})
+	cfg := config.Default()
+	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
+	if data, err := os.ReadFile(cfgPath); err == nil {
+		if loaded, err := config.LoadFromString(string(data)); err == nil {
+			cfg = loaded
+		}
+	}
+
+	dataDir := config.ExpandPath(cfg.DataDir)
+	os.MkdirAll(dataDir, 0o755)
+
+	exec := tmux.NewRealExecutor()
+	mgr := tmux.NewManager(exec)
+
+	statusDir := filepath.Join(dataDir, "status")
+
+	deps := ui.Deps{
+		TmuxMgr:   mgr,
+		Cfg:       cfg,
+		StatusDir: statusDir,
+	}
+
+	m := ui.NewModel(deps)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
-	if _, err := p.Run(); err != nil {
+	finalModel, err := p.Run()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if selected := finalModel.(ui.Model).Selected(); selected != "" {
+		switchToSession(selected)
+	}
+}
+
+func switchToSession(name string) {
+	if os.Getenv("TMUX") != "" {
+		osexec.Command("tmux", "switch-client", "-t", name).Run()
+	} else {
+		cmd := osexec.Command("tmux", "attach-session", "-t", name)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Run()
 	}
 }
 

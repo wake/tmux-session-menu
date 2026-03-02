@@ -108,6 +108,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 			return m, nil
+		case "enter":
+			if m.cursor >= 0 && m.cursor < len(m.items) {
+				item := m.items[m.cursor]
+				if item.Type == ItemSession {
+					m.selected = item.Session.Name
+					m.quitting = true
+					return m, tea.Quit
+				}
+			}
+			return m, nil
 		}
 	}
 	return m, nil
