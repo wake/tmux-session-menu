@@ -1194,6 +1194,162 @@ func TestModel_Search_NavigationInResults(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 
+// --- 排序（J/K 鍵）相關測試 ---
+
+func TestModel_Sort_MoveGroupDown(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 建立兩個群組，sort_order 分別為 0 和 1
+	st.CreateGroup("alpha", 0)
+	st.CreateGroup("beta", 1)
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]}, // alpha
+		{Type: ui.ItemGroup, Group: groups[1]}, // beta
+	})
+
+	// cursor 在第一個群組上（alpha），按 J 下移
+	m, cmd := applyKey(m, "J")
+
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "J 應觸發 loadSessionsCmd")
+	// 驗證：cursor 跟隨移動（0 → 1）
+	assert.Equal(t, 1, m.Cursor(), "cursor 應跟隨移動到 1")
+
+	// 驗證：store 中群組順序已交換
+	updatedGroups, err := st.ListGroups()
+	assert.NoError(t, err)
+	assert.Len(t, updatedGroups, 2)
+	// beta 的 sort_order 應變為 0（排前面），alpha 應變為 1（排後面）
+	assert.Equal(t, "beta", updatedGroups[0].Name, "beta 應排在前面")
+	assert.Equal(t, "alpha", updatedGroups[1].Name, "alpha 應排在後面")
+}
+
+func TestModel_Sort_MoveGroupUp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 建立兩個群組
+	st.CreateGroup("alpha", 0)
+	st.CreateGroup("beta", 1)
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]}, // alpha
+		{Type: ui.ItemGroup, Group: groups[1]}, // beta
+	})
+
+	// 移動 cursor 到第二個群組（beta）
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 1, m.Cursor())
+
+	// 按 K 上移
+	m, cmd := applyKey(m, "K")
+
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "K 應觸發 loadSessionsCmd")
+	// 驗證：cursor 跟隨移動（1 → 0）
+	assert.Equal(t, 0, m.Cursor(), "cursor 應跟隨移動到 0")
+
+	// 驗證：store 中群組順序已交換
+	updatedGroups, err := st.ListGroups()
+	assert.NoError(t, err)
+	assert.Len(t, updatedGroups, 2)
+	// beta 的 sort_order 應變為 0（排前面），alpha 應變為 1（排後面）
+	assert.Equal(t, "beta", updatedGroups[0].Name, "beta 應排在前面")
+	assert.Equal(t, "alpha", updatedGroups[1].Name, "alpha 應排在後面")
+}
+
+func TestModel_Sort_MoveSessionDown(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 建立群組和兩個 session
+	st.CreateGroup("dev", 0)
+	groups, _ := st.ListGroups()
+	groupID := groups[0].ID
+	st.SetSessionGroup("alpha", groupID, 0)
+	st.SetSessionGroup("beta", groupID, 1)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", GroupName: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta", GroupName: "dev"}},
+	})
+
+	// 移動 cursor 到 alpha session（index 1）
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 1, m.Cursor())
+
+	// 按 J 下移 alpha
+	m, cmd := applyKey(m, "J")
+
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "J 應觸發 loadSessionsCmd")
+	// 驗證：cursor 跟隨移動（1 → 2）
+	assert.Equal(t, 2, m.Cursor(), "cursor 應跟隨移動到 2")
+
+	// 驗證：store 中 session 順序已交換
+	metas, err := st.ListSessionMetas(groupID)
+	assert.NoError(t, err)
+	assert.Len(t, metas, 2)
+	// beta 的 sort_order 應變為 0（排前面），alpha 應變為 1（排後面）
+	assert.Equal(t, "beta", metas[0].SessionName, "beta 應排在前面")
+	assert.Equal(t, "alpha", metas[1].SessionName, "alpha 應排在後面")
+}
+
+func TestModel_Sort_UngroupedSession_NoOp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "lonely"}},
+	})
+
+	// cursor 在未分組 session 上，按 J 應無操作
+	m, cmd := applyKey(m, "J")
+
+	assert.Nil(t, cmd, "未分組 session 按 J 不應觸發任何 cmd")
+	assert.Equal(t, 0, m.Cursor(), "cursor 應保持不變")
+}
+
+func TestModel_Sort_AtBoundary_NoOp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 建立兩個群組
+	st.CreateGroup("alpha", 0)
+	st.CreateGroup("beta", 1)
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]}, // alpha
+		{Type: ui.ItemGroup, Group: groups[1]}, // beta
+	})
+
+	// 移動 cursor 到最後一個群組（beta）
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 1, m.Cursor())
+
+	// 按 J 嘗試繼續下移（已在邊界）
+	m, cmd := applyKey(m, "J")
+
+	assert.Nil(t, cmd, "邊界處按 J 不應觸發任何 cmd")
+	assert.Equal(t, 1, m.Cursor(), "cursor 應保持不變")
+
+	// 驗證：store 中群組順序未變
+	updatedGroups, _ := st.ListGroups()
+	assert.Equal(t, "alpha", updatedGroups[0].Name, "alpha 應仍排在前面")
+	assert.Equal(t, "beta", updatedGroups[1].Name, "beta 應仍排在後面")
+}
+
 func TestModel_Search_BackspaceWorks(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{

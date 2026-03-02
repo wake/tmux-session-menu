@@ -357,6 +357,10 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchQuery = ""
 		m.cursor = 0
 		return m, nil
+	case "J":
+		return m.moveItem(1) // 下移
+	case "K":
+		return m.moveItem(-1) // 上移
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
 		if m.cursor >= 0 && m.cursor < len(m.items) {
@@ -542,6 +546,103 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// moveItem 根據方向移動目前選取的項目（群組或 session）。
+func (m Model) moveItem(direction int) (tea.Model, tea.Cmd) {
+	if m.deps.Store == nil || m.cursor < 0 || m.cursor >= len(m.items) {
+		return m, nil
+	}
+	item := m.items[m.cursor]
+	switch item.Type {
+	case ItemGroup:
+		return m.moveGroup(item.Group, direction)
+	case ItemSession:
+		return m.moveSession(item.Session, direction)
+	}
+	return m, nil
+}
+
+// moveGroup 將群組在排序中上移或下移，交換 sort_order。
+func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) {
+	groups, err := m.deps.Store.ListGroups()
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	idx := -1
+	for i, g := range groups {
+		if g.ID == group.ID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return m, nil
+	}
+	newIdx := idx + direction
+	if newIdx < 0 || newIdx >= len(groups) {
+		return m, nil
+	}
+	// 交換 sort_order
+	if err := m.deps.Store.SetGroupOrder(groups[idx].ID, groups[newIdx].SortOrder); err != nil {
+		m.err = err
+		return m, nil
+	}
+	if err := m.deps.Store.SetGroupOrder(groups[newIdx].ID, groups[idx].SortOrder); err != nil {
+		m.err = err
+		return m, nil
+	}
+	m.cursor += direction
+	return m, loadSessionsCmd(m.deps)
+}
+
+// moveSession 將 session 在群組內排序中上移或下移，交換 sort_order。
+func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.Cmd) {
+	if session.GroupName == "" {
+		return m, nil // 未分組 session 不支援排序
+	}
+	groups, _ := m.deps.Store.ListGroups()
+	var groupID int64
+	for _, g := range groups {
+		if g.Name == session.GroupName {
+			groupID = g.ID
+			break
+		}
+	}
+	if groupID == 0 {
+		return m, nil
+	}
+	metas, err := m.deps.Store.ListSessionMetas(groupID)
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	idx := -1
+	for i, meta := range metas {
+		if meta.SessionName == session.Name {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return m, nil
+	}
+	newIdx := idx + direction
+	if newIdx < 0 || newIdx >= len(metas) {
+		return m, nil
+	}
+	// 交換 sort_order
+	if err := m.deps.Store.SetSessionGroup(metas[idx].SessionName, groupID, metas[newIdx].SortOrder); err != nil {
+		m.err = err
+		return m, nil
+	}
+	if err := m.deps.Store.SetSessionGroup(metas[newIdx].SessionName, groupID, metas[idx].SortOrder); err != nil {
+		m.err = err
+		return m, nil
+	}
+	m.cursor += direction
+	return m, loadSessionsCmd(m.deps)
 }
 
 // SetConfirm 設定確認模式（主要用於測試）。
