@@ -134,8 +134,10 @@ func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 
 		metaMap := make(map[string]int64)
 		customNameMap := make(map[string]string)
+		sortOrderMap := make(map[string]int)
 		for _, meta := range metas {
 			metaMap[meta.SessionName] = meta.GroupID
+			sortOrderMap[meta.SessionName] = meta.SortOrder
 			if meta.CustomName != "" {
 				customNameMap[meta.SessionName] = meta.CustomName
 			}
@@ -146,6 +148,9 @@ func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 				if name, ok := groupMap[gid]; ok {
 					sessions[i].GroupName = name
 				}
+			}
+			if so, ok := sortOrderMap[sessions[i].Name]; ok {
+				sessions[i].SortOrder = so
 			}
 			if cn, ok := customNameMap[sessions[i].Name]; ok {
 				sessions[i].CustomName = cn
