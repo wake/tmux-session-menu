@@ -1456,6 +1456,63 @@ func TestModel_Sort_AtBoundary_NoOp(t *testing.T) {
 	assert.Equal(t, "beta", updatedGroups[1].Name, "beta 應仍排在後面")
 }
 
+func TestModel_Sort_DuplicateSortOrder_GroupMoveDown(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 兩個群組都使用 sort_order=0（模擬實際建立群組時的情境）
+	st.CreateGroup("alpha", 0)
+	st.CreateGroup("beta", 0)
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]}, // alpha
+		{Type: ui.ItemGroup, Group: groups[1]}, // beta
+	})
+
+	// cursor 在第一個群組上（alpha），按 J 下移
+	m, cmd := applyKey(m, "J")
+
+	assert.NotNil(t, cmd, "J 應觸發 loadSessionsCmd")
+	assert.Equal(t, 1, m.Cursor(), "cursor 應跟隨移動到 1")
+
+	// 驗證：store 中群組順序已交換
+	updatedGroups, err := st.ListGroups()
+	assert.NoError(t, err)
+	assert.Len(t, updatedGroups, 2)
+	assert.Equal(t, "beta", updatedGroups[0].Name, "beta 應排在前面")
+	assert.Equal(t, "alpha", updatedGroups[1].Name, "alpha 應排在後面")
+}
+
+func TestModel_Sort_DuplicateSortOrder_SessionMoveDown(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 兩個未分組 session 都使用 sort_order=0（模擬未曾排序的情境）
+	st.SetSessionGroup("alpha", 0, 0)
+	st.SetSessionGroup("beta", 0, 0)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta", SortOrder: 0}},
+	})
+
+	// cursor 在第一個 session 上（alpha），按 J 下移
+	m, cmd := applyKey(m, "J")
+
+	assert.NotNil(t, cmd, "J 應觸發 loadSessionsCmd")
+	assert.Equal(t, 1, m.Cursor(), "cursor 應跟隨移動到 1")
+
+	// 驗證：store 中 session 順序已交換
+	metas, err := st.ListSessionMetas(0)
+	assert.NoError(t, err)
+	assert.Len(t, metas, 2)
+	assert.Equal(t, "beta", metas[0].SessionName, "beta 應排在前面")
+	assert.Equal(t, "alpha", metas[1].SessionName, "alpha 應排在後面")
+}
+
 func TestModel_ModeInput_SpaceWorks(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 

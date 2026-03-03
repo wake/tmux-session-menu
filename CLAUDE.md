@@ -10,7 +10,8 @@
 
 ### 版本號位置
 
-版本號透過 Go ldflags 在編譯時注入 `internal/version/version.go`：
+- **VERSION 檔案**（專案根目錄）：單一真相來源，格式為 `x.y.z`
+- 編譯時透過 Go ldflags 注入 `internal/version/version.go`：
 
 ```
 -X github.com/wake/tmux-session-menu/internal/version.Version=$(VERSION)
@@ -18,14 +19,15 @@
 -X github.com/wake/tmux-session-menu/internal/version.Date=$(DATE)
 ```
 
-未注入時預設為 `dev`。
+- 顯示格式：`x.y.z(commit_hash)`，未注入時為 `dev`
 
 ### 發佈流程
 
-1. 更新程式碼並通過所有測試（`make test`）
-2. 建立 git tag：`git tag v<MAJOR>.<MINOR>.<PATCH>`
-3. 推送 tag：`git push origin v<MAJOR>.<MINOR>.<PATCH>`
-4. 編譯：`make build`（自動從 `git describe` 取得版本號）
+1. 更新 `VERSION` 檔案中的版本號
+2. 通過所有測試（`make test`）
+3. 建立 git tag：`git tag v<MAJOR>.<MINOR>.<PATCH>`
+4. 推送 tag：`git push origin v<MAJOR>.<MINOR>.<PATCH>`
+5. 編譯：`make build`（自動從 `VERSION` 讀取版本號）
 
 ### 版本推進規則
 
