@@ -20,7 +20,6 @@ import (
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
 	"github.com/wake/tmux-session-menu/internal/version"
-
 )
 
 // runMode 表示 TUI 的啟動模式
