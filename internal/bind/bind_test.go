@@ -1,11 +1,135 @@
 package bind
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// ─── Detect ──────────────────────────────────────────────────
+
+func TestDetect_NotInstalled(t *testing.T) {
+	tmp := t.TempDir()
+	confPath := filepath.Join(tmp, ".tmux.conf")
+	// 空檔案
+	os.WriteFile(confPath, []byte(""), 0o644)
+
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return confPath, nil }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	r := Detect()
+	if r.Status != BindNotInstalled {
+		t.Fatalf("expected BindNotInstalled, got %d", r.Status)
+	}
+	if r.ConfPath != confPath {
+		t.Fatalf("expected ConfPath=%s, got %s", confPath, r.ConfPath)
+	}
+}
+
+func TestDetect_Installed(t *testing.T) {
+	tmp := t.TempDir()
+	confPath := filepath.Join(tmp, ".tmux.conf")
+	os.WriteFile(confPath, []byte(bindBlock+"\n"), 0o644)
+
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return confPath, nil }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	r := Detect()
+	if r.Status != BindInstalled {
+		t.Fatalf("expected BindInstalled, got %d", r.Status)
+	}
+	if r.ConfPath != confPath {
+		t.Fatalf("expected ConfPath=%s, got %s", confPath, r.ConfPath)
+	}
+}
+
+func TestDetect_NoConfFile(t *testing.T) {
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return "", errors.New("no home") }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	r := Detect()
+	if r.Status != BindNoConfFile {
+		t.Fatalf("expected BindNoConfFile, got %d", r.Status)
+	}
+}
+
+func TestDetect_FileNotExist(t *testing.T) {
+	tmp := t.TempDir()
+	confPath := filepath.Join(tmp, ".tmux.conf") // 不建立檔案
+
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return confPath, nil }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	r := Detect()
+	if r.Status != BindNotInstalled {
+		t.Fatalf("expected BindNotInstalled for non-existent file, got %d", r.Status)
+	}
+}
+
+// ─── BuildComponent ─────────────────────────────────────────
+
+func TestBuildComponent_NotInstalled(t *testing.T) {
+	tmp := t.TempDir()
+	confPath := filepath.Join(tmp, ".tmux.conf")
+
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return confPath, nil }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	comp := BuildComponent()
+	if !comp.Checked {
+		t.Error("expected Checked=true for NotInstalled")
+	}
+	if comp.Disabled {
+		t.Error("expected Disabled=false for NotInstalled")
+	}
+	if !strings.Contains(comp.Note, "將寫入") {
+		t.Errorf("expected Note to contain '將寫入', got %q", comp.Note)
+	}
+}
+
+func TestBuildComponent_Installed(t *testing.T) {
+	tmp := t.TempDir()
+	confPath := filepath.Join(tmp, ".tmux.conf")
+	os.WriteFile(confPath, []byte(bindBlock+"\n"), 0o644)
+
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return confPath, nil }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	comp := BuildComponent()
+	if comp.Checked {
+		t.Error("expected Checked=false for Installed")
+	}
+	if comp.Disabled {
+		t.Error("expected Disabled=false for Installed")
+	}
+	if !strings.Contains(comp.Note, "已安裝於") {
+		t.Errorf("expected Note to contain '已安裝於', got %q", comp.Note)
+	}
+}
+
+func TestBuildComponent_NoConfFile(t *testing.T) {
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return "", errors.New("no home") }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	comp := BuildComponent()
+	if comp.Checked {
+		t.Error("expected Checked=false for NoConfFile")
+	}
+	if !comp.Disabled {
+		t.Error("expected Disabled=true for NoConfFile")
+	}
+}
+
+// ─── Install / Uninstall ────────────────────────────────────
 
 func TestInstall_NewFile(t *testing.T) {
 	tmp := t.TempDir()

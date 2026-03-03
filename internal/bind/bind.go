@@ -6,6 +6,8 @@ import (
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/wake/tmux-session-menu/internal/setup"
 )
 
 const (
@@ -15,6 +17,87 @@ const (
 bind-key -n C-q display-popup -E -w 80% -h 80% "tsm --inline"
 # [tsm] end`
 )
+
+// BindStatus 表示 tmux keybinding 的偵測狀態。
+type BindStatus int
+
+const (
+	BindNotInstalled BindStatus = iota
+	BindInstalled
+	BindNoConfFile
+)
+
+// BindDetectResult 包含偵測結果的詳細資訊。
+type BindDetectResult struct {
+	Status   BindStatus
+	ConfPath string
+}
+
+// Detect 偵測 tmux keybinding 的安裝狀態。
+func Detect() BindDetectResult {
+	confPath, err := tmuxConfPath()
+	if err != nil {
+		return BindDetectResult{Status: BindNoConfFile}
+	}
+
+	content, _ := readFileOrEmpty(confPath)
+	if strings.Contains(content, markerBegin) {
+		return BindDetectResult{Status: BindInstalled, ConfPath: confPath}
+	}
+	return BindDetectResult{Status: BindNotInstalled, ConfPath: confPath}
+}
+
+// BuildComponent 根據偵測結果建立 setup.Component。
+func BuildComponent() setup.Component {
+	r := Detect()
+
+	installFn := func() (string, error) {
+		result, err := Install(false)
+		if err != nil {
+			return "", err
+		}
+		return result.Message, nil
+	}
+	uninstallFn := func() (string, error) {
+		result, err := Uninstall(false)
+		if err != nil {
+			return "", err
+		}
+		return result.Message, nil
+	}
+
+	switch r.Status {
+	case BindInstalled:
+		return setup.Component{
+			Label:       "Ctrl+Q 快捷鍵 (tmux keybinding)",
+			Checked:     false,
+			Note:        fmt.Sprintf("已安裝於 %s", r.ConfPath),
+			InstallFn:   installFn,
+			UninstallFn: uninstallFn,
+		}
+	case BindNoConfFile:
+		return setup.Component{
+			Label:    "Ctrl+Q 快捷鍵 (tmux keybinding)",
+			Checked:  false,
+			Disabled: true,
+			Note:     "無法取得 tmux.conf 路徑",
+			InstallFn: func() (string, error) {
+				return "", fmt.Errorf("無法取得 tmux.conf 路徑")
+			},
+			UninstallFn: func() (string, error) {
+				return "", fmt.Errorf("無法取得 tmux.conf 路徑")
+			},
+		}
+	default: // BindNotInstalled
+		return setup.Component{
+			Label:       "Ctrl+Q 快捷鍵 (tmux keybinding)",
+			Checked:     true,
+			Note:        fmt.Sprintf("將寫入 %s", r.ConfPath),
+			InstallFn:   installFn,
+			UninstallFn: uninstallFn,
+		}
+	}
+}
 
 // Result 代表 install/uninstall 的操作結果。
 type Result struct {

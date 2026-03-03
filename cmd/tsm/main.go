@@ -6,6 +6,7 @@ import (
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wake/tmux-session-menu/internal/bind"
@@ -19,6 +20,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
 	"github.com/wake/tmux-session-menu/internal/version"
+
 )
 
 // runMode 表示 TUI 的啟動模式
@@ -488,6 +490,7 @@ func runSetup(args []string) {
 
 	if containsFlag(args, "--uninstall") {
 		setup.RunUninstallAll(components)
+		restartDaemon()
 		return
 	}
 
@@ -497,66 +500,30 @@ func runSetup(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	restartDaemon()
+}
+
+// restartDaemon 嘗試重啟 daemon，確保使用最新 binary。
+func restartDaemon() {
+	cfg := loadConfig()
+	// 嘗試停止（忽略錯誤，daemon 可能未運行）
+	_ = daemon.Stop(cfg)
+	// 等待舊程序釋放 socket
+	time.Sleep(500 * time.Millisecond)
+	// 用目前執行檔重新啟動 daemon（背景 fork）
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := osexec.Command(exe, "daemon", "start")
+	_ = cmd.Start()
+	go func() { _ = cmd.Wait() }()
 }
 
 func buildSetupComponents() []setup.Component {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: 無法取得 home 目錄: %v\n", err)
-		os.Exit(1)
-	}
-
-	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	scriptPath := filepath.Join(home, ".config", "tsm", "hooks", "tsm-hook.sh")
-
 	return []setup.Component{
 		selfinstall.BuildComponent(),
-		{
-			Label:   "Ctrl+Q 快捷鍵 (tmux keybinding)",
-			Checked: true,
-			InstallFn: func() (string, error) {
-				result, err := bind.Install(false)
-				if err != nil {
-					return "", err
-				}
-				return result.Message, nil
-			},
-			UninstallFn: func() (string, error) {
-				result, err := bind.Uninstall(false)
-				if err != nil {
-					return "", err
-				}
-				return result.Message, nil
-			},
-		},
-		{
-			Label:   "Claude Code hooks",
-			Checked: true,
-			InstallFn: func() (string, error) {
-				mgr := hooks.NewManager(settingsPath, scriptPath)
-				if err := mgr.EnsureScript(); err != nil {
-					return "", err
-				}
-				result, err := mgr.Install(false)
-				if err != nil {
-					return "", err
-				}
-				if !result.Changed {
-					return "已安裝，無需變更", nil
-				}
-				return fmt.Sprintf("已新增 hooks: %s", strings.Join(result.EventsAdded, ", ")), nil
-			},
-			UninstallFn: func() (string, error) {
-				mgr := hooks.NewManager(settingsPath, scriptPath)
-				result, err := mgr.Uninstall(false)
-				if err != nil {
-					return "", err
-				}
-				if !result.Changed {
-					return "未偵測到 hooks，無需移除", nil
-				}
-				return fmt.Sprintf("已移除 hooks: %s", strings.Join(result.EventsRemoved, ", ")), nil
-			},
-		},
+		bind.BuildComponent(),
+		hooks.BuildComponent(),
 	}
 }
