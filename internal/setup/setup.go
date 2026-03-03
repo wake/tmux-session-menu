@@ -23,6 +23,9 @@ type Component struct {
 	Label       string
 	InstallFn   func() (string, error)
 	UninstallFn func() (string, error)
+	Checked     bool   // 初始勾選狀態
+	Disabled    bool   // 禁用：不可切換/安裝
+	Note        string // 附加資訊，顯示在 Label 下方
 }
 
 // result 記錄單一元件的安裝結果。
@@ -51,11 +54,11 @@ type Model struct {
 	quitting   bool
 }
 
-// NewModel 建立 setup TUI model，預設全選所有元件。
+// NewModel 建立 setup TUI model，根據各元件的 Checked 欄位初始化勾選狀態。
 func NewModel(components []Component) Model {
 	checked := make([]bool, len(components))
-	for i := range checked {
-		checked[i] = true
+	for i, comp := range components {
+		checked[i] = comp.Checked
 	}
 	return Model{
 		components: components,
@@ -112,7 +115,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 	case " ":
-		if m.cursor < len(m.checked) {
+		if m.cursor < len(m.checked) && !m.components[m.cursor].Disabled {
 			m.checked[m.cursor] = !m.checked[m.cursor]
 		}
 	case "enter":
@@ -126,7 +129,7 @@ func (m Model) runInstall() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		var results []result
 		for i, comp := range m.components {
-			if !m.checked[i] {
+			if !m.checked[i] || comp.Disabled {
 				continue
 			}
 			msg, err := comp.InstallFn()
@@ -161,6 +164,16 @@ func (m Model) View() string {
 			if i == m.cursor {
 				cursor = selectedStyle.Render("► ")
 			}
+
+			if comp.Disabled {
+				label := errorStyle.Render(comp.Label)
+				b.WriteString(fmt.Sprintf("%s[-] %s\n", cursor, label))
+				if comp.Note != "" {
+					b.WriteString(fmt.Sprintf("       %s\n", errorStyle.Render(comp.Note)))
+				}
+				continue
+			}
+
 			check := "[ ]"
 			if m.checked[i] {
 				check = "[x]"
@@ -170,6 +183,9 @@ func (m Model) View() string {
 				label = selectedStyle.Render(label)
 			}
 			b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, check, label))
+			if comp.Note != "" {
+				b.WriteString(fmt.Sprintf("       %s\n", dimStyle.Render(comp.Note)))
+			}
 		}
 
 	case phaseRunning:

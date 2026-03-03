@@ -13,6 +13,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/daemon"
 	"github.com/wake/tmux-session-menu/internal/hooks"
+	"github.com/wake/tmux-session-menu/internal/selfinstall"
 	"github.com/wake/tmux-session-menu/internal/setup"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
@@ -509,8 +510,10 @@ func buildSetupComponents() []setup.Component {
 	scriptPath := filepath.Join(home, ".config", "tsm", "hooks", "tsm-hook.sh")
 
 	return []setup.Component{
+		selfinstall.BuildComponent(),
 		{
-			Label: "Ctrl+Q 快捷鍵 (tmux keybinding)",
+			Label:   "Ctrl+Q 快捷鍵 (tmux keybinding)",
+			Checked: true,
 			InstallFn: func() (string, error) {
 				result, err := bind.Install(false)
 				if err != nil {
@@ -527,7 +530,8 @@ func buildSetupComponents() []setup.Component {
 			},
 		},
 		{
-			Label: "Claude Code hooks",
+			Label:   "Claude Code hooks",
+			Checked: true,
 			InstallFn: func() (string, error) {
 				mgr := hooks.NewManager(settingsPath, scriptPath)
 				if err := mgr.EnsureScript(); err != nil {
