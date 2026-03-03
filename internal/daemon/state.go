@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -26,6 +27,9 @@ type StateManager struct {
 
 	mu   sync.RWMutex
 	last *tsmv1.StateSnapshot
+
+	scanCh  chan struct{} // debounce channel for Scan() requests
+	running int32        // atomic: 1 when Run() is active
 }
 
 // NewStateManager 建立新的 StateManager。
@@ -36,35 +40,64 @@ func NewStateManager(mgr *tmux.Manager, st *store.Store, cfg config.Config, stat
 		cfg:       cfg,
 		statusDir: statusDir,
 		hub:       hub,
+		scanCh:    make(chan struct{}, 1),
 	}
 }
 
 // Run 啟動掃描迴圈，每秒執行 buildSnapshot 並在有變更時廣播。
 // 會阻塞直到 ctx 被取消。
 func (sm *StateManager) Run(ctx context.Context) {
+	atomic.StoreInt32(&sm.running, 1)
+	defer atomic.StoreInt32(&sm.running, 0)
+
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
 	// 立即執行一次
-	sm.scan()
+	sm.doScan()
 
+	var debounce *time.Timer
 	for {
 		select {
 		case <-ctx.Done():
+			if debounce != nil {
+				debounce.Stop()
+			}
 			return
 		case <-ticker.C:
-			sm.scan()
+			sm.doScan()
+		case <-sm.scanCh:
+			// 收到 Scan 請求，重設 debounce timer
+			if debounce != nil {
+				debounce.Stop()
+			}
+			debounce = time.AfterFunc(50*time.Millisecond, func() {
+				select {
+				case <-ctx.Done():
+				default:
+					sm.doScan()
+				}
+			})
 		}
 	}
 }
 
 // Scan 執行一次掃描並在有變更時廣播（public 封裝，供 service 和測試呼叫）。
+// 當 Run() 啟動中，Scan() 透過 debounce channel 合併連續快速呼叫；
+// 未啟動時同步執行（測試相容）。
 func (sm *StateManager) Scan() {
-	sm.scan()
+	if atomic.LoadInt32(&sm.running) == 1 {
+		select {
+		case sm.scanCh <- struct{}{}:
+		default:
+		}
+		return
+	}
+	sm.doScan()
 }
 
-// scan 執行一次掃描並在有變更時廣播。
-func (sm *StateManager) scan() {
+// doScan 執行一次掃描並在有變更時廣播。
+func (sm *StateManager) doScan() {
 	snap := sm.BuildSnapshot()
 	if snap == nil {
 		return

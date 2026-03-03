@@ -95,7 +95,7 @@ func TestStateManager_BroadcastOnChange(t *testing.T) {
 	sm := NewStateManager(mgr, nil, config.Default(), "", hub)
 
 	// 首次掃描應廣播
-	sm.scan()
+	sm.Scan()
 
 	select {
 	case snap := <-ch:
@@ -106,7 +106,7 @@ func TestStateManager_BroadcastOnChange(t *testing.T) {
 	}
 
 	// 無變更 — 不應廣播
-	sm.scan()
+	sm.Scan()
 	select {
 	case <-ch:
 		t.Fatal("should not broadcast when no change")
@@ -116,7 +116,7 @@ func TestStateManager_BroadcastOnChange(t *testing.T) {
 
 	// 變更 — 應廣播
 	exec.listOutput = "dev:$1:1:/home:0:" + itoa(now) + "\nnew:$3:1:/tmp:0:" + itoa(now)
-	sm.scan()
+	sm.Scan()
 
 	select {
 	case snap := <-ch:
