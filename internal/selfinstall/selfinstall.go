@@ -39,15 +39,12 @@ var (
 		}
 		return strings.TrimSpace(string(out)), nil
 	}
-	goPathBinFn = func() string {
-		if gopath := os.Getenv("GOPATH"); gopath != "" {
-			return filepath.Join(gopath, "bin")
-		}
+	defaultBinFn = func() string {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return ""
 		}
-		return filepath.Join(home, "go", "bin")
+		return filepath.Join(home, ".local", "bin")
 	}
 )
 
@@ -138,13 +135,13 @@ func BuildComponent() setup.Component {
 
 	switch r.Status {
 	case StatusNotFound:
-		targetDir := goPathBinFn()
+		targetDir := defaultBinFn()
 		if targetDir == "" {
 			return setup.Component{
 				Label:    "安裝 tsm (無法偵測路徑)",
 				Checked:  false,
 				Disabled: true,
-				Note:     "無法取得 $GOPATH/bin 路徑，請設定 GOPATH 環境變數",
+				Note:     "無法取得 home 目錄",
 				InstallFn: func() (string, error) {
 					return "", fmt.Errorf("無法偵測安裝路徑")
 				},

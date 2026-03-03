@@ -15,11 +15,11 @@ import (
 func saveAndRestore(t *testing.T) {
 	origLookPath := lookPathFn
 	origRunVersion := runVersionFn
-	origGoPathBin := goPathBinFn
+	origGoPathBin := defaultBinFn
 	t.Cleanup(func() {
 		lookPathFn = origLookPath
 		runVersionFn = origRunVersion
-		goPathBinFn = origGoPathBin
+		defaultBinFn = origGoPathBin
 	})
 }
 
@@ -97,11 +97,11 @@ func TestBuildComponentNotFound(t *testing.T) {
 	lookPathFn = func(string) (string, error) {
 		return "", errors.New("not found")
 	}
-	goPathBinFn = func() string { return "/mock/go/bin" }
+	defaultBinFn = func() string { return "/mock/.local/bin" }
 
 	comp := BuildComponent()
 	assert.Contains(t, comp.Label, "安裝 tsm 到")
-	assert.Contains(t, comp.Label, "/mock/go/bin/tsm")
+	assert.Contains(t, comp.Label, "/mock/.local/bin/tsm")
 	assert.True(t, comp.Checked)
 	assert.False(t, comp.Disabled)
 }
@@ -216,9 +216,9 @@ func TestBuildComponentNotFound_EmptyGoPath(t *testing.T) {
 	lookPathFn = func(string) (string, error) {
 		return "", errors.New("not found")
 	}
-	goPathBinFn = func() string { return "" }
+	defaultBinFn = func() string { return "" }
 
 	comp := BuildComponent()
-	assert.True(t, comp.Disabled, "goPathBinFn 回傳空字串時應禁用")
-	assert.Contains(t, comp.Note, "GOPATH")
+	assert.True(t, comp.Disabled, "defaultBinFn 回傳空字串時應禁用")
+	assert.Contains(t, comp.Note, "home")
 }
