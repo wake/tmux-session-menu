@@ -14,11 +14,13 @@ func testComponents() []Component {
 			Label:       "Component A",
 			InstallFn:   func() (string, error) { return "installed A", nil },
 			UninstallFn: func() (string, error) { return "uninstalled A", nil },
+			Checked:     true,
 		},
 		{
 			Label:       "Component B",
 			InstallFn:   func() (string, error) { return "installed B", nil },
 			UninstallFn: func() (string, error) { return "uninstalled B", nil },
+			Checked:     true,
 		},
 	}
 }
@@ -116,4 +118,103 @@ func TestNavigationUpDown(t *testing.T) {
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	m = updated.(Model)
 	assert.Equal(t, 0, m.cursor)
+}
+
+func TestDisabledCannotToggle(t *testing.T) {
+	comps := []Component{
+		{
+			Label:    "Disabled Item",
+			Checked:  false,
+			Disabled: true,
+			InstallFn: func() (string, error) { return "", nil },
+		},
+	}
+	m := NewModel(comps)
+	assert.False(t, m.Checked()[0])
+
+	// 按 Space 不應改變勾選狀態
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	assert.False(t, m.Checked()[0], "Disabled 元件不應被切換")
+}
+
+func TestInitialCheckedState(t *testing.T) {
+	comps := []Component{
+		{Label: "Checked", Checked: true, InstallFn: func() (string, error) { return "", nil }},
+		{Label: "Unchecked", Checked: false, InstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	checked := m.Checked()
+	assert.True(t, checked[0], "Checked=true 元件應初始勾選")
+	assert.False(t, checked[1], "Checked=false 元件應初始未勾選")
+}
+
+func TestDisabledView(t *testing.T) {
+	comps := []Component{
+		{
+			Label:    "Conflict Item",
+			Disabled: true,
+			Note:     "路徑衝突",
+			InstallFn: func() (string, error) { return "", nil },
+		},
+	}
+	m := NewModel(comps)
+	view := m.View()
+	assert.Contains(t, view, "[-]")
+	assert.Contains(t, view, "Conflict Item")
+	assert.Contains(t, view, "路徑衝突")
+}
+
+func TestRunInstallSkipsDisabled(t *testing.T) {
+	called := false
+	comps := []Component{
+		{
+			Label:   "Disabled",
+			Checked: true,
+			Disabled: true,
+			InstallFn: func() (string, error) {
+				called = true
+				return "should not run", nil
+			},
+		},
+		{
+			Label:   "Enabled",
+			Checked: true,
+			InstallFn: func() (string, error) { return "installed", nil },
+		},
+	}
+	m := NewModel(comps)
+
+	// 按 Enter 開始安裝
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	updated, cmd = m.Update(msg)
+	m = updated.(Model)
+	require.NotNil(t, cmd)
+
+	msg = cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+
+	assert.False(t, called, "Disabled 元件的 InstallFn 不應被呼叫")
+	results := m.Results()
+	assert.Len(t, results, 1)
+	assert.Equal(t, "Enabled", results[0].label)
+}
+
+func TestNoteRendered(t *testing.T) {
+	comps := []Component{
+		{
+			Label:   "With Note",
+			Checked: true,
+			Note:    "這是附加說明",
+			InstallFn: func() (string, error) { return "", nil },
+		},
+	}
+	m := NewModel(comps)
+	view := m.View()
+	assert.Contains(t, view, "這是附加說明")
 }
