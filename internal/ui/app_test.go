@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -830,7 +831,11 @@ func TestModel_View_ShowsCustomName(t *testing.T) {
 
 	view := m.View()
 	assert.Contains(t, view, "開發伺服器", "View 應顯示自訂名稱")
-	assert.NotContains(t, view, "  dev  ", "View 不應顯示原始名稱（當有自訂名稱時）")
+	// 排除 header 行（含版本號 "dev"），只檢查 items 區域不含原始名稱
+	lines := strings.Split(view, "\n")
+	for _, line := range lines[1:] {
+		assert.NotContains(t, line, "  dev  ", "items 區域不應顯示原始名稱（當有自訂名稱時）")
+	}
 }
 
 func TestModel_Rename_PrefillsCurrentCustomName(t *testing.T) {
