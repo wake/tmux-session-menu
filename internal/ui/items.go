@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"sort"
+
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 )
@@ -21,7 +23,7 @@ type ListItem struct {
 }
 
 // FlattenItems 將群組與 session 扁平化為一維列表。
-// 排列順序：未分組 session → 各群組（標頭 + 子 session）。
+// 排列順序：各群組（標頭 + 子 session）→ 未分組 session（按 SortOrder 排序）。
 // 已收合的群組不會展開子 session。
 func FlattenItems(groups []store.Group, sessions []tmux.Session) []ListItem {
 	var items []ListItem
@@ -37,10 +39,7 @@ func FlattenItems(groups []store.Group, sessions []tmux.Session) []ListItem {
 		}
 	}
 
-	for _, s := range ungrouped {
-		items = append(items, ListItem{Type: ItemSession, Session: s})
-	}
-
+	// 先放群組
 	for _, g := range groups {
 		items = append(items, ListItem{Type: ItemGroup, Group: g})
 		if !g.Collapsed {
@@ -48,6 +47,14 @@ func FlattenItems(groups []store.Group, sessions []tmux.Session) []ListItem {
 				items = append(items, ListItem{Type: ItemSession, Session: s})
 			}
 		}
+	}
+
+	// 未分組按 SortOrder 排序後放在最後
+	sort.Slice(ungrouped, func(i, j int) bool {
+		return ungrouped[i].SortOrder < ungrouped[j].SortOrder
+	})
+	for _, s := range ungrouped {
+		items = append(items, ListItem{Type: ItemSession, Session: s})
 	}
 
 	return items

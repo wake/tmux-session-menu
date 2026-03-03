@@ -467,7 +467,7 @@ func TestModel_ModeInput_RenderPrompt(t *testing.T) {
 
 	view := m.View()
 	assert.Contains(t, view, "Session 名稱")
-	assert.Contains(t, view, "\u2588") // 游標方塊字元
+	assert.Contains(t, view, "取消")
 }
 
 func TestModel_ModeInput_BackspaceWorks(t *testing.T) {
@@ -1308,20 +1308,121 @@ func TestModel_Sort_MoveSessionDown(t *testing.T) {
 	assert.Equal(t, "alpha", metas[1].SessionName, "alpha 應排在後面")
 }
 
-func TestModel_Sort_UngroupedSession_NoOp(t *testing.T) {
+func TestModel_Sort_UngroupedSession_MoveDown(t *testing.T) {
 	st := openUITestDB(t)
 	defer st.Close()
 
+	// 建立兩個未分組 session（groupID=0）
+	st.SetSessionGroup("alpha", 0, 0)
+	st.SetSessionGroup("beta", 0, 1)
+
 	m := ui.NewModel(ui.Deps{Store: st})
 	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemSession, Session: tmux.Session{Name: "lonely"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta", SortOrder: 1}},
 	})
 
-	// cursor 在未分組 session 上，按 J 應無操作
+	// cursor 在第一個未分組 session 上（alpha），按 J 下移
 	m, cmd := applyKey(m, "J")
 
-	assert.Nil(t, cmd, "未分組 session 按 J 不應觸發任何 cmd")
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "J 應觸發 loadSessionsCmd")
+	// 驗證：cursor 跟隨移動（0 → 1）
+	assert.Equal(t, 1, m.Cursor(), "cursor 應跟隨移動到 1")
+
+	// 驗證：store 中 session 順序已交換
+	metas, err := st.ListSessionMetas(0)
+	assert.NoError(t, err)
+	assert.Len(t, metas, 2)
+	assert.Equal(t, "beta", metas[0].SessionName, "beta 應排在前面")
+	assert.Equal(t, "alpha", metas[1].SessionName, "alpha 應排在後面")
+}
+
+func TestModel_Sort_UngroupedSession_MoveUp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 建立兩個未分組 session（groupID=0）
+	st.SetSessionGroup("alpha", 0, 0)
+	st.SetSessionGroup("beta", 0, 1)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta", SortOrder: 1}},
+	})
+
+	// 移動 cursor 到第二個未分組 session（beta）
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 1, m.Cursor())
+
+	// 按 K 上移
+	m, cmd := applyKey(m, "K")
+
+	// 驗證：cmd 不為 nil（觸發 reload）
+	assert.NotNil(t, cmd, "K 應觸發 loadSessionsCmd")
+	// 驗證：cursor 跟隨移動（1 → 0）
+	assert.Equal(t, 0, m.Cursor(), "cursor 應跟隨移動到 0")
+
+	// 驗證：store 中 session 順序已交換
+	metas, err := st.ListSessionMetas(0)
+	assert.NoError(t, err)
+	assert.Len(t, metas, 2)
+	assert.Equal(t, "beta", metas[0].SessionName, "beta 應排在前面")
+	assert.Equal(t, "alpha", metas[1].SessionName, "alpha 應排在後面")
+}
+
+func TestModel_Sort_UngroupedSession_Boundary(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 只有一個未分組 session
+	st.SetSessionGroup("lonely", 0, 0)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "lonely", SortOrder: 0}},
+	})
+
+	// 按 J 嘗試下移（已在邊界）
+	m, cmd := applyKey(m, "J")
+	assert.Nil(t, cmd, "邊界處按 J 不應觸發任何 cmd")
 	assert.Equal(t, 0, m.Cursor(), "cursor 應保持不變")
+
+	// 按 K 嘗試上移（已在邊界）
+	m, cmd = applyKey(m, "K")
+	assert.Nil(t, cmd, "邊界處按 K 不應觸發任何 cmd")
+	assert.Equal(t, 0, m.Cursor(), "cursor 應保持不變")
+}
+
+func TestModel_Sort_UngroupedSession_DoesNotCrossGroup(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 建立群組和未分組 session
+	st.CreateGroup("dev", 0)
+	groups, _ := st.ListGroups()
+	st.SetSessionGroup("grouped", groups[0].ID, 0)
+	st.SetSessionGroup("ungrouped-a", 0, 0)
+	st.SetSessionGroup("ungrouped-b", 0, 1)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "grouped", GroupName: "dev", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "ungrouped-a", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "ungrouped-b", SortOrder: 1}},
+	})
+
+	// 移動 cursor 到 ungrouped-a（index 2）
+	m, _ = applyKey(m, "j")
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 2, m.Cursor())
+
+	// 按 K 嘗試上移（不應跨越群組邊界）
+	m, cmd := applyKey(m, "K")
+	assert.Nil(t, cmd, "未分組第一個 session 按 K 不應觸發任何 cmd")
+	assert.Equal(t, 2, m.Cursor(), "cursor 應保持不變")
 }
 
 func TestModel_Sort_AtBoundary_NoOp(t *testing.T) {
@@ -1353,6 +1454,55 @@ func TestModel_Sort_AtBoundary_NoOp(t *testing.T) {
 	updatedGroups, _ := st.ListGroups()
 	assert.Equal(t, "alpha", updatedGroups[0].Name, "alpha 應仍排在前面")
 	assert.Equal(t, "beta", updatedGroups[1].Name, "beta 應仍排在後面")
+}
+
+func TestModel_ModeInput_SpaceWorks(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 進入 ModeInput
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	// 輸入 "hello world"（含空格）
+	for _, ch := range "hello" {
+		m, _ = applyKey(m, string(ch))
+	}
+	// 使用 KeySpace 傳送空格（模擬真實終端行為）
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+	m = updated.(ui.Model)
+	for _, ch := range "world" {
+		m, _ = applyKey(m, string(ch))
+	}
+	assert.Equal(t, "hello world", m.InputValue())
+}
+
+func TestModel_ModeInput_ArrowKeysMoveCursor(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 進入 ModeInput
+	m, _ = applyKey(m, "n")
+
+	// 輸入 "abcd"
+	for _, ch := range "abcd" {
+		m, _ = applyKey(m, string(ch))
+	}
+	assert.Equal(t, "abcd", m.InputValue())
+
+	// 按左方向鍵兩次，游標移到 'c' 前
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(ui.Model)
+
+	// 在游標位置插入 'X'
+	m, _ = applyKey(m, "X")
+	assert.Equal(t, "abXcd", m.InputValue())
+
+	// 按右方向鍵一次，再插入 'Y'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(ui.Model)
+	m, _ = applyKey(m, "Y")
+	assert.Equal(t, "abXcYd", m.InputValue())
 }
 
 func TestModel_Search_BackspaceWorks(t *testing.T) {

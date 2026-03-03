@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
@@ -44,7 +45,7 @@ type Model struct {
 	mode        Mode
 	inputTarget InputTarget
 	inputPrompt string
-	inputValue  string
+	textInput   textinput.Model
 
 	confirmPrompt string
 	confirmAction func() tea.Cmd
@@ -60,7 +61,11 @@ type Model struct {
 
 // NewModel 建立初始 Model。
 func NewModel(deps Deps) Model {
-	return Model{deps: deps}
+	ti := textinput.New()
+	ti.PromptStyle = selectedStyle
+	ti.TextStyle = lipgloss.NewStyle()
+	ti.Cursor.Style = selectedStyle
+	return Model{deps: deps, textInput: ti}
 }
 
 // SessionsMsg 是 loadSessions 完成後的回傳訊息。
@@ -87,7 +92,7 @@ func (m Model) Mode() Mode {
 
 // InputValue 回傳目前的輸入值（主要用於測試）。
 func (m Model) InputValue() string {
-	return m.inputValue
+	return m.textInput.Value()
 }
 
 // Err 回傳目前的錯誤（主要用於測試）。
@@ -170,8 +175,10 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 
 			metaMap := make(map[string]int64)
 			customNameMap := make(map[string]string)
+			sortOrderMap := make(map[string]int)
 			for _, meta := range metas {
 				metaMap[meta.SessionName] = meta.GroupID
+				sortOrderMap[meta.SessionName] = meta.SortOrder
 				if meta.CustomName != "" {
 					customNameMap[meta.SessionName] = meta.CustomName
 				}
@@ -182,6 +189,9 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 					if name, ok := groupMap[gid]; ok {
 						sessions[i].GroupName = name
 					}
+				}
+				if so, ok := sortOrderMap[sessions[i].Name]; ok {
+					sessions[i].SortOrder = so
 				}
 				if cn, ok := customNameMap[sessions[i].Name]; ok {
 					sessions[i].CustomName = cn
@@ -399,7 +409,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeInput
 		m.inputTarget = InputNewSession
 		m.inputPrompt = "Session 名稱"
-		m.inputValue = ""
+		m.textInput.SetValue("")
+		m.textInput.Focus()
 		return m, nil
 	case "r":
 		// 重命名 session（自訂名稱）：僅對 ItemSession 生效
@@ -409,7 +420,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.mode = ModeInput
 				m.inputTarget = InputRenameSession
 				m.inputPrompt = "自訂名稱"
-				m.inputValue = item.Session.CustomName
+				m.textInput.SetValue(item.Session.CustomName)
+				m.textInput.Focus()
 			}
 		}
 		return m, nil
@@ -419,7 +431,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = ModeInput
 			m.inputTarget = InputNewGroup
 			m.inputPrompt = "群組名稱"
-			m.inputValue = ""
+			m.textInput.SetValue("")
+			m.textInput.Focus()
 		}
 		return m, nil
 	case "m":
@@ -484,19 +497,14 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		// 取消輸入，回到一般模式
 		m.mode = ModeNormal
-		m.inputValue = ""
+		m.textInput.SetValue("")
+		m.textInput.Blur()
 		m.inputPrompt = ""
 		return m, nil
-	case tea.KeyBackspace:
-		// 刪除最後一個字元
-		if len(m.inputValue) > 0 {
-			runes := []rune(m.inputValue)
-			m.inputValue = string(runes[:len(runes)-1])
-		}
-		return m, nil
 	case tea.KeyEnter:
-		value := strings.TrimSpace(m.inputValue)
-		m.inputValue = ""
+		value := strings.TrimSpace(m.textInput.Value())
+		m.textInput.SetValue("")
+		m.textInput.Blur()
 		m.inputPrompt = ""
 		if value == "" {
 			m.mode = ModeNormal
@@ -559,12 +567,12 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = ModeNormal
 		}
 		return m, nil
-	case tea.KeyRunes:
-		// 附加輸入字元
-		m.inputValue += string(msg.Runes)
-		return m, nil
+	default:
+		// 委託給 textinput 處理所有其他按鍵（含空格、方向鍵、Backspace 等）
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
 	}
-	return m, nil
 }
 
 // updateConfirm 處理確認對話框模式的按鍵。
@@ -754,21 +762,22 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 	return m, loadSessionsCmd(m.deps)
 }
 
-// moveSession 將 session 在群組內排序中上移或下移，交換 sort_order。
+// moveSession 將 session 在群組內（或未分組）排序中上移或下移，交換 sort_order。
 func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.Cmd) {
-	if session.GroupName == "" {
-		return m, nil // 未分組 session 不支援排序
-	}
-	groups := m.collectGroups()
 	var groupID int64
-	for _, g := range groups {
-		if g.Name == session.GroupName {
-			groupID = g.ID
-			break
+	if session.GroupName == "" {
+		groupID = 0
+	} else {
+		groups := m.collectGroups()
+		for _, g := range groups {
+			if g.Name == session.GroupName {
+				groupID = g.ID
+				break
+			}
 		}
-	}
-	if groupID == 0 {
-		return m, nil
+		if groupID == 0 {
+			return m, nil
+		}
 	}
 
 	if m.deps.Client != nil {
@@ -913,10 +922,9 @@ func (m Model) View() string {
 	// 模式相關的底部列
 	switch m.mode {
 	case ModeInput:
-		b.WriteString(fmt.Sprintf("\n  %s: %s%s\n",
+		b.WriteString(fmt.Sprintf("\n  %s: %s\n",
 			selectedStyle.Render(m.inputPrompt),
-			m.inputValue,
-			selectedStyle.Render("\u2588"))) // 游標方塊字元
+			m.textInput.View()))
 		b.WriteString(fmt.Sprintf("  %s\n",
 			dimStyle.Render("[Esc] 取消")))
 	case ModeConfirm:
