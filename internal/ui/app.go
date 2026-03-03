@@ -14,6 +14,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
+	"github.com/wake/tmux-session-menu/internal/version"
 )
 
 // Deps 封裝 Model 的外部依賴。
@@ -854,6 +855,7 @@ func (m Model) View() string {
 
 	// Header
 	b.WriteString(headerStyle.Render("tmux session menu"))
+	b.WriteString(dimStyle.Render("  " + version.String()))
 	b.WriteString(dimStyle.Render("  (↑↓/jk 選擇, Enter 確認, q 離開)"))
 	b.WriteString("\n")
 

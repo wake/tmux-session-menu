@@ -13,9 +13,11 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/daemon"
 	"github.com/wake/tmux-session-menu/internal/hooks"
+	"github.com/wake/tmux-session-menu/internal/setup"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
+	"github.com/wake/tmux-session-menu/internal/version"
 )
 
 // runMode 表示 TUI 的啟動模式
@@ -48,6 +50,11 @@ func main() {
 		return
 	}
 
+	if args[0] == "--version" || args[0] == "-v" {
+		fmt.Printf("tsm %s\n", version.String())
+		return
+	}
+
 	if args[0] == "--help" || args[0] == "-h" {
 		printUsage()
 		return // exit 0
@@ -70,6 +77,11 @@ func main() {
 
 	if args[0] == "daemon" {
 		runDaemon(args[1:])
+		return
+	}
+
+	if args[0] == "setup" {
+		runSetup(args[1:])
 		return
 	}
 
@@ -313,10 +325,13 @@ func containsFlag(args []string, flag string) bool {
 }
 
 func printUsage() {
+	fmt.Fprintf(os.Stderr, "tsm %s\n", version.String())
+	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Usage: tsm [command] [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  (no args)          啟動 TUI 選單（自動管理 daemon）")
+	fmt.Fprintln(os.Stderr, "  setup              互動式安裝所有元件")
 	fmt.Fprintln(os.Stderr, "  bind install       安裝 Ctrl+Q 快捷鍵到 ~/.tmux.conf")
 	fmt.Fprintln(os.Stderr, "  bind uninstall     移除 Ctrl+Q 快捷鍵")
 	fmt.Fprintln(os.Stderr, "  daemon start       前景啟動 daemon")
@@ -326,6 +341,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  hooks uninstall    移除 tsm hooks")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
+	fmt.Fprintln(os.Stderr, "  --version, -v      顯示版本號")
 	fmt.Fprintln(os.Stderr, "  --inline           強制使用內嵌全螢幕模式")
 	fmt.Fprintln(os.Stderr, "  --popup            強制使用 tmux popup 模式")
 	fmt.Fprintln(os.Stderr, "  --dry-run          預覽變更，不實際寫入")
@@ -454,4 +470,89 @@ func printHooksUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  --dry-run    預覽變更，不實際寫入")
+}
+
+func runSetup(args []string) {
+	if containsFlag(args, "--help") || containsFlag(args, "-h") {
+		fmt.Fprintln(os.Stderr, "Usage: tsm setup [--uninstall]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "互動式安裝所有 tsm 元件。")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fmt.Fprintln(os.Stderr, "  --uninstall  移除所有已安裝的元件")
+		return
+	}
+
+	components := buildSetupComponents()
+
+	if containsFlag(args, "--uninstall") {
+		setup.RunUninstallAll(components)
+		return
+	}
+
+	m := setup.NewModel(components)
+	p := tea.NewProgram(m)
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func buildSetupComponents() []setup.Component {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 無法取得 home 目錄: %v\n", err)
+		os.Exit(1)
+	}
+
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	scriptPath := filepath.Join(home, ".config", "tsm", "hooks", "tsm-hook.sh")
+
+	return []setup.Component{
+		{
+			Label: "Ctrl+Q 快捷鍵 (tmux keybinding)",
+			InstallFn: func() (string, error) {
+				result, err := bind.Install(false)
+				if err != nil {
+					return "", err
+				}
+				return result.Message, nil
+			},
+			UninstallFn: func() (string, error) {
+				result, err := bind.Uninstall(false)
+				if err != nil {
+					return "", err
+				}
+				return result.Message, nil
+			},
+		},
+		{
+			Label: "Claude Code hooks",
+			InstallFn: func() (string, error) {
+				mgr := hooks.NewManager(settingsPath, scriptPath)
+				if err := mgr.EnsureScript(); err != nil {
+					return "", err
+				}
+				result, err := mgr.Install(false)
+				if err != nil {
+					return "", err
+				}
+				if !result.Changed {
+					return "已安裝，無需變更", nil
+				}
+				return fmt.Sprintf("已新增 hooks: %s", strings.Join(result.EventsAdded, ", ")), nil
+			},
+			UninstallFn: func() (string, error) {
+				mgr := hooks.NewManager(settingsPath, scriptPath)
+				result, err := mgr.Uninstall(false)
+				if err != nil {
+					return "", err
+				}
+				if !result.Changed {
+					return "未偵測到 hooks，無需移除", nil
+				}
+				return fmt.Sprintf("已移除 hooks: %s", strings.Join(result.EventsRemoved, ", ")), nil
+			},
+		},
+	}
 }
