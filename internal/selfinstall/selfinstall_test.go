@@ -164,8 +164,6 @@ func TestInstallCopiesFile(t *testing.T) {
 	// 目標目錄
 	targetDir := t.TempDir()
 
-	// 暫時替換 os.Executable 的結果（透過直接呼叫 Install 前先複製）
-	// 由於 Install 使用 os.Executable，這裡直接測試 copyFile
 	target := filepath.Join(targetDir, "tsm-copy")
 	err := copyFile(srcFile, target)
 	require.NoError(t, err)
@@ -178,4 +176,49 @@ func TestInstallCopiesFile(t *testing.T) {
 	info, err := os.Stat(target)
 	require.NoError(t, err)
 	assert.NotZero(t, info.Mode()&0o111, "應有執行權限")
+}
+
+func TestInstallIntegration(t *testing.T) {
+	// Install 使用 os.Executable() 取得來源路徑（test binary）
+	targetDir := filepath.Join(t.TempDir(), "bin")
+
+	msg, err := Install(targetDir)
+	require.NoError(t, err)
+	assert.Contains(t, msg, "已安裝到")
+
+	// 驗證目標檔案存在且可讀
+	target := filepath.Join(targetDir, "tsm")
+	info, err := os.Stat(target)
+	require.NoError(t, err)
+	assert.True(t, info.Size() > 0, "複製的檔案不應為空")
+	assert.NotZero(t, info.Mode()&0o111, "應有執行權限")
+}
+
+func TestInstallSkipsSelfOverwrite(t *testing.T) {
+	// 取得目前 test binary 路徑
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	exe, err = filepath.EvalSymlinks(exe)
+	require.NoError(t, err)
+
+	// 在同一個目錄建立 "tsm" symlink 指向自己
+	targetDir := t.TempDir()
+	target := filepath.Join(targetDir, "tsm")
+	require.NoError(t, os.Symlink(exe, target))
+
+	msg, err := Install(targetDir)
+	require.NoError(t, err)
+	assert.Contains(t, msg, "跳過")
+}
+
+func TestBuildComponentNotFound_EmptyGoPath(t *testing.T) {
+	saveAndRestore(t)
+	lookPathFn = func(string) (string, error) {
+		return "", errors.New("not found")
+	}
+	goPathBinFn = func() string { return "" }
+
+	comp := BuildComponent()
+	assert.True(t, comp.Disabled, "goPathBinFn 回傳空字串時應禁用")
+	assert.Contains(t, comp.Note, "GOPATH")
 }

@@ -124,10 +124,12 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
-	_, err = io.Copy(out, in)
-	return err
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // BuildComponent 根據偵測結果建立 setup.Component。
@@ -137,6 +139,20 @@ func BuildComponent() setup.Component {
 	switch r.Status {
 	case StatusNotFound:
 		targetDir := goPathBinFn()
+		if targetDir == "" {
+			return setup.Component{
+				Label:    "安裝 tsm (無法偵測路徑)",
+				Checked:  false,
+				Disabled: true,
+				Note:     "無法取得 $GOPATH/bin 路徑，請設定 GOPATH 環境變數",
+				InstallFn: func() (string, error) {
+					return "", fmt.Errorf("無法偵測安裝路徑")
+				},
+				UninstallFn: func() (string, error) {
+					return "", fmt.Errorf("尚未安裝")
+				},
+			}
+		}
 		return setup.Component{
 			Label:   fmt.Sprintf("安裝 tsm 到 %s", filepath.Join(targetDir, "tsm")),
 			Checked: true,
