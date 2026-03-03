@@ -717,6 +717,35 @@ func (m Model) moveItem(direction int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// normalizeGroupOrders 當群組的 sort_order 有重複時，重新指派為連續值。
+func (m Model) normalizeGroupOrders(groups []store.Group) error {
+	seen := make(map[int]bool)
+	needsNormalize := false
+	for _, g := range groups {
+		if seen[g.SortOrder] {
+			needsNormalize = true
+			break
+		}
+		seen[g.SortOrder] = true
+	}
+	if !needsNormalize {
+		return nil
+	}
+	for i, g := range groups {
+		if m.deps.Client != nil {
+			if err := m.deps.Client.ReorderGroup(context.Background(), g.ID, i); err != nil {
+				return err
+			}
+		} else if m.deps.Store != nil {
+			if err := m.deps.Store.SetGroupOrder(g.ID, i); err != nil {
+				return err
+			}
+		}
+		groups[i].SortOrder = i
+	}
+	return nil
+}
+
 // moveGroup 將群組在排序中上移或下移，交換 sort_order。
 func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) {
 	groups := m.collectGroups()
@@ -732,6 +761,12 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 	}
 	newIdx := idx + direction
 	if newIdx < 0 || newIdx >= len(groups) {
+		return m, nil
+	}
+
+	// sort_order 重複時先正規化
+	if err := m.normalizeGroupOrders(groups); err != nil {
+		m.err = err
 		return m, nil
 	}
 
@@ -760,6 +795,59 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 	}
 	m.cursor += direction
 	return m, loadSessionsCmd(m.deps)
+}
+
+// normalizeSessionOrders 當同群組 session 的 sort_order 有重複時，重新指派為連續值。
+// gRPC 模式使用 siblings（來自 items），舊模式使用 metas（來自 store）。
+func (m Model) normalizeSessionOrders(siblings []tmux.Session, groupID int64) error {
+	seen := make(map[int]bool)
+	needsNormalize := false
+	for _, s := range siblings {
+		if seen[s.SortOrder] {
+			needsNormalize = true
+			break
+		}
+		seen[s.SortOrder] = true
+	}
+	if !needsNormalize {
+		return nil
+	}
+	for i, s := range siblings {
+		if m.deps.Client != nil {
+			if err := m.deps.Client.ReorderSession(context.Background(), s.Name, groupID, i); err != nil {
+				return err
+			}
+		} else if m.deps.Store != nil {
+			if err := m.deps.Store.SetSessionGroup(s.Name, groupID, i); err != nil {
+				return err
+			}
+		}
+		siblings[i].SortOrder = i
+	}
+	return nil
+}
+
+// normalizeMetaOrders 當 session metas 的 sort_order 有重複時，重新指派為連續值（舊模式）。
+func (m Model) normalizeMetaOrders(metas []store.SessionMeta, groupID int64) error {
+	seen := make(map[int]bool)
+	needsNormalize := false
+	for _, meta := range metas {
+		if seen[meta.SortOrder] {
+			needsNormalize = true
+			break
+		}
+		seen[meta.SortOrder] = true
+	}
+	if !needsNormalize {
+		return nil
+	}
+	for i, meta := range metas {
+		if err := m.deps.Store.SetSessionGroup(meta.SessionName, groupID, i); err != nil {
+			return err
+		}
+		metas[i].SortOrder = i
+	}
+	return nil
 }
 
 // moveSession 將 session 在群組內（或未分組）排序中上移或下移，交換 sort_order。
@@ -802,6 +890,11 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 		if newIdx < 0 || newIdx >= len(siblings) {
 			return m, nil
 		}
+		// sort_order 重複時先正規化
+		if err := m.normalizeSessionOrders(siblings, groupID); err != nil {
+			m.err = err
+			return m, nil
+		}
 		if err := m.deps.Client.ReorderSession(context.Background(), siblings[idx].Name, groupID, siblings[newIdx].SortOrder); err != nil {
 			m.err = err
 			return m, nil
@@ -832,6 +925,11 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 	}
 	newIdx := idx + direction
 	if newIdx < 0 || newIdx >= len(metas) {
+		return m, nil
+	}
+	// sort_order 重複時先正規化
+	if err := m.normalizeMetaOrders(metas, groupID); err != nil {
+		m.err = err
 		return m, nil
 	}
 	// 交換 sort_order

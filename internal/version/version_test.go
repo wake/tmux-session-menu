@@ -14,12 +14,12 @@ func TestStringDefault(t *testing.T) {
 }
 
 func TestStringWithVersion(t *testing.T) {
-	Version = "v0.1.0"
+	Version = "0.5.1"
 	Commit = "abc1234"
 	defer func() {
 		Version = "dev"
 		Commit = "unknown"
 	}()
 
-	assert.Equal(t, "v0.1.0 (abc1234)", String())
+	assert.Equal(t, "0.5.1(abc1234)", String())
 }

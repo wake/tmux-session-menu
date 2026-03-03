@@ -39,11 +39,15 @@ func FlattenItems(groups []store.Group, sessions []tmux.Session) []ListItem {
 		}
 	}
 
-	// 先放群組
+	// 先放群組（群組內 session 按 SortOrder 排序）
 	for _, g := range groups {
 		items = append(items, ListItem{Type: ItemGroup, Group: g})
 		if !g.Collapsed {
-			for _, s := range grouped[g.Name] {
+			subs := grouped[g.Name]
+			sort.Slice(subs, func(i, j int) bool {
+				return subs[i].SortOrder < subs[j].SortOrder
+			})
+			for _, s := range subs {
 				items = append(items, ListItem{Type: ItemSession, Session: s})
 			}
 		}
