@@ -113,6 +113,15 @@ func (c *Client) CreateGroup(ctx context.Context, name string, sortOrder int) er
 	return err
 }
 
+// RenameGroup 重命名群組。
+func (c *Client) RenameGroup(ctx context.Context, groupID int64, newName string) error {
+	_, err := c.rpc.RenameGroup(ctx, &tsmv1.RenameGroupRequest{
+		GroupId: groupID,
+		NewName: newName,
+	})
+	return err
+}
+
 // MoveSession 將 session 移動到指定群組。
 func (c *Client) MoveSession(ctx context.Context, sessionName string, groupID int64, sortOrder int) error {
 	_, err := c.rpc.MoveSession(ctx, &tsmv1.MoveSessionRequest{

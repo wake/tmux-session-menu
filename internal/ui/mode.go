@@ -18,4 +18,5 @@ const (
 	InputNewSession    InputTarget = iota // 新建 session
 	InputRenameSession                    // 重命名 session (custom_name)
 	InputNewGroup                         // 新建群組
+	InputRenameGroup                      // 重命名群組
 )

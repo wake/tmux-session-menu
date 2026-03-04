@@ -52,6 +52,7 @@ type Model struct {
 	phase      phase
 	results    []result
 	quitting   bool
+	daemonHint string // 安裝完成後顯示的 daemon 提示
 }
 
 // NewModel 建立 setup TUI model，根據各元件的 Checked 欄位初始化勾選狀態。
@@ -64,6 +65,11 @@ func NewModel(components []Component) Model {
 		components: components,
 		checked:    checked,
 	}
+}
+
+// SetDaemonHint 設定安裝完成後顯示的 daemon 提示訊息。
+func (m *Model) SetDaemonHint(hint string) {
+	m.daemonHint = hint
 }
 
 func (m Model) Init() tea.Cmd {
@@ -198,6 +204,11 @@ func (m Model) View() string {
 			} else {
 				b.WriteString(successStyle.Render(fmt.Sprintf("✓ %s: %s", r.label, r.message)))
 			}
+			b.WriteString("\n")
+		}
+		if m.daemonHint != "" {
+			b.WriteString("\n")
+			b.WriteString(dimStyle.Render(m.daemonHint))
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")

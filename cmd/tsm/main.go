@@ -503,19 +503,16 @@ func runSetup(args []string) {
 		return
 	}
 
-	daemonWasRunning := isDaemonRunning()
-
 	m := setup.NewModel(components)
+	if isDaemonRunning() {
+		m.SetDaemonHint("請手動重新啟動 daemon: tsm daemon restart")
+	} else {
+		m.SetDaemonHint("請啟動 daemon: tsm daemon start")
+	}
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
-	}
-
-	if daemonWasRunning {
-		fmt.Fprintln(os.Stderr, "請手動重新啟動 daemon: tsm daemon restart")
-	} else {
-		fmt.Fprintln(os.Stderr, "請啟動 daemon: tsm daemon start")
 	}
 }
 

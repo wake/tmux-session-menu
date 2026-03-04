@@ -90,6 +90,11 @@ func (m Model) Mode() Mode {
 	return m.mode
 }
 
+// InputTarget 回傳目前的輸入目標（主要用於測試）。
+func (m Model) InputTarget() InputTarget {
+	return m.inputTarget
+}
+
 // InputValue 回傳目前的輸入值（主要用於測試）。
 func (m Model) InputValue() string {
 	return m.textInput.Value()
@@ -377,30 +382,36 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			item := m.items[m.cursor]
-			if item.Type == ItemSession {
+			switch item.Type {
+			case ItemSession:
 				m.selected = item.Session.Name
 				m.quitting = true
 				return m, tea.Quit
+			case ItemGroup:
+				return m.toggleCollapse(item)
 			}
 		}
 		return m, nil
 	case "tab":
+		if m.cursor >= 0 && m.cursor < len(m.items) && m.items[m.cursor].Type == ItemGroup {
+			return m.toggleCollapse(m.items[m.cursor])
+		}
+		return m, nil
+	case "left":
+		// 收合群組（僅對已展開的群組生效）
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			item := m.items[m.cursor]
-			if item.Type == ItemGroup {
-				if m.deps.Client != nil {
-					if err := m.deps.Client.ToggleCollapse(context.Background(), item.Group.ID); err != nil {
-						m.err = err
-					}
-					return m, nil // 變更透過 Watch stream 自動推送
-				}
-				if m.deps.Store != nil {
-					if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
-						m.err = err
-						return m, nil
-					}
-					return m, loadSessionsCmd(m.deps)
-				}
+			if item.Type == ItemGroup && !item.Group.Collapsed {
+				return m.toggleCollapse(item)
+			}
+		}
+		return m, nil
+	case "right":
+		// 展開群組（僅對已收合的群組生效）
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemGroup && item.Group.Collapsed {
+				return m.toggleCollapse(item)
 			}
 		}
 		return m, nil
@@ -412,14 +423,21 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textInput.Focus()
 		return m, nil
 	case "r":
-		// 重命名 session（自訂名稱）：僅對 ItemSession 生效
+		// 重命名：session 設定自訂名稱，群組重命名
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			item := m.items[m.cursor]
-			if item.Type == ItemSession {
+			switch item.Type {
+			case ItemSession:
 				m.mode = ModeInput
 				m.inputTarget = InputRenameSession
 				m.inputPrompt = "自訂名稱"
 				m.textInput.SetValue(item.Session.CustomName)
+				m.textInput.Focus()
+			case ItemGroup:
+				m.mode = ModeInput
+				m.inputTarget = InputRenameGroup
+				m.inputPrompt = "群組名稱"
+				m.textInput.SetValue(item.Group.Name)
 				m.textInput.Focus()
 			}
 		}
@@ -447,6 +465,28 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pickerGroups = groups
 				m.pickerCursor = 0
 				m.pickerTarget = item.Session.Name
+			}
+		}
+		return m, nil
+	case "c":
+		// 清除 session 自訂名稱：僅對有 CustomName 的 ItemSession 生效
+		if m.cursor >= 0 && m.cursor < len(m.items) {
+			item := m.items[m.cursor]
+			if item.Type == ItemSession && item.Session.CustomName != "" {
+				name := item.Session.Name
+				if m.deps.Client != nil {
+					if err := m.deps.Client.RenameSession(context.Background(), name, ""); err != nil {
+						m.err = err
+					}
+					return m, nil // 變更透過 Watch stream 自動推送
+				}
+				if m.deps.Store != nil {
+					if err := m.deps.Store.SetCustomName(name, ""); err != nil {
+						m.err = err
+						return m, nil
+					}
+					return m, loadSessionsCmd(m.deps)
+				}
 			}
 		}
 		return m, nil
@@ -559,6 +599,25 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if err := m.deps.Store.CreateGroup(value, 0); err != nil {
 					m.err = err
 					return m, nil
+				}
+			}
+			return m, loadSessionsCmd(m.deps)
+		case InputRenameGroup:
+			m.mode = ModeNormal
+			if m.cursor >= 0 && m.cursor < len(m.items) && m.items[m.cursor].Type == ItemGroup {
+				groupID := m.items[m.cursor].Group.ID
+				if m.deps.Client != nil {
+					if err := m.deps.Client.RenameGroup(context.Background(), groupID, value); err != nil {
+						m.err = err
+						return m, nil
+					}
+					return m, nil // 變更透過 Watch stream 自動推送
+				}
+				if m.deps.Store != nil {
+					if err := m.deps.Store.RenameGroup(groupID, value); err != nil {
+						m.err = err
+						return m, nil
+					}
 				}
 			}
 			return m, loadSessionsCmd(m.deps)
@@ -678,6 +737,24 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		}
+	}
+	return m, nil
+}
+
+// toggleCollapse 切換群組的展開/收合狀態。
+func (m Model) toggleCollapse(item ListItem) (tea.Model, tea.Cmd) {
+	if m.deps.Client != nil {
+		if err := m.deps.Client.ToggleCollapse(context.Background(), item.Group.ID); err != nil {
+			m.err = err
+		}
+		return m, nil // 變更透過 Watch stream 自動推送
+	}
+	if m.deps.Store != nil {
+		if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
+			m.err = err
+			return m, nil
+		}
+		return m, loadSessionsCmd(m.deps)
 	}
 	return m, nil
 }
@@ -1079,10 +1156,11 @@ func (m Model) View() string {
 			m.searchQuery))
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	default:
-		b.WriteString(fmt.Sprintf("\n  %s  %s  %s  %s  %s  %s  %s\n",
+		b.WriteString(fmt.Sprintf("\n  %s  %s  %s  %s  %s  %s  %s  %s\n",
 			dimStyle.Render("[n] 新建"),
 			dimStyle.Render("[d] 刪除"),
 			dimStyle.Render("[r] 更名"),
+			dimStyle.Render("[c] 清除名稱"),
 			dimStyle.Render("[g] 群組"),
 			dimStyle.Render("[m] 移動"),
 			dimStyle.Render("[/] 搜尋"),

@@ -64,6 +64,12 @@ message RenameSessionRequest {
   string custom_name = 2;
 }
 
+// RenameGroupRequest 重命名群組。
+message RenameGroupRequest {
+  int64 group_id = 1;
+  string new_name = 2;
+}
+
 // CreateGroupRequest 建立新的群組。
 message CreateGroupRequest {
   string name = 1;
@@ -120,6 +126,7 @@ service SessionManager {
   rpc KillSession(KillSessionRequest) returns (google.protobuf.Empty);
   rpc RenameSession(RenameSessionRequest) returns (google.protobuf.Empty);
   rpc CreateGroup(CreateGroupRequest) returns (google.protobuf.Empty);
+  rpc RenameGroup(RenameGroupRequest) returns (google.protobuf.Empty);
   rpc MoveSession(MoveSessionRequest) returns (google.protobuf.Empty);
   rpc Reorder(ReorderRequest) returns (google.protobuf.Empty);
   rpc ToggleCollapse(ToggleCollapseRequest) returns (google.protobuf.Empty);

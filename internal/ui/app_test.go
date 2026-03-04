@@ -178,18 +178,29 @@ func TestModel_Enter_SelectsSession(t *testing.T) {
 	assert.NotNil(t, cmd) // should return tea.Quit
 }
 
-func TestModel_Enter_OnGroup_DoesNotSelect(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+func TestModel_Enter_OnGroup_TogglesCollapse(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
 	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
-		{Type: ui.ItemSession, Session: tmux.Session{Name: "target"}},
+		{Type: ui.ItemGroup, Group: groups[0]},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "target", GroupName: "dev"}},
 	})
 
+	// cursor 在群組上，按 Enter 應 toggle collapse
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(ui.Model)
 
-	assert.Equal(t, "", model.Selected())
-	assert.Nil(t, cmd) // should NOT quit
+	assert.Equal(t, "", model.Selected(), "不應選取 session")
+	assert.NotNil(t, cmd, "應觸發 loadSessionsCmd")
+
+	// 驗證 store 中 collapsed 已切換
+	groups, _ = st.ListGroups()
+	assert.True(t, groups[0].Collapsed, "群組應被收合")
 }
 
 func TestModel_LoadSessions_WithHookStatus(t *testing.T) {
@@ -808,16 +819,18 @@ func TestModel_Rename_SetsCustomName(t *testing.T) {
 	}
 }
 
-func TestModel_Rename_OnGroup_NoOp(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+func TestModel_Rename_OnGroup_EntersModeInput(t *testing.T) {
+	m := ui.NewModel(ui.Deps{Store: openUITestDB(t)})
 	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
+		{Type: ui.ItemGroup, Group: store.Group{ID: 1, Name: "dev"}},
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
 	})
 
-	// cursor 在群組上，按 r 應保持 ModeNormal
+	// cursor 在群組上，按 r 應進入 ModeInput + InputRenameGroup
 	m, _ = applyKey(m, "r")
-	assert.Equal(t, ui.ModeNormal, m.Mode(), "群組上按 r 應保持 ModeNormal")
+	assert.Equal(t, ui.ModeInput, m.Mode(), "群組上按 r 應進入 ModeInput")
+	assert.Equal(t, ui.InputRenameGroup, m.InputTarget(), "inputTarget 應為 InputRenameGroup")
+	assert.Equal(t, "dev", m.InputValue(), "應預填群組名")
 }
 
 func TestModel_View_ShowsCustomName(t *testing.T) {
@@ -1674,4 +1687,206 @@ func TestSessionsMsg_CursorFollowsItem(t *testing.T) {
 	m = updated.(ui.Model)
 
 	assert.Equal(t, 2, m.Cursor(), "cursor 應跟隨 beta 移到 index 2")
+}
+
+// --- 左/右箭頭群組展開/收合 相關測試 ---
+
+func TestModel_LeftArrow_CollapsesGroup(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+	groups, _ := st.ListGroups()
+	// 群組預設是展開的（Collapsed=false）
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", GroupName: "dev"}},
+	})
+
+	// cursor 在展開的群組上，按 left → 收合
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	_ = updated.(ui.Model)
+
+	assert.NotNil(t, cmd, "應觸發 loadSessionsCmd")
+	groups, _ = st.ListGroups()
+	assert.True(t, groups[0].Collapsed, "群組應被收合")
+}
+
+func TestModel_RightArrow_ExpandsGroup(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+	st.ToggleGroupCollapsed(1) // 先收合
+	groups, _ := st.ListGroups()
+	assert.True(t, groups[0].Collapsed, "前提：群組應已收合")
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+	})
+
+	// cursor 在收合的群組上，按 right → 展開
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	_ = updated.(ui.Model)
+
+	assert.NotNil(t, cmd, "應觸發 loadSessionsCmd")
+	groups, _ = st.ListGroups()
+	assert.False(t, groups[0].Collapsed, "群組應被展開")
+}
+
+func TestModel_LeftArrow_AlreadyCollapsed_NoOp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+	st.ToggleGroupCollapsed(1) // 先收合
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+	})
+
+	// 已收合的群組按 left → 無動作
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	assert.Nil(t, cmd, "已收合的群組按 left 應無動作")
+}
+
+func TestModel_RightArrow_AlreadyExpanded_NoOp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+	groups, _ := st.ListGroups()
+	// 群組預設展開
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", GroupName: "dev"}},
+	})
+
+	// 已展開的群組按 right → 無動作
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	assert.Nil(t, cmd, "已展開的群組按 right 應無動作")
+}
+
+func TestModel_LeftRight_OnSession_NoOp(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+	})
+
+	// session 上按 left → 無動作
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	assert.Nil(t, cmd, "session 上按 left 應無動作")
+
+	// session 上按 right → 無動作
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	assert.Nil(t, cmd, "session 上按 right 應無動作")
+}
+
+// --- 群組重命名 (r key on group) 相關測試 ---
+
+func TestModel_Rename_OnGroup_PrefillsCurrentName(t *testing.T) {
+	m := ui.NewModel(ui.Deps{Store: openUITestDB(t)})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{ID: 1, Name: "原始群組"}},
+	})
+
+	m, _ = applyKey(m, "r")
+	assert.Equal(t, "原始群組", m.InputValue(), "應預填目前的群組名稱")
+}
+
+func TestModel_Rename_OnGroup_Submit_Updates(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("old-name", 0)
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+	})
+
+	// 按 r 進入重命名模式
+	m, _ = applyKey(m, "r")
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	// 清空預填值並輸入新名稱
+	// 先用 Ctrl+A + 刪除的方式清空，或重新設定
+	// 這裡用逐字刪除的方式
+	for range "old-name" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(ui.Model)
+	}
+	for _, ch := range "new-name" {
+		m, _ = applyKey(m, string(ch))
+	}
+
+	// 按 Enter 送出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+
+	// 驗證 store 中群組名稱已更新
+	groups, _ = st.ListGroups()
+	assert.Equal(t, "new-name", groups[0].Name)
+}
+
+// --- 清除 session 自訂名稱 (c key) 相關測試 ---
+
+func TestModel_ClearName_Session(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 先設定自訂名稱
+	st.SetCustomName("dev", "我的開發")
+	metas, _ := st.ListAllSessionMetas()
+	assert.Equal(t, "我的開發", metas[0].CustomName)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", CustomName: "我的開發"}},
+	})
+
+	// 按 c 清除自訂名稱
+	m, cmd := applyKey(m, "c")
+
+	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+	assert.Equal(t, ui.ModeNormal, m.Mode(), "應保持 ModeNormal")
+
+	// 驗證 store 中 custom_name 已清空
+	metas, _ = st.ListAllSessionMetas()
+	assert.Equal(t, "", metas[0].CustomName, "custom_name 應已清空")
+}
+
+func TestModel_ClearName_OnGroup_NoOp(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+	})
+
+	// cursor 在群組上，按 c 應無動作
+	m, cmd := applyKey(m, "c")
+	assert.Nil(t, cmd, "群組上按 c 應無動作")
+	assert.Equal(t, ui.ModeNormal, m.Mode())
+}
+
+func TestModel_ClearName_NoCustomName_NoOp(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// session 沒有自訂名稱，按 c 應無動作
+	m, cmd := applyKey(m, "c")
+	assert.Nil(t, cmd, "無自訂名稱時按 c 應無動作")
 }

@@ -92,6 +92,18 @@ func (s *Service) RenameSession(_ context.Context, req *tsmv1.RenameSessionReque
 	return &emptypb.Empty{}, nil
 }
 
+// RenameGroup 重命名群組。
+func (s *Service) RenameGroup(_ context.Context, req *tsmv1.RenameGroupRequest) (*emptypb.Empty, error) {
+	if s.store == nil {
+		return &emptypb.Empty{}, nil
+	}
+	if err := s.store.RenameGroup(req.GroupId, req.NewName); err != nil {
+		return nil, err
+	}
+	s.state.Scan()
+	return &emptypb.Empty{}, nil
+}
+
 // CreateGroup 建立新的群組。
 func (s *Service) CreateGroup(_ context.Context, req *tsmv1.CreateGroupRequest) (*emptypb.Empty, error) {
 	if s.store == nil {

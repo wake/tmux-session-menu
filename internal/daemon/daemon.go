@@ -127,6 +127,10 @@ func (d *Daemon) Shutdown() {
 	if d.cancelRun != nil {
 		d.cancelRun()
 	}
+	// 先關閉 hub，讓所有 Watch stream 結束，避免 GracefulStop 死鎖
+	if d.hub != nil {
+		d.hub.Close()
+	}
 	if d.server != nil {
 		d.server.GracefulStop()
 	}
@@ -181,7 +185,7 @@ func Start(cfg config.Config) error {
 	return nil
 }
 
-// Stop 停止由 PID 檔案指定的 daemon。
+// Stop 停止由 PID 檔案指定的 daemon，等待程序退出。
 func Stop(cfg config.Config) error {
 	pidPath := PidPath(cfg)
 	data, err := os.ReadFile(pidPath)
@@ -194,19 +198,35 @@ func Stop(cfg config.Config) error {
 		return fmt.Errorf("parse pid: %w", err)
 	}
 
+	if !processExists(pid) {
+		os.Remove(pidPath)
+		fmt.Fprintf(os.Stderr, "daemon (pid=%d) already exited, cleaned pid file\n", pid)
+		return nil
+	}
+
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return fmt.Errorf("find process: %w", err)
 	}
 
 	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		// 程序可能已終止，清理 PID 檔案
 		os.Remove(pidPath)
 		return fmt.Errorf("send SIGTERM to pid %d: %w", pid, err)
 	}
 
-	fmt.Fprintf(os.Stderr, "sent SIGTERM to daemon (pid=%d)\n", pid)
-	return nil
+	// 等待程序退出（最多 5 秒）
+	for i := 0; i < 50; i++ {
+		time.Sleep(100 * time.Millisecond)
+		if !processExists(pid) {
+			os.Remove(pidPath)
+			fmt.Fprintf(os.Stderr, "daemon stopped (pid=%d)\n", pid)
+			return nil
+		}
+	}
+
+	// 超時：強制清理 PID 檔案
+	os.Remove(pidPath)
+	return fmt.Errorf("daemon (pid=%d) did not exit within 5s after SIGTERM", pid)
 }
 
 // Status 回傳 daemon 的狀態資訊字串。

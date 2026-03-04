@@ -123,6 +123,20 @@ func TestClient_RenameSession(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestClient_RenameGroup(t *testing.T) {
+	exec := &fakeExecutor{listOutput: ""}
+	client, cleanup := setupTestClient(t, exec)
+	defer cleanup()
+
+	// 先建立群組
+	err := client.CreateGroup(context.Background(), "old-name", 0)
+	require.NoError(t, err)
+
+	// 重命名群組
+	err = client.RenameGroup(context.Background(), 1, "new-name")
+	require.NoError(t, err)
+}
+
 func TestClient_ToggleCollapse(t *testing.T) {
 	exec := &fakeExecutor{listOutput: ""}
 	client, cleanup := setupTestClient(t, exec)

@@ -25,6 +25,7 @@ const (
 	SessionManager_KillSession_FullMethodName    = "/tsm.v1.SessionManager/KillSession"
 	SessionManager_RenameSession_FullMethodName  = "/tsm.v1.SessionManager/RenameSession"
 	SessionManager_CreateGroup_FullMethodName    = "/tsm.v1.SessionManager/CreateGroup"
+	SessionManager_RenameGroup_FullMethodName    = "/tsm.v1.SessionManager/RenameGroup"
 	SessionManager_MoveSession_FullMethodName    = "/tsm.v1.SessionManager/MoveSession"
 	SessionManager_Reorder_FullMethodName        = "/tsm.v1.SessionManager/Reorder"
 	SessionManager_ToggleCollapse_FullMethodName = "/tsm.v1.SessionManager/ToggleCollapse"
@@ -45,6 +46,7 @@ type SessionManagerClient interface {
 	KillSession(ctx context.Context, in *KillSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	RenameSession(ctx context.Context, in *RenameSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RenameGroup(ctx context.Context, in *RenameGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	MoveSession(ctx context.Context, in *MoveSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Reorder(ctx context.Context, in *ReorderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ToggleCollapse(ctx context.Context, in *ToggleCollapseRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -119,6 +121,16 @@ func (c *sessionManagerClient) CreateGroup(ctx context.Context, in *CreateGroupR
 	return out, nil
 }
 
+func (c *sessionManagerClient) RenameGroup(ctx context.Context, in *RenameGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, SessionManager_RenameGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *sessionManagerClient) MoveSession(ctx context.Context, in *MoveSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -173,6 +185,7 @@ type SessionManagerServer interface {
 	KillSession(context.Context, *KillSessionRequest) (*emptypb.Empty, error)
 	RenameSession(context.Context, *RenameSessionRequest) (*emptypb.Empty, error)
 	CreateGroup(context.Context, *CreateGroupRequest) (*emptypb.Empty, error)
+	RenameGroup(context.Context, *RenameGroupRequest) (*emptypb.Empty, error)
 	MoveSession(context.Context, *MoveSessionRequest) (*emptypb.Empty, error)
 	Reorder(context.Context, *ReorderRequest) (*emptypb.Empty, error)
 	ToggleCollapse(context.Context, *ToggleCollapseRequest) (*emptypb.Empty, error)
@@ -202,6 +215,9 @@ func (UnimplementedSessionManagerServer) RenameSession(context.Context, *RenameS
 }
 func (UnimplementedSessionManagerServer) CreateGroup(context.Context, *CreateGroupRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateGroup not implemented")
+}
+func (UnimplementedSessionManagerServer) RenameGroup(context.Context, *RenameGroupRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method RenameGroup not implemented")
 }
 func (UnimplementedSessionManagerServer) MoveSession(context.Context, *MoveSessionRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method MoveSession not implemented")
@@ -319,6 +335,24 @@ func _SessionManager_CreateGroup_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SessionManager_RenameGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).RenameGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_RenameGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).RenameGroup(ctx, req.(*RenameGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SessionManager_MoveSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MoveSessionRequest)
 	if err := dec(in); err != nil {
@@ -413,6 +447,10 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateGroup",
 			Handler:    _SessionManager_CreateGroup_Handler,
+		},
+		{
+			MethodName: "RenameGroup",
+			Handler:    _SessionManager_RenameGroup_Handler,
 		},
 		{
 			MethodName: "MoveSession",
