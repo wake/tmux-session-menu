@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -128,6 +130,55 @@ func (d *Daemon) Shutdown() {
 	if d.server != nil {
 		d.server.GracefulStop()
 	}
+}
+
+// Start 以 re-exec 模式在背景啟動 daemon。
+func Start(cfg config.Config) error {
+	pidPath := PidPath(cfg)
+	if isRunning(pidPath) {
+		return fmt.Errorf("daemon already running (pid file: %s)", pidPath)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve executable: %w", err)
+	}
+
+	cmd := exec.Command(exe, "daemon", "start", "--foreground")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start daemon process: %w", err)
+	}
+	go cmd.Wait()
+
+	// 輪詢等待 socket 就緒
+	sockPath := SocketPath(cfg)
+	ready := false
+	for i := 0; i < 30; i++ {
+		time.Sleep(100 * time.Millisecond)
+		if conn, err := net.Dial("unix", sockPath); err == nil {
+			conn.Close()
+			ready = true
+			break
+		}
+	}
+	if !ready {
+		return fmt.Errorf("daemon did not become ready within 3s (socket: %s)", sockPath)
+	}
+
+	// 讀取 PID 檔案
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		return fmt.Errorf("daemon started but cannot read pid file: %w", err)
+	}
+	pid := strings.TrimSpace(string(data))
+
+	fmt.Fprintf(os.Stderr, "tsm daemon started (pid=%s, socket=%s)\n", pid, sockPath)
+	return nil
 }
 
 // Stop 停止由 PID 檔案指定的 daemon。

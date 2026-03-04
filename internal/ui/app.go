@@ -312,9 +312,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		sessions := ConvertProtoSessions(msg.Snapshot.Sessions)
 		groups := ConvertProtoGroups(msg.Snapshot.Groups)
-		cursorName, cursorIsGroup := m.cursorItemKey()
 		m.items = FlattenItems(groups, sessions)
-		m.restoreCursor(cursorName, cursorIsGroup)
+		if m.cursor >= len(m.items) && len(m.items) > 0 {
+			m.cursor = len(m.items) - 1
+		}
 		// 繼續接收下一個快照
 		if m.deps.Client != nil {
 			return m, recvSnapshotCmd(m.deps.Client)
@@ -1133,4 +1134,9 @@ func (m Model) Cursor() int {
 // PickerCursor 回傳 picker 模式的游標位置（主要用於測試）。
 func (m Model) PickerCursor() int {
 	return m.pickerCursor
+}
+
+// SetCursor 設定游標位置（主要用於測試）。
+func (m *Model) SetCursor(pos int) {
+	m.cursor = pos
 }

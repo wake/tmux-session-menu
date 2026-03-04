@@ -337,7 +337,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  setup              互動式安裝所有元件")
 	fmt.Fprintln(os.Stderr, "  bind install       安裝 Ctrl+Q 快捷鍵到 ~/.tmux.conf")
 	fmt.Fprintln(os.Stderr, "  bind uninstall     移除 Ctrl+Q 快捷鍵")
-	fmt.Fprintln(os.Stderr, "  daemon start       前景啟動 daemon")
+	fmt.Fprintln(os.Stderr, "  daemon start       啟動 daemon（背景執行）")
 	fmt.Fprintln(os.Stderr, "  daemon stop        停止 daemon")
 	fmt.Fprintln(os.Stderr, "  daemon status      顯示 daemon 狀態")
 	fmt.Fprintln(os.Stderr, "  hooks install      安裝 tsm hooks 到 Claude Code settings")
@@ -366,10 +366,19 @@ func runDaemon(args []string) {
 
 	switch args[0] {
 	case "start":
-		d := daemon.NewDaemon(cfg)
-		if err := d.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+		if containsFlag(args[1:], "--foreground") {
+			// 前景執行（供 daemonize 的子程序使用）
+			d := daemon.NewDaemon(cfg)
+			if err := d.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			// 背景 daemonize
+			if err := daemon.Start(cfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
 		}
 	case "stop":
 		if err := daemon.Stop(cfg); err != nil {
@@ -393,7 +402,8 @@ func printDaemonUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: tsm daemon <command>")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  start      前景啟動 daemon")
+	fmt.Fprintln(os.Stderr, "  start                啟動 daemon（背景執行）")
+	fmt.Fprintln(os.Stderr, "  start --foreground   前景啟動 daemon")
 	fmt.Fprintln(os.Stderr, "  stop       停止 daemon（送 SIGTERM）")
 	fmt.Fprintln(os.Stderr, "  status     顯示 daemon 狀態")
 }

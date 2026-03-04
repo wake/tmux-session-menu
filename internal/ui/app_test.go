@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
@@ -1587,4 +1588,90 @@ func TestModel_Search_BackspaceWorks(t *testing.T) {
 	assert.Contains(t, view, "abc")
 	assert.Contains(t, view, "abd")
 	assert.NotContains(t, view, "xyz")
+}
+
+// --- SnapshotMsg / SessionsMsg cursor 行為測試 ---
+
+func TestSnapshotMsg_CursorStableAfterOptimisticSwap(t *testing.T) {
+	// 模擬 optimistic swap 後收到 stale SnapshotMsg，cursor 不應跳回
+
+	// 初始順序：alpha(0), beta(1), gamma(2)，cursor 在 beta（index 1）
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta", SortOrder: 1}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "gamma", SortOrder: 2}},
+	})
+	m.SetCursor(1)
+
+	// 模擬 optimistic swap：beta ↔ gamma，cursor 移到 2
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "gamma", SortOrder: 1}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta", SortOrder: 2}},
+	})
+	m.SetCursor(2)
+	assert.Equal(t, 2, m.Cursor(), "swap 後 cursor 應在 2")
+
+	// 收到 stale SnapshotMsg（舊順序：alpha, beta, gamma）
+	staleSnap := &tsmv1.StateSnapshot{
+		Sessions: []*tsmv1.Session{
+			{Name: "alpha", SortOrder: 0},
+			{Name: "beta", SortOrder: 1},
+			{Name: "gamma", SortOrder: 2},
+		},
+	}
+	updated, _ := m.Update(ui.SnapshotMsg{Snapshot: staleSnap})
+	m = updated.(ui.Model)
+
+	// cursor 應保持在 2，不被 stale snapshot 拉回到 beta 的舊位置 1
+	assert.Equal(t, 2, m.Cursor(), "stale SnapshotMsg 不應改變 cursor 位置")
+}
+
+func TestSnapshotMsg_CursorBoundsOnShrink(t *testing.T) {
+	// 當 SnapshotMsg 使 items 縮減時，cursor 不應超界
+
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "gamma"}},
+	})
+	m.SetCursor(2)
+
+	// 收到 SnapshotMsg，只剩 2 個 session
+	snap := &tsmv1.StateSnapshot{
+		Sessions: []*tsmv1.Session{
+			{Name: "alpha", SortOrder: 0},
+			{Name: "beta", SortOrder: 1},
+		},
+	}
+	updated, _ := m.Update(ui.SnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	assert.Equal(t, 1, m.Cursor(), "cursor 應被 bounds check 修正為 len-1")
+}
+
+func TestSessionsMsg_CursorFollowsItem(t *testing.T) {
+	// SessionsMsg（store 模式）的 restoreCursor 應正確追蹤 item
+
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "beta"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "gamma"}},
+	})
+	m.SetCursor(1) // cursor 在 beta
+
+	// 收到 SessionsMsg，順序改為 alpha, gamma, beta（beta 移到 index 2）
+	updated, _ := m.Update(ui.SessionsMsg{
+		Sessions: []tmux.Session{
+			{Name: "alpha", SortOrder: 0},
+			{Name: "gamma", SortOrder: 1},
+			{Name: "beta", SortOrder: 2},
+		},
+	})
+	m = updated.(ui.Model)
+
+	assert.Equal(t, 2, m.Cursor(), "cursor 應跟隨 beta 移到 index 2")
 }
