@@ -1311,14 +1311,20 @@ func (m Model) renderToolbar() string {
 	return result.String()
 }
 
-// cursorLine 將行內容加上背景色並用 \033[K (Erase in Line) 延伸到行尾。
-// 這是 vim/tmux 等終端程式的標準做法，無需計算寬度。
-// 注意：line 內含 lipgloss 渲染的子字串，其 reset 序列會清除背景色，
-// 因此必須在 \033[K 前重新設定背景色。
+// cursorLine 將行內容加上背景色，並用空格填充到終端寬度。
+// lipgloss Render 會插入 \033[49m（背景重置）和 \033[0m（全重置），
+// 必須將它們替換為 cursor 背景色，才能讓背景貫穿整行。
 func (m Model) cursorLine(line string) string {
-	// #373737 = RGB(55,55,55)
 	const bg = "\033[48;2;55;55;55m"
-	return bg + line + bg + "\033[K\033[0m"
+	// 攔截 lipgloss 的背景重置，改為重新設定 cursor 背景
+	line = strings.ReplaceAll(line, "\033[49m", bg)
+	line = strings.ReplaceAll(line, "\033[0m", "\033[0m"+bg)
+	visWidth := lipgloss.Width(line)
+	pad := ""
+	if m.width > visWidth {
+		pad = strings.Repeat(" ", m.width-visWidth)
+	}
+	return bg + line + pad + "\033[0m"
 }
 
 // animFrames 是呼吸動畫一個完整週期的 frame 數（30 frames × 100ms = 3 秒）。

@@ -156,8 +156,8 @@ func TestModel_View_CursorUsesBackground(t *testing.T) {
 	assert.NotContains(t, view, "►", "cursor 不應使用 ► 箭頭")
 	// session 名稱仍應存在
 	assert.Contains(t, view, "my-session")
-	// cursor 行應使用 \033[K (Erase in Line) 確保背景色延伸到行尾
-	assert.Contains(t, view, "\033[K", "cursor 行應包含 Erase in Line 序列")
+	// cursor 行應使用 ANSI RGB 背景色
+	assert.Contains(t, view, "\033[48;2;55;55;55m", "cursor 行應包含背景色序列")
 }
 
 func TestModel_View_UngroupedNoLineNumber(t *testing.T) {
@@ -273,8 +273,9 @@ func TestModel_View_CursorDoesNotTruncate(t *testing.T) {
 	view := m.View()
 	// cursor 行應包含完整的群組名稱，不應被截斷
 	assert.Contains(t, view, "體大 ISTDC", "cursor 行不應截斷群組名稱")
-	// 應使用 \033[K 而非手動 padding，避免 CJK 字元寬度計算問題
-	assert.Contains(t, view, "\033[K", "cursor 行應用 Erase in Line")
+	// cursor 行應用空格填充到終端寬度
+	assert.Contains(t, view, "\033[48;2;55;55;55m", "cursor 行應包含背景色序列")
+	assert.NotContains(t, view, "\033[K", "不應使用 Erase in Line（Bubble Tea 不支援）")
 }
 
 func TestModel_View_ToolbarFitsWidth(t *testing.T) {
