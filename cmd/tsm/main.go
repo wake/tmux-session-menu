@@ -2,14 +2,12 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wake/tmux-session-menu/internal/bind"
@@ -492,9 +490,10 @@ func runSetup(args []string) {
 
 	if containsFlag(args, "--uninstall") {
 		setup.RunUninstallAll(components)
-		restartDaemon()
 		return
 	}
+
+	daemonWasRunning := isDaemonRunning()
 
 	m := setup.NewModel(components)
 	p := tea.NewProgram(m)
@@ -502,68 +501,30 @@ func runSetup(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	restartDaemon()
+
+	if daemonWasRunning {
+		fmt.Fprintln(os.Stderr, "請手動重新啟動 daemon: tsm daemon restart")
+	} else {
+		fmt.Fprintln(os.Stderr, "請啟動 daemon: tsm daemon start")
+	}
 }
 
-// restartDaemon 嘗試重啟 daemon，確保使用最新 binary。
-func restartDaemon() {
+// isDaemonRunning 檢查 daemon 是否正在運行。
+func isDaemonRunning() bool {
 	cfg := loadConfig()
-
-	// 嘗試停止（忽略錯誤，daemon 可能未運行）
-	_ = daemon.Stop(cfg)
-
-	// 等待舊 daemon 完全退出（最多 5 秒）
-	waitDaemonExit(cfg, 5*time.Second)
-
-	// 用目前執行檔重新啟動 daemon（背景 fork）
-	exe, err := os.Executable()
+	data, err := os.ReadFile(daemon.PidPath(cfg))
 	if err != nil {
-		return
-	}
-	cmd := osexec.Command(exe, "daemon", "start")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	if err := cmd.Start(); err != nil {
-		return
-	}
-	go func() { _ = cmd.Wait() }()
-
-	// 等待新 daemon socket 就緒（最多 3 秒）
-	sockPath := daemon.SocketPath(cfg)
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("unix", sockPath, 200*time.Millisecond)
-		if err == nil {
-			conn.Close()
-			fmt.Fprintf(os.Stderr, "daemon restarted\n")
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-// waitDaemonExit 等待舊 daemon 程序完全退出。
-func waitDaemonExit(cfg config.Config, timeout time.Duration) {
-	pidPath := daemon.PidPath(cfg)
-	data, err := os.ReadFile(pidPath)
-	if err != nil {
-		return // PID 檔案不存在，daemon 未運行
+		return false
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
-		return
+		return false
 	}
 	proc, _ := os.FindProcess(pid)
 	if proc == nil {
-		return
+		return false
 	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if proc.Signal(syscall.Signal(0)) != nil {
-			return // 程序已退出
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	return proc.Signal(syscall.Signal(0)) == nil
 }
 
 func buildSetupComponents() []setup.Component {

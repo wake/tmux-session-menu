@@ -312,10 +312,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		sessions := ConvertProtoSessions(msg.Snapshot.Sessions)
 		groups := ConvertProtoGroups(msg.Snapshot.Groups)
+		cursorName, cursorIsGroup := m.cursorItemKey()
 		m.items = FlattenItems(groups, sessions)
-		if m.cursor >= len(m.items) && len(m.items) > 0 {
-			m.cursor = len(m.items) - 1
-		}
+		m.restoreCursor(cursorName, cursorIsGroup)
 		// 繼續接收下一個快照
 		if m.deps.Client != nil {
 			return m, recvSnapshotCmd(m.deps.Client)
@@ -326,10 +325,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 			return m, nil
 		}
+		cursorName, cursorIsGroup := m.cursorItemKey()
 		m.items = FlattenItems(msg.Groups, msg.Sessions)
-		if m.cursor >= len(m.items) && len(m.items) > 0 {
-			m.cursor = len(m.items) - 1
-		}
+		m.restoreCursor(cursorName, cursorIsGroup)
 		return m, nil
 	case reconnectMsg:
 		if m.deps.Client != nil {
@@ -903,7 +901,9 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 			m.err = err
 			return m, nil
 		}
-		m.cursor += direction
+		newCursor := m.cursor + direction
+		m.items[m.cursor], m.items[newCursor] = m.items[newCursor], m.items[m.cursor]
+		m.cursor = newCursor
 		return m, nil // 變更透過 Watch stream 自動推送
 	}
 
@@ -943,6 +943,39 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 	}
 	m.cursor += direction
 	return m, loadSessionsCmd(m.deps)
+}
+
+// cursorItemKey 回傳 cursor 目前指向的 item 識別資訊。
+func (m Model) cursorItemKey() (name string, isGroup bool) {
+	if m.cursor >= 0 && m.cursor < len(m.items) {
+		item := m.items[m.cursor]
+		if item.Type == ItemSession {
+			return item.Session.Name, false
+		}
+		if item.Type == ItemGroup {
+			return item.Group.Name, true
+		}
+	}
+	return "", false
+}
+
+// restoreCursor 嘗試將 cursor 還原到指定 item 位置。
+func (m *Model) restoreCursor(name string, isGroup bool) {
+	if name != "" {
+		for i, item := range m.items {
+			if !isGroup && item.Type == ItemSession && item.Session.Name == name {
+				m.cursor = i
+				return
+			}
+			if isGroup && item.Type == ItemGroup && item.Group.Name == name {
+				m.cursor = i
+				return
+			}
+		}
+	}
+	if m.cursor >= len(m.items) && len(m.items) > 0 {
+		m.cursor = len(m.items) - 1
+	}
 }
 
 // SetConfirm 設定確認模式（主要用於測試）。
