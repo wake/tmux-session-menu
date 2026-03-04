@@ -1313,9 +1313,12 @@ func (m Model) renderToolbar() string {
 
 // cursorLine 將行內容加上背景色並用 \033[K (Erase in Line) 延伸到行尾。
 // 這是 vim/tmux 等終端程式的標準做法，無需計算寬度。
+// 注意：line 內含 lipgloss 渲染的子字串，其 reset 序列會清除背景色，
+// 因此必須在 \033[K 前重新設定背景色。
 func (m Model) cursorLine(line string) string {
 	// #373737 = RGB(55,55,55)
-	return "\033[48;2;55;55;55m" + line + "\033[K\033[0m"
+	const bg = "\033[48;2;55;55;55m"
+	return bg + line + bg + "\033[K\033[0m"
 }
 
 // animFrames 是呼吸動畫一個完整週期的 frame 數（30 frames × 100ms = 3 秒）。
