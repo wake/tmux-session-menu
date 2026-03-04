@@ -397,22 +397,10 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.toggleCollapse(m.items[m.cursor])
 		}
 		return m, nil
-	case "left":
-		// 收合群組（僅對已展開的群組生效）
-		if m.cursor >= 0 && m.cursor < len(m.items) {
-			item := m.items[m.cursor]
-			if item.Type == ItemGroup && !item.Group.Collapsed {
-				return m.toggleCollapse(item)
-			}
-		}
-		return m, nil
-	case "right":
-		// 展開群組（僅對已收合的群組生效）
-		if m.cursor >= 0 && m.cursor < len(m.items) {
-			item := m.items[m.cursor]
-			if item.Type == ItemGroup && item.Group.Collapsed {
-				return m.toggleCollapse(item)
-			}
+	case "left", "right":
+		// 群組上切換展開/收合
+		if m.cursor >= 0 && m.cursor < len(m.items) && m.items[m.cursor].Type == ItemGroup {
+			return m.toggleCollapse(m.items[m.cursor])
 		}
 		return m, nil
 	case "n":

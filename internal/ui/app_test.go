@@ -1691,13 +1691,12 @@ func TestSessionsMsg_CursorFollowsItem(t *testing.T) {
 
 // --- 左/右箭頭群組展開/收合 相關測試 ---
 
-func TestModel_LeftArrow_CollapsesGroup(t *testing.T) {
+func TestModel_LeftArrow_TogglesGroup(t *testing.T) {
 	st := openUITestDB(t)
 	defer st.Close()
 
 	st.CreateGroup("dev", 0)
 	groups, _ := st.ListGroups()
-	// 群組預設是展開的（Collapsed=false）
 
 	m := ui.NewModel(ui.Deps{Store: st})
 	m.SetItems([]ui.ListItem{
@@ -1705,63 +1704,19 @@ func TestModel_LeftArrow_CollapsesGroup(t *testing.T) {
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", GroupName: "dev"}},
 	})
 
-	// cursor 在展開的群組上，按 left → 收合
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	_ = updated.(ui.Model)
-
+	// 按 left → toggle（展開→收合）
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	assert.NotNil(t, cmd, "應觸發 loadSessionsCmd")
 	groups, _ = st.ListGroups()
 	assert.True(t, groups[0].Collapsed, "群組應被收合")
 }
 
-func TestModel_RightArrow_ExpandsGroup(t *testing.T) {
-	st := openUITestDB(t)
-	defer st.Close()
-
-	st.CreateGroup("dev", 0)
-	st.ToggleGroupCollapsed(1) // 先收合
-	groups, _ := st.ListGroups()
-	assert.True(t, groups[0].Collapsed, "前提：群組應已收合")
-
-	m := ui.NewModel(ui.Deps{Store: st})
-	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemGroup, Group: groups[0]},
-	})
-
-	// cursor 在收合的群組上，按 right → 展開
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	_ = updated.(ui.Model)
-
-	assert.NotNil(t, cmd, "應觸發 loadSessionsCmd")
-	groups, _ = st.ListGroups()
-	assert.False(t, groups[0].Collapsed, "群組應被展開")
-}
-
-func TestModel_LeftArrow_AlreadyCollapsed_NoOp(t *testing.T) {
-	st := openUITestDB(t)
-	defer st.Close()
-
-	st.CreateGroup("dev", 0)
-	st.ToggleGroupCollapsed(1) // 先收合
-	groups, _ := st.ListGroups()
-
-	m := ui.NewModel(ui.Deps{Store: st})
-	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemGroup, Group: groups[0]},
-	})
-
-	// 已收合的群組按 left → 無動作
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	assert.Nil(t, cmd, "已收合的群組按 left 應無動作")
-}
-
-func TestModel_RightArrow_AlreadyExpanded_NoOp(t *testing.T) {
+func TestModel_RightArrow_TogglesGroup(t *testing.T) {
 	st := openUITestDB(t)
 	defer st.Close()
 
 	st.CreateGroup("dev", 0)
 	groups, _ := st.ListGroups()
-	// 群組預設展開
 
 	m := ui.NewModel(ui.Deps{Store: st})
 	m.SetItems([]ui.ListItem{
@@ -1769,9 +1724,11 @@ func TestModel_RightArrow_AlreadyExpanded_NoOp(t *testing.T) {
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", GroupName: "dev"}},
 	})
 
-	// 已展開的群組按 right → 無動作
+	// 按 right → toggle（展開→收合）
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	assert.Nil(t, cmd, "已展開的群組按 right 應無動作")
+	assert.NotNil(t, cmd, "應觸發 loadSessionsCmd")
+	groups, _ = st.ListGroups()
+	assert.True(t, groups[0].Collapsed, "群組應被收合")
 }
 
 func TestModel_LeftRight_OnSession_NoOp(t *testing.T) {
@@ -1780,11 +1737,9 @@ func TestModel_LeftRight_OnSession_NoOp(t *testing.T) {
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
 	})
 
-	// session 上按 left → 無動作
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	assert.Nil(t, cmd, "session 上按 left 應無動作")
 
-	// session 上按 right → 無動作
 	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	assert.Nil(t, cmd, "session 上按 right 應無動作")
 }

@@ -5,9 +5,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wake/tmux-session-menu/internal/bind"
@@ -339,6 +337,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  bind uninstall     移除 Ctrl+Q 快捷鍵")
 	fmt.Fprintln(os.Stderr, "  daemon start       啟動 daemon（背景執行）")
 	fmt.Fprintln(os.Stderr, "  daemon stop        停止 daemon")
+	fmt.Fprintln(os.Stderr, "  daemon restart     重新啟動 daemon")
 	fmt.Fprintln(os.Stderr, "  daemon status      顯示 daemon 狀態")
 	fmt.Fprintln(os.Stderr, "  hooks install      安裝 tsm hooks 到 Claude Code settings")
 	fmt.Fprintln(os.Stderr, "  hooks uninstall    移除 tsm hooks")
@@ -385,6 +384,18 @@ func runDaemon(args []string) {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "restart":
+		// 若有在跑就先停
+		if daemon.IsRunning(cfg) {
+			if err := daemon.Stop(cfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Error stopping daemon: %v\n", err)
+				os.Exit(1)
+			}
+		}
+		if err := daemon.Start(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "status":
 		status, err := daemon.Status(cfg)
 		if err != nil {
@@ -404,7 +415,8 @@ func printDaemonUsage() {
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  start                啟動 daemon（背景執行）")
 	fmt.Fprintln(os.Stderr, "  start --foreground   前景啟動 daemon")
-	fmt.Fprintln(os.Stderr, "  stop       停止 daemon（送 SIGTERM）")
+	fmt.Fprintln(os.Stderr, "  stop       停止 daemon")
+	fmt.Fprintln(os.Stderr, "  restart    重新啟動 daemon")
 	fmt.Fprintln(os.Stderr, "  status     顯示 daemon 狀態")
 }
 
@@ -518,20 +530,7 @@ func runSetup(args []string) {
 
 // isDaemonRunning 檢查 daemon 是否正在運行。
 func isDaemonRunning() bool {
-	cfg := loadConfig()
-	data, err := os.ReadFile(daemon.PidPath(cfg))
-	if err != nil {
-		return false
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil {
-		return false
-	}
-	proc, _ := os.FindProcess(pid)
-	if proc == nil {
-		return false
-	}
-	return proc.Signal(syscall.Signal(0)) == nil
+	return daemon.IsRunning(loadConfig())
 }
 
 func buildSetupComponents() []setup.Component {

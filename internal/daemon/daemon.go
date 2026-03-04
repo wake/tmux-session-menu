@@ -214,19 +214,27 @@ func Stop(cfg config.Config) error {
 		return fmt.Errorf("send SIGTERM to pid %d: %w", pid, err)
 	}
 
-	// 等待程序退出（最多 5 秒）
-	for i := 0; i < 50; i++ {
-		time.Sleep(100 * time.Millisecond)
-		if !processExists(pid) {
-			os.Remove(pidPath)
-			fmt.Fprintf(os.Stderr, "daemon stopped (pid=%d)\n", pid)
-			return nil
+	// 等待程序退出（最多 5 秒），每秒顯示倒數
+	const totalSec = 5
+	for sec := totalSec; sec > 0; sec-- {
+		fmt.Fprintf(os.Stderr, "\r服務關閉中...%d ", sec)
+		for i := 0; i < 10; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if !processExists(pid) {
+				os.Remove(pidPath)
+				fmt.Fprintf(os.Stderr, "\rdaemon stopped (pid=%d)   \n", pid)
+				return nil
+			}
 		}
 	}
 
-	// 超時：強制清理 PID 檔案
+	// 超時後再確認一次
 	os.Remove(pidPath)
-	return fmt.Errorf("daemon (pid=%d) did not exit within 5s after SIGTERM", pid)
+	if !processExists(pid) {
+		fmt.Fprintf(os.Stderr, "\rdaemon stopped (pid=%d)   \n", pid)
+		return nil
+	}
+	return fmt.Errorf("daemon (pid=%d) did not exit within %ds after SIGTERM", pid, totalSec)
 }
 
 // Status 回傳 daemon 的狀態資訊字串。
@@ -249,6 +257,11 @@ func Status(cfg config.Config) (string, error) {
 
 	sockPath := SocketPath(cfg)
 	return fmt.Sprintf("daemon running (pid=%d, socket=%s)", pid, sockPath), nil
+}
+
+// IsRunning 檢查 daemon 是否正在執行。
+func IsRunning(cfg config.Config) bool {
+	return isRunning(PidPath(cfg))
 }
 
 // isRunning 檢查 PID 檔案中的程序是否仍在執行。
