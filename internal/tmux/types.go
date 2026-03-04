@@ -59,7 +59,7 @@ func (s Session) StatusIcon() string {
 	case StatusRunning:
 		return "●"
 	case StatusWaiting:
-		return "◐"
+		return "●"
 	case StatusIdle:
 		return "○"
 	case StatusError:

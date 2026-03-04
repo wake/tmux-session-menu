@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>tsm TUI Preview</title>
+<style>
+  body {
+    background: #1a1b26;
+    padding: 32px;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .term {
+    background: #1a1b26;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 20px 24px;
+    max-width: 780px;
+    color: #888;
+  }
+  .header    { color: #D77757; font-weight: bold; }
+  .version   { color: #C1C1C1; }
+  .dim       { color: #888888; }
+  .white     { color: #FFFFFF; }
+  .white-b   { color: #FFFFFF; font-weight: bold; }
+  .group     { color: #F1E174; }
+  .green     { color: #91E200; }
+  .yellow    { color: #E8D969; }
+  .red       { color: #FF6B80; }
+  .summary   { color: #ABB5F7; }
+  .terra     { color: #D77757; font-weight: bold; }
+  .cursor    { background: #373737; }
+  .row { white-space: pre; }
+  hr { border: none; border-top: 1px solid #333; margin: 12px 0; }
+  h3 { color: #888; font-size: 13px; font-weight: normal; margin: 24px 0 8px; }
+</style>
+</head>
+<body>
+
+<div class="term">
+<div class="row"><span class="header">tmux session menu</span>  <span class="version">0.9.0(abc1234)</span>  <span class="version">(↑↓/jk 選擇, Enter 確認, q 離開)</span></div>
+<div class="row">&nbsp;</div>
+<div class="row cursor"><span class="white-b">1·</span><span class="group">▸ development</span></div>
+<div class="row"><span class="dim">2·</span><span class="group">▾ 體大 ISTDC</span></div>
+<div class="row">  <span class="dim">├─</span> <span class="green">●</span> <span class="white">backend-api</span>  <span class="summary">Implementing REST API</span>  <span class="dim">3m</span></div>
+<div class="row">  <span class="dim">├─</span> <span class="yellow">●</span> <span class="white">testing</span>  <span class="summary">Running unit tests</span>  <span class="dim">12m</span></div>
+<div class="row">  <span class="dim">└─</span> <span class="dim">○</span> <span class="white">docs</span>  <span class="dim">45m</span></div>
+<div class="row"><span class="dim">3·</span><span class="group">▾ 測試</span></div>
+<div class="row">  <span class="dim">└─</span> <span class="yellow">●</span> <span class="white">tmux-session-menu</span>  <span class="summary">Refactoring styles</span>  <span class="dim">2m</span></div>
+<div class="row">  <span class="dim">○</span> <span class="white">misc-session</span>  <span class="dim">1h</span></div>
+<div class="row">&nbsp;</div>
+<div class="row">  <span class="terra">[n]</span> <span class="version">新建</span>  <span class="terra">[d]</span> <span class="version">刪除</span>  <span class="terra">[r]</span> <span class="version">更名</span>  <span class="terra">[c]</span> <span class="version">清除名稱</span>  <span class="terra">[g]</span> <span class="version">群組</span>  <span class="terra">[m]</span> <span class="version">移動</span>  <span class="terra">[/]</span> <span class="version">搜尋</span>  <span class="terra">[e]</span> <span class="version">退出 tmux</span>  <span class="terra">[q]</span> <span class="version">離開</span></div>
+</div>
+
+<h3>▼ 配色對照</h3>
+<div class="term" style="font-size:13px; line-height:2">
+<div class="row"><span class="header">██</span> #D77757  header / 快捷鍵 (Claude terracotta, bold)</div>
+<div class="row"><span class="version">██</span> #C1C1C1  版號·提示·快捷鍵說明</div>
+<div class="row"><span class="white-b">██</span> #FFFFFF  session 名稱</div>
+<div class="row"><span class="group">██</span> #F1E174  群組名稱·群組箭頭</div>
+<div class="row"><span class="dim">██</span> #888888  行號·樹狀·時間·idle ○</div>
+<div class="row"><span class="green">██</span> #91E200  running ● (慢速閃動)</div>
+<div class="row"><span class="yellow">██</span> #E8D969  waiting ●</div>
+<div class="row"><span class="summary">██</span> #ABB5F7  AI summary</div>
+<div class="row"><span class="red">██</span> #FF6B80  error ✗</div>
+<div class="row"><span style="background:#373737;color:#fff">██</span> #373737  cursor 背景色</div>
+</div>
+
+</body>
+</html>

@@ -35,7 +35,7 @@ func TestSession_StatusIcon(t *testing.T) {
 		expected string
 	}{
 		{tmux.StatusRunning, "●"},
-		{tmux.StatusWaiting, "◐"},
+		{tmux.StatusWaiting, "●"},
 		{tmux.StatusIdle, "○"},
 		{tmux.StatusError, "✗"},
 	}

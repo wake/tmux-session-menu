@@ -5,16 +5,19 @@ import "github.com/charmbracelet/lipgloss"
 // Claude Code dark mode 配色
 var (
 	headerStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#D77757"))  // claude terracotta
-	selectedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#B1B9F9")).Bold(true)   // periwinkle
-	dimStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))              // inactive
-	subtleStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#505050"))              // subtle
-	statusRunningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4EBA65"))              // success green
-	statusWaitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFC107"))              // warning yellow
-	statusIdleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))              // inactive（可見）
+	selectedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#B1B9F9")).Bold(true)   // periwinkle（用於 input prompt）
+	dimStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))              // dim text
+	statusRunningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#91E200"))              // running green
+	statusRunningDimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#325000"))           // running green (dim phase)
+	statusWaitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E8D969"))              // waiting yellow
+	statusIdleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))              // idle gray
 	statusErrorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B80"))              // error red
 	sessionNameStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))              // bright white
-	groupNameStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)    // group header: white bold
-	keyStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#D77757"))              // shortcut key: terracotta
+	groupNameStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1E174"))              // group name: warm yellow
+	keyStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#D77757")).Bold(true)    // shortcut key: terracotta bold
+	versionStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#C1C1C1"))              // version/hints
+	summaryStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#ABB5F7"))              // AI summary
+	cursorBgStyle      = lipgloss.NewStyle().Background(lipgloss.Color("#373737"))              // cursor row background
 	previewBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), true, false, false, false).
 				BorderForeground(lipgloss.Color("#505050")) // subtle

@@ -113,17 +113,20 @@ func TestModel_View_TreeAndLineNumbers(t *testing.T) {
 
 	view := m.View()
 
-	// cursor 在 index 0（group），應顯示 ►
-	assert.Contains(t, view, "►")
+	// cursor 在 index 0（group），不應有 ► 箭頭（改用背景色）
+	assert.NotContains(t, view, "►", "cursor 不應使用 ► 箭頭")
 	assert.Contains(t, view, "▾")
 	assert.Contains(t, view, "development")
+
+	// 群組應有行號（1·）
+	assert.Contains(t, view, "1·", "群組應有行號 1·")
 
 	// 群組子項目應有樹狀符號
 	assert.Contains(t, view, "├─", "非最後子項目應用 ├─")
 	assert.Contains(t, view, "└─", "最後子項目應用 └─")
 
-	// 未分組 session 應有行號
-	assert.Contains(t, view, "2·", "未分組 session 應有行號")
+	// 未分組 session 不應有行號（只有群組有行號）
+	assert.NotContains(t, view, "2·", "未分組 session 不應有行號")
 
 	// 圖示應在名稱前面
 	lines := strings.Split(view, "\n")
@@ -138,7 +141,125 @@ func TestModel_View_TreeAndLineNumbers(t *testing.T) {
 	}
 }
 
-func TestModel_View_Preview(t *testing.T) {
+func TestModel_View_CursorUsesBackground(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:   "my-session",
+			Status: tmux.StatusIdle,
+		}},
+	})
+
+	view := m.View()
+
+	// cursor 不應使用 ► 箭頭
+	assert.NotContains(t, view, "►", "cursor 不應使用 ► 箭頭")
+	// session 名稱仍應存在
+	assert.Contains(t, view, "my-session")
+}
+
+func TestModel_View_UngroupedNoLineNumber(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "grp"}},
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:      "child",
+			GroupName: "grp",
+			Status:    tmux.StatusIdle,
+		}},
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:   "standalone",
+			Status: tmux.StatusIdle,
+		}},
+	})
+	m.SetCursor(2) // cursor 在 standalone
+
+	view := m.View()
+
+	// 群組有行號
+	assert.Contains(t, view, "1·", "群組應有行號 1·")
+	// standalone 不應有行號
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "standalone") {
+			assert.NotContains(t, line, "2·", "未分組 session 不應有行號")
+		}
+	}
+}
+
+func TestModel_View_AISummaryInline(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:      "dev",
+			Status:    tmux.StatusRunning,
+			AISummary: "Refactoring auth",
+			Activity:  time.Now().Add(-3 * time.Minute),
+		}},
+	})
+
+	view := m.View()
+
+	// AISummary 應在同一行內聯顯示
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "dev") && strings.Contains(line, "Refactoring auth") {
+			nameIdx := strings.Index(line, "dev")
+			summaryIdx := strings.Index(line, "Refactoring auth")
+			timeIdx := strings.Index(line, "3m")
+			// 順序：name → summary → time
+			assert.Less(t, nameIdx, summaryIdx, "名稱應在 summary 前面")
+			if timeIdx >= 0 {
+				assert.Less(t, summaryIdx, timeIdx, "summary 應在時間前面")
+			}
+			return
+		}
+	}
+	t.Fatal("AISummary 應在 session 名稱同一行內聯顯示")
+}
+
+func TestModel_View_UnifiedStatusIcons(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:   "running-session",
+			Status: tmux.StatusRunning,
+		}},
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:   "waiting-session",
+			Status: tmux.StatusWaiting,
+		}},
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:   "idle-session",
+			Status: tmux.StatusIdle,
+		}},
+	})
+
+	view := m.View()
+
+	// running 和 waiting 都用 ●
+	assert.Contains(t, view, "●")
+	// idle 用 ○
+	assert.Contains(t, view, "○")
+	// 不應出現 ◐（舊的 waiting 圖示）
+	assert.NotContains(t, view, "◐", "不應使用舊的 ◐ 圖示")
+}
+
+func TestModel_AnimTick(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:   "dev",
+			Status: tmux.StatusRunning,
+		}},
+	})
+
+	// 送入 AnimTickMsg 應更新 animFrame
+	updated, cmd := m.Update(ui.AnimTickMsg{})
+	model := updated.(ui.Model)
+	assert.Equal(t, 1, model.AnimFrame(), "AnimTickMsg 應遞增 animFrame")
+	assert.NotNil(t, cmd, "AnimTickMsg 應回傳下一個 tick cmd")
+}
+
+func TestModel_View_AISummaryShown(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{
 		{Type: ui.ItemSession, Session: tmux.Session{
@@ -149,6 +270,8 @@ func TestModel_View_Preview(t *testing.T) {
 
 	view := m.View()
 	assert.Contains(t, view, "正在重構 auth 模組")
+	// 不應在 Preview 區塊顯示（移至內聯）
+	assert.NotContains(t, view, "Preview:", "AISummary 應內聯而非 Preview 區塊")
 }
 
 func TestModel_SessionsMsg_PopulatesItems(t *testing.T) {

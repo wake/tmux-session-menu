@@ -29,6 +29,9 @@ type Deps struct {
 	StatusDir string
 }
 
+// AnimTickMsg 表示動畫定時更新觸發。
+type AnimTickMsg struct{}
+
 // Model 是 Bubble Tea 的主要模型。
 type Model struct {
 	width    int
@@ -41,6 +44,9 @@ type Model struct {
 	selected  string // Enter 選取的 session name
 	exitTmux_ bool   // e 鍵：退出 tmux
 	err       error
+
+	// 動畫
+	animFrame int // running 狀態閃動用的 frame 計數器
 
 	// Mode 相關
 	mode        Mode
@@ -89,6 +95,11 @@ func (m Model) Selected() string {
 // ExitTmux 回傳使用者是否按了 e 要求退出 tmux。
 func (m Model) ExitTmux() bool {
 	return m.exitTmux_
+}
+
+// AnimFrame 回傳目前的動畫 frame（主要用於測試）。
+func (m Model) AnimFrame() int {
+	return m.animFrame
 }
 
 // Mode 回傳目前的互動模式。
@@ -236,6 +247,13 @@ func tickCmd(interval time.Duration) tea.Cmd {
 	})
 }
 
+// animTickCmd 排程下一次動畫 tick（750ms 週期用於慢速閃動）。
+func animTickCmd() tea.Cmd {
+	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
+		return AnimTickMsg{}
+	})
+}
+
 // watchCmd 啟動 Watch stream 並持續接收快照。
 func watchCmd(c *client.Client) tea.Cmd {
 	return func() tea.Msg {
@@ -293,6 +311,7 @@ func (m Model) Init() tea.Cmd {
 		return tea.Batch(
 			tea.SetWindowTitle("tmux session menu"),
 			watchCmd(m.deps.Client),
+			animTickCmd(),
 		)
 	}
 	// 舊模式：直接輪詢
@@ -300,6 +319,7 @@ func (m Model) Init() tea.Cmd {
 		tea.SetWindowTitle("tmux session menu"),
 		loadSessionsCmd(m.deps),
 		tickCmd(m.pollInterval()),
+		animTickCmd(),
 	)
 }
 
@@ -350,6 +370,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		return m, nil
+	case AnimTickMsg:
+		m.animFrame++
+		return m, animTickCmd()
 	case TickMsg:
 		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
 	case tea.KeyMsg:
@@ -1071,8 +1094,8 @@ func (m Model) View() string {
 
 	// Header
 	b.WriteString(headerStyle.Render("tmux session menu"))
-	b.WriteString(dimStyle.Render("  " + version.String()))
-	b.WriteString(dimStyle.Render("  (↑↓/jk 選擇, Enter 確認, q 離開)"))
+	b.WriteString(versionStyle.Render("  " + version.String()))
+	b.WriteString(versionStyle.Render("  (↑↓/jk 選擇, Enter 確認, q 離開)"))
 	b.WriteString("\n")
 
 	// Items list
@@ -1080,33 +1103,27 @@ func (m Model) View() string {
 	if len(displayItems) > 0 {
 		b.WriteString("\n")
 
-		// 計算主行號總數（群組 + 未分組 session）以決定對齊位數
-		mainLineCount := 0
+		// 計算群組行號總數（只有群組佔行號）以決定對齊位數
+		groupCount := 0
 		for _, item := range displayItems {
-			isChild := item.Type == ItemSession && item.Session.GroupName != ""
-			if !isChild {
-				mainLineCount++
+			if item.Type == ItemGroup {
+				groupCount++
 			}
 		}
-		maxDigits := len(fmt.Sprintf("%d", mainLineCount))
+		maxDigits := 1
+		if groupCount > 0 {
+			maxDigits = len(fmt.Sprintf("%d", groupCount))
+		}
+		// 前綴寬度：數字位數 + 1（中點）
+		prefixWidth := maxDigits + 1
 
 		lineNum := 0
 		for i, item := range displayItems {
 			isGroupChild := item.Type == ItemSession && item.Session.GroupName != ""
+			isCursor := i == m.cursor
 
-			if !isGroupChild {
+			if item.Type == ItemGroup {
 				lineNum++
-			}
-
-			// 前綴：cursor 箭頭 / 行號+中點 / 子項目空格對齊
-			var prefix string
-			if i == m.cursor {
-				prefix = selectedStyle.Render("►") + " "
-			} else if isGroupChild {
-				prefix = strings.Repeat(" ", maxDigits+1) // 對齊行號+中點寬度
-			} else {
-				numStr := fmt.Sprintf("%d", lineNum)
-				prefix = dimStyle.Render(numStr+"·") + strings.Repeat(" ", maxDigits-len(numStr))
 			}
 
 			switch item.Type {
@@ -1115,21 +1132,36 @@ func (m Model) View() string {
 				if item.Group.Collapsed {
 					collapse = "▸"
 				}
-				if i == m.cursor {
-					b.WriteString(fmt.Sprintf("%s%s %s\n",
-						prefix,
-						selectedStyle.Render(collapse),
-						selectedStyle.Render(item.Group.Name)))
+
+				numStr := fmt.Sprintf("%d", lineNum)
+				padding := strings.Repeat(" ", maxDigits-len(numStr))
+
+				var line string
+				if isCursor {
+					// cursor 行：數字+中點亮白，箭頭+名稱群組色，背景色
+					line = fmt.Sprintf("%s%s%s %s",
+						padding,
+						sessionNameStyle.Render(numStr+"·"),
+						groupNameStyle.Render(collapse),
+						groupNameStyle.Render(item.Group.Name))
+					line = cursorBgStyle.Render(line)
 				} else {
-					b.WriteString(fmt.Sprintf("%s%s %s\n",
-						prefix,
-						dimStyle.Render(collapse),
-						groupNameStyle.Render(item.Group.Name)))
+					line = fmt.Sprintf("%s%s%s %s",
+						padding,
+						dimStyle.Render(numStr+"·"),
+						groupNameStyle.Render(collapse),
+						groupNameStyle.Render(item.Group.Name))
 				}
+				b.WriteString(line + "\n")
 
 			case ItemSession:
 				icon := item.Session.StatusIcon()
-				styledIcon := statusStyleFor(item.Session.Status).Render(icon)
+				styledIcon := m.styledStatusIcon(item.Session.Status, icon)
+
+				summary := ""
+				if item.Session.AISummary != "" {
+					summary = "  " + summaryStyle.Render(item.Session.AISummary)
+				}
 
 				relTime := ""
 				if !item.Session.Activity.IsZero() {
@@ -1142,8 +1174,8 @@ func (m Model) View() string {
 				}
 
 				name := item.Session.DisplayName()
-				if i == m.cursor {
-					name = selectedStyle.Render(name)
+				if isCursor {
+					name = sessionNameStyle.Render(name)
 				} else {
 					name = sessionNameStyle.Render(name)
 				}
@@ -1161,11 +1193,22 @@ func (m Model) View() string {
 					if isLast {
 						tree = dimStyle.Render("└─")
 					}
-					b.WriteString(fmt.Sprintf("%s%s %s %s%s%s\n",
-						prefix, tree, styledIcon, name, relTime, aiModel))
+					prefix := strings.Repeat(" ", prefixWidth)
+					line := fmt.Sprintf("%s%s %s %s%s%s%s",
+						prefix, tree, styledIcon, name, summary, relTime, aiModel)
+					if isCursor {
+						line = cursorBgStyle.Render(line)
+					}
+					b.WriteString(line + "\n")
 				} else {
-					b.WriteString(fmt.Sprintf("%s%s %s%s%s\n",
-						prefix, styledIcon, name, relTime, aiModel))
+					// 未分組 session：不顯示行號，但留白對齊
+					prefix := strings.Repeat(" ", prefixWidth)
+					line := fmt.Sprintf("%s%s %s%s%s%s",
+						prefix, styledIcon, name, summary, relTime, aiModel)
+					if isCursor {
+						line = cursorBgStyle.Render(line)
+					}
+					b.WriteString(line + "\n")
 				}
 			}
 		}
@@ -1205,43 +1248,36 @@ func (m Model) View() string {
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	default:
 		b.WriteString(fmt.Sprintf("\n  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s\n",
-			keyStyle.Render("[n]"), dimStyle.Render(" 新建"),
-			keyStyle.Render("[d]"), dimStyle.Render(" 刪除"),
-			keyStyle.Render("[r]"), dimStyle.Render(" 更名"),
-			keyStyle.Render("[c]"), dimStyle.Render(" 清除名稱"),
-			keyStyle.Render("[g]"), dimStyle.Render(" 群組"),
-			keyStyle.Render("[m]"), dimStyle.Render(" 移動"),
-			keyStyle.Render("[/]"), dimStyle.Render(" 搜尋"),
-			keyStyle.Render("[e]"), dimStyle.Render(" 退出 tmux"),
-			keyStyle.Render("[q]"), dimStyle.Render(" 離開")))
-	}
-
-	// Preview section
-	visible := m.visibleItems()
-	if len(visible) > 0 && m.cursor >= 0 && m.cursor < len(visible) {
-		selected := visible[m.cursor]
-		if selected.Type == ItemSession && selected.Session.AISummary != "" {
-			b.WriteString("\n")
-			b.WriteString(previewBorderStyle.Render(
-				fmt.Sprintf("Preview: %s", selected.Session.AISummary)))
-			b.WriteString("\n")
-		}
+			keyStyle.Render("[n]"), versionStyle.Render(" 新建"),
+			keyStyle.Render("[d]"), versionStyle.Render(" 刪除"),
+			keyStyle.Render("[r]"), versionStyle.Render(" 更名"),
+			keyStyle.Render("[c]"), versionStyle.Render(" 清除名稱"),
+			keyStyle.Render("[g]"), versionStyle.Render(" 群組"),
+			keyStyle.Render("[m]"), versionStyle.Render(" 移動"),
+			keyStyle.Render("[/]"), versionStyle.Render(" 搜尋"),
+			keyStyle.Render("[e]"), versionStyle.Render(" 退出 tmux"),
+			keyStyle.Render("[q]"), versionStyle.Render(" 離開")))
 	}
 
 	return b.String()
 }
 
-// statusStyleFor 回傳對應狀態的 lipgloss 樣式。
-func statusStyleFor(status tmux.SessionStatus) lipgloss.Style {
+// styledStatusIcon 回傳帶動畫效果的狀態圖示。
+// running 狀態的 ● 會慢速閃動（交替亮/暗綠色）。
+func (m Model) styledStatusIcon(status tmux.SessionStatus, icon string) string {
 	switch status {
 	case tmux.StatusRunning:
-		return statusRunningStyle
+		// 慢速閃動：animFrame 偶數亮，奇數暗
+		if m.animFrame%2 == 0 {
+			return statusRunningStyle.Render(icon)
+		}
+		return statusRunningDimStyle.Render(icon)
 	case tmux.StatusWaiting:
-		return statusWaitingStyle
+		return statusWaitingStyle.Render(icon)
 	case tmux.StatusError:
-		return statusErrorStyle
+		return statusErrorStyle.Render(icon)
 	default:
-		return statusIdleStyle
+		return statusIdleStyle.Render(icon)
 	}
 }
 
