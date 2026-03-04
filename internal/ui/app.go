@@ -1144,7 +1144,7 @@ func (m Model) View() string {
 						sessionNameStyle.Render(numStr+"·"),
 						groupNameStyle.Render(collapse),
 						groupNameStyle.Render(item.Group.Name))
-					line = cursorBgStyle.Render(line)
+					line = m.cursorLine(line)
 				} else {
 					line = fmt.Sprintf("%s%s%s %s",
 						padding,
@@ -1197,7 +1197,7 @@ func (m Model) View() string {
 					line := fmt.Sprintf("%s%s %s %s%s%s%s",
 						prefix, tree, styledIcon, name, summary, relTime, aiModel)
 					if isCursor {
-						line = cursorBgStyle.Render(line)
+						line = m.cursorLine(line)
 					}
 					b.WriteString(line + "\n")
 				} else {
@@ -1206,7 +1206,7 @@ func (m Model) View() string {
 					line := fmt.Sprintf("%s%s %s%s%s%s",
 						prefix, styledIcon, name, summary, relTime, aiModel)
 					if isCursor {
-						line = cursorBgStyle.Render(line)
+						line = m.cursorLine(line)
 					}
 					b.WriteString(line + "\n")
 				}
@@ -1260,6 +1260,15 @@ func (m Model) View() string {
 	}
 
 	return b.String()
+}
+
+// cursorLine 將行內容加上背景色並補滿到終端寬度。
+func (m Model) cursorLine(line string) string {
+	w := lipgloss.Width(line)
+	if m.width > w {
+		line += strings.Repeat(" ", m.width-w)
+	}
+	return cursorBgStyle.Render(line)
 }
 
 // styledStatusIcon 回傳帶動畫效果的狀態圖示。
