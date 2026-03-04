@@ -90,6 +90,54 @@ func TestModel_View_RendersSessions(t *testing.T) {
 	assert.Contains(t, view, "claude-sonnet-4-6")
 }
 
+func TestModel_View_TreeAndLineNumbers(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "development"}},
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:      "backend-api",
+			GroupName: "development",
+			Status:    tmux.StatusRunning,
+			AIModel:   "claude",
+		}},
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:      "docs",
+			GroupName: "development",
+			Status:    tmux.StatusIdle,
+		}},
+		{Type: ui.ItemSession, Session: tmux.Session{
+			Name:   "ungrouped",
+			Status: tmux.StatusIdle,
+		}},
+	})
+
+	view := m.View()
+
+	// cursor 在 index 0（group），應顯示 ►
+	assert.Contains(t, view, "►")
+	assert.Contains(t, view, "▼")
+	assert.Contains(t, view, "development")
+
+	// 群組子項目應有樹狀符號
+	assert.Contains(t, view, "├─", "非最後子項目應用 ├─")
+	assert.Contains(t, view, "└─", "最後子項目應用 └─")
+
+	// 未分組 session 應有行號
+	assert.Contains(t, view, "2·", "未分組 session 應有行號")
+
+	// 圖示應在名稱前面
+	lines := strings.Split(view, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "backend-api") {
+			iconIdx := strings.Index(line, "●")
+			nameIdx := strings.Index(line, "backend-api")
+			if iconIdx >= 0 && nameIdx >= 0 {
+				assert.Less(t, iconIdx, nameIdx, "圖示應在名稱前面")
+			}
+		}
+	}
+}
+
 func TestModel_View_Preview(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{

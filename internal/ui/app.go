@@ -1069,10 +1069,34 @@ func (m Model) View() string {
 	displayItems := m.visibleItems()
 	if len(displayItems) > 0 {
 		b.WriteString("\n")
+
+		// 計算主行號總數（群組 + 未分組 session）以決定對齊位數
+		mainLineCount := 0
+		for _, item := range displayItems {
+			isChild := item.Type == ItemSession && item.Session.GroupName != ""
+			if !isChild {
+				mainLineCount++
+			}
+		}
+		maxDigits := len(fmt.Sprintf("%d", mainLineCount))
+
+		lineNum := 0
 		for i, item := range displayItems {
-			cursor := "  "
+			isGroupChild := item.Type == ItemSession && item.Session.GroupName != ""
+
+			if !isGroupChild {
+				lineNum++
+			}
+
+			// 前綴：cursor 箭頭 / 行號+中點 / 子項目空格對齊
+			var prefix string
 			if i == m.cursor {
-				cursor = selectedStyle.Render("► ")
+				prefix = selectedStyle.Render("►") + " "
+			} else if isGroupChild {
+				prefix = strings.Repeat(" ", maxDigits+1) // 對齊行號+中點寬度
+			} else {
+				numStr := fmt.Sprintf("%d", lineNum)
+				prefix = dimStyle.Render(numStr+"·") + strings.Repeat(" ", maxDigits-len(numStr))
 			}
 
 			switch item.Type {
@@ -1082,7 +1106,7 @@ func (m Model) View() string {
 					collapse = "▶"
 				}
 				b.WriteString(fmt.Sprintf("%s%s %s\n",
-					cursor,
+					prefix,
 					selectedStyle.Render(collapse),
 					selectedStyle.Render(item.Group.Name)))
 
@@ -1105,8 +1129,25 @@ func (m Model) View() string {
 					name = selectedStyle.Render(name)
 				}
 
-				b.WriteString(fmt.Sprintf("%s   %s  %s%s%s\n",
-					cursor, name, styledIcon, relTime, aiModel))
+				if isGroupChild {
+					// 樹狀符號：判斷是否為群組最後一個子項目
+					isLast := true
+					if i+1 < len(displayItems) {
+						next := displayItems[i+1]
+						if next.Type == ItemSession && next.Session.GroupName == item.Session.GroupName {
+							isLast = false
+						}
+					}
+					tree := "├─"
+					if isLast {
+						tree = "└─"
+					}
+					b.WriteString(fmt.Sprintf("%s%s %s %s%s%s\n",
+						prefix, tree, styledIcon, name, relTime, aiModel))
+				} else {
+					b.WriteString(fmt.Sprintf("%s%s %s%s%s\n",
+						prefix, styledIcon, name, relTime, aiModel))
+				}
 			}
 		}
 	}
