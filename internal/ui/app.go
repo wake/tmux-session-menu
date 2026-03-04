@@ -1115,10 +1115,17 @@ func (m Model) View() string {
 				if item.Group.Collapsed {
 					collapse = "▸"
 				}
-				b.WriteString(fmt.Sprintf("%s%s %s\n",
-					prefix,
-					selectedStyle.Render(collapse),
-					selectedStyle.Render(item.Group.Name)))
+				if i == m.cursor {
+					b.WriteString(fmt.Sprintf("%s%s %s\n",
+						prefix,
+						selectedStyle.Render(collapse),
+						selectedStyle.Render(item.Group.Name)))
+				} else {
+					b.WriteString(fmt.Sprintf("%s%s %s\n",
+						prefix,
+						dimStyle.Render(collapse),
+						groupNameStyle.Render(item.Group.Name)))
+				}
 
 			case ItemSession:
 				icon := item.Session.StatusIcon()
@@ -1150,9 +1157,9 @@ func (m Model) View() string {
 							isLast = false
 						}
 					}
-					tree := "├─"
+					tree := dimStyle.Render("├─")
 					if isLast {
-						tree = "└─"
+						tree = dimStyle.Render("└─")
 					}
 					b.WriteString(fmt.Sprintf("%s%s %s %s%s%s\n",
 						prefix, tree, styledIcon, name, relTime, aiModel))
@@ -1197,16 +1204,16 @@ func (m Model) View() string {
 			m.searchQuery))
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	default:
-		b.WriteString(fmt.Sprintf("\n  %s  %s  %s  %s  %s  %s  %s  %s  %s\n",
-			dimStyle.Render("[n] 新建"),
-			dimStyle.Render("[d] 刪除"),
-			dimStyle.Render("[r] 更名"),
-			dimStyle.Render("[c] 清除名稱"),
-			dimStyle.Render("[g] 群組"),
-			dimStyle.Render("[m] 移動"),
-			dimStyle.Render("[/] 搜尋"),
-			dimStyle.Render("[e] 退出 tmux"),
-			dimStyle.Render("[q] 離開")))
+		b.WriteString(fmt.Sprintf("\n  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s\n",
+			keyStyle.Render("[n]"), dimStyle.Render(" 新建"),
+			keyStyle.Render("[d]"), dimStyle.Render(" 刪除"),
+			keyStyle.Render("[r]"), dimStyle.Render(" 更名"),
+			keyStyle.Render("[c]"), dimStyle.Render(" 清除名稱"),
+			keyStyle.Render("[g]"), dimStyle.Render(" 群組"),
+			keyStyle.Render("[m]"), dimStyle.Render(" 移動"),
+			keyStyle.Render("[/]"), dimStyle.Render(" 搜尋"),
+			keyStyle.Render("[e]"), dimStyle.Render(" 退出 tmux"),
+			keyStyle.Render("[q]"), dimStyle.Render(" 離開")))
 	}
 
 	// Preview section
