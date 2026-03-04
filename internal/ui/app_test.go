@@ -259,6 +259,41 @@ func TestModel_AnimTick(t *testing.T) {
 	assert.NotNil(t, cmd, "AnimTickMsg 應回傳下一個 tick cmd")
 }
 
+func TestModel_View_CursorDoesNotTruncate(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "體大 ISTDC"}},
+	})
+	// 設定終端寬度
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+	m = updated.(ui.Model)
+
+	view := m.View()
+	// cursor 行應包含完整的群組名稱，不應被截斷
+	assert.Contains(t, view, "體大 ISTDC", "cursor 行不應截斷群組名稱")
+}
+
+func TestModel_View_ToolbarFitsWidth(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", Status: tmux.StatusIdle}},
+	})
+	// 設定終端寬度為 50（較窄）
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
+	m = updated.(ui.Model)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// 工具列應分行或縮短，每行可見寬度不超過終端寬度
+	for _, line := range lines {
+		if strings.Contains(line, "[n]") || strings.Contains(line, "[q]") {
+			w := ui.VisibleWidth(line)
+			assert.LessOrEqual(t, w, 50, "工具列行寬不應超過終端寬度: %q", line)
+		}
+	}
+}
+
 func TestModel_View_AISummaryShown(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{

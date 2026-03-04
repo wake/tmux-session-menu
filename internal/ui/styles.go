@@ -21,3 +21,8 @@ var (
 				Border(lipgloss.NormalBorder(), true, false, false, false).
 				BorderForeground(lipgloss.Color("#505050")) // subtle
 )
+
+// VisibleWidth 回傳字串的可見寬度（排除 ANSI 跳脫碼）。
+func VisibleWidth(s string) int {
+	return lipgloss.Width(s)
+}

@@ -1093,11 +1093,16 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// Header
-	b.WriteString(headerStyle.Render("tmux session menu"))
-	b.WriteString(versionStyle.Render("  " + version.String()))
-	b.WriteString(versionStyle.Render("  (↑↓/jk 選擇, Enter 確認, q 離開)"))
-	b.WriteString("\n")
+	// Header（依終端寬度決定顯示內容）
+	title := headerStyle.Render("tmux session menu")
+	ver := versionStyle.Render("  " + version.String())
+	hint := versionStyle.Render("  (↑↓/jk, Enter, q)")
+
+	header := title + ver
+	if m.width <= 0 || lipgloss.Width(header+hint) <= m.width {
+		header += hint
+	}
+	b.WriteString(header + "\n")
 
 	// Items list
 	displayItems := m.visibleItems()
@@ -1248,25 +1253,71 @@ func (m Model) View() string {
 			m.searchQuery))
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	default:
-		b.WriteString(fmt.Sprintf("\n  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s  %s%s\n",
-			keyStyle.Render("[n]"), versionStyle.Render(" 新建"),
-			keyStyle.Render("[d]"), versionStyle.Render(" 刪除"),
-			keyStyle.Render("[r]"), versionStyle.Render(" 更名"),
-			keyStyle.Render("[c]"), versionStyle.Render(" 清除名稱"),
-			keyStyle.Render("[g]"), versionStyle.Render(" 群組"),
-			keyStyle.Render("[m]"), versionStyle.Render(" 移動"),
-			keyStyle.Render("[/]"), versionStyle.Render(" 搜尋"),
-			keyStyle.Render("[e]"), versionStyle.Render(" 退出 tmux"),
-			keyStyle.Render("[q]"), versionStyle.Render(" 離開")))
+		b.WriteString("\n")
+		b.WriteString(m.renderToolbar())
 	}
 
 	return b.String()
 }
 
+// toolbarItem 代表工具列上的一個快捷鍵項目。
+type toolbarItem struct {
+	key  string // e.g. "[n]"
+	desc string // e.g. "新建"
+}
+
+// renderToolbar 渲染底部工具列，自動依終端寬度換行。
+func (m Model) renderToolbar() string {
+	items := []toolbarItem{
+		{"[n]", "新建"}, {"[d]", "刪除"}, {"[r]", "更名"},
+		{"[c]", "清除名稱"}, {"[g]", "群組"}, {"[m]", "移動"},
+		{"[/]", "搜尋"}, {"[e]", "退出tmux"}, {"[q]", "離開"},
+	}
+
+	maxWidth := m.width
+	if maxWidth <= 0 {
+		maxWidth = 80
+	}
+
+	var result strings.Builder
+	indent := "  "
+	lineWidth := 0
+	first := true
+
+	for _, item := range items {
+		seg := keyStyle.Render(item.key) + versionStyle.Render(" "+item.desc)
+		segWidth := lipgloss.Width(seg)
+
+		if first {
+			result.WriteString(indent)
+			lineWidth = 2 // indent width
+			first = false
+		} else {
+			// 兩個 space 間隔
+			nextWidth := lineWidth + 2 + segWidth
+			if nextWidth > maxWidth {
+				// 換行
+				result.WriteString("\n" + indent)
+				lineWidth = 2
+			} else {
+				result.WriteString("  ")
+				lineWidth += 2
+			}
+		}
+		result.WriteString(seg)
+		lineWidth += segWidth
+	}
+	result.WriteString("\n")
+	return result.String()
+}
+
 // cursorLine 將行內容加上背景色並補滿到終端寬度。
 func (m Model) cursorLine(line string) string {
 	if m.width > 0 {
-		return cursorBgStyle.Width(m.width).Render(line)
+		w := lipgloss.Width(line)
+		if m.width > w {
+			line += strings.Repeat(" ", m.width-w)
+		}
 	}
 	return cursorBgStyle.Render(line)
 }
