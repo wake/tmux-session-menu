@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -247,9 +248,9 @@ func tickCmd(interval time.Duration) tea.Cmd {
 	})
 }
 
-// animTickCmd 排程下一次動畫 tick（750ms 週期用於慢速閃動）。
+// animTickCmd 排程下一次動畫 tick（100ms 週期用於平滑呼吸效果）。
 func animTickCmd() tea.Cmd {
-	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return AnimTickMsg{}
 	})
 }
@@ -1270,16 +1271,21 @@ func (m Model) cursorLine(line string) string {
 	return cursorBgStyle.Render(line)
 }
 
+// animFrames 是呼吸動畫一個完整週期的 frame 數（30 frames × 100ms = 3 秒）。
+const animFrames = 30
+
 // styledStatusIcon 回傳帶動畫效果的狀態圖示。
-// running 狀態的 ● 會慢速閃動（交替亮/暗綠色）。
+// running 狀態的 ● 會以 sine 波呼吸效果平滑變化亮度。
 func (m Model) styledStatusIcon(status tmux.SessionStatus, icon string) string {
 	switch status {
 	case tmux.StatusRunning:
-		// 慢速閃動：animFrame 偶數亮，奇數暗
-		if m.animFrame%2 == 0 {
-			return statusRunningStyle.Render(icon)
-		}
-		return statusRunningDimStyle.Render(icon)
+		// sine 波：0→1→0 平滑呼吸，最低亮度 35%
+		t := float64(m.animFrame%animFrames) / float64(animFrames)
+		brightness := 0.35 + 0.65*((math.Sin(t*2*math.Pi-math.Pi/2)+1)/2)
+		r := int(float64(0x91) * brightness)
+		g := int(float64(0xE2) * brightness)
+		style := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x00", r, g)))
+		return style.Render(icon)
 	case tmux.StatusWaiting:
 		return statusWaitingStyle.Render(icon)
 	case tmux.StatusError:

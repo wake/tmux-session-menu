@@ -8,7 +8,6 @@ var (
 	selectedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#B1B9F9")).Bold(true)   // periwinkle（用於 input prompt）
 	dimStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))              // dim text
 	statusRunningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#91E200"))              // running green
-	statusRunningDimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#325000"))           // running green (dim phase)
 	statusWaitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E8D969"))              // waiting yellow
 	statusIdleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))              // idle gray
 	statusErrorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B80"))              // error red
