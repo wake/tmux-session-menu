@@ -1311,15 +1311,11 @@ func (m Model) renderToolbar() string {
 	return result.String()
 }
 
-// cursorLine 將行內容加上背景色並補滿到終端寬度。
+// cursorLine 將行內容加上背景色並用 \033[K (Erase in Line) 延伸到行尾。
+// 這是 vim/tmux 等終端程式的標準做法，無需計算寬度。
 func (m Model) cursorLine(line string) string {
-	if m.width > 0 {
-		w := lipgloss.Width(line)
-		if m.width > w {
-			line += strings.Repeat(" ", m.width-w)
-		}
-	}
-	return cursorBgStyle.Render(line)
+	// #373737 = RGB(55,55,55)
+	return "\033[48;2;55;55;55m" + line + "\033[K\033[0m"
 }
 
 // animFrames 是呼吸動畫一個完整週期的 frame 數（30 frames × 100ms = 3 秒）。

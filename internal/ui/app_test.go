@@ -156,6 +156,8 @@ func TestModel_View_CursorUsesBackground(t *testing.T) {
 	assert.NotContains(t, view, "►", "cursor 不應使用 ► 箭頭")
 	// session 名稱仍應存在
 	assert.Contains(t, view, "my-session")
+	// cursor 行應使用 \033[K (Erase in Line) 確保背景色延伸到行尾
+	assert.Contains(t, view, "\033[K", "cursor 行應包含 Erase in Line 序列")
 }
 
 func TestModel_View_UngroupedNoLineNumber(t *testing.T) {
@@ -271,6 +273,8 @@ func TestModel_View_CursorDoesNotTruncate(t *testing.T) {
 	view := m.View()
 	// cursor 行應包含完整的群組名稱，不應被截斷
 	assert.Contains(t, view, "體大 ISTDC", "cursor 行不應截斷群組名稱")
+	// 應使用 \033[K 而非手動 padding，避免 CJK 字元寬度計算問題
+	assert.Contains(t, view, "\033[K", "cursor 行應用 Erase in Line")
 }
 
 func TestModel_View_ToolbarFitsWidth(t *testing.T) {
@@ -292,6 +296,36 @@ func TestModel_View_ToolbarFitsWidth(t *testing.T) {
 			assert.LessOrEqual(t, w, 50, "工具列行寬不應超過終端寬度: %q", line)
 		}
 	}
+
+	// 所有工具列快捷鍵都應出現（可能分佈在多行）
+	assert.Contains(t, view, "[n]", "工具列應包含 [n]")
+	assert.Contains(t, view, "[q]", "工具列應包含 [q]")
+	assert.Contains(t, view, "[/]", "工具列應包含 [/]")
+}
+
+func TestModel_View_ToolbarWrapsAtWidth(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", Status: tmux.StatusIdle}},
+	})
+	// 設定非常窄的寬度，強制換行
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+	m = updated.(ui.Model)
+
+	view := m.View()
+
+	// 工具列應分佈在多行
+	toolbarLines := 0
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "[") && strings.Contains(line, "]") {
+			if strings.Contains(line, "新建") || strings.Contains(line, "刪除") ||
+				strings.Contains(line, "更名") || strings.Contains(line, "離開") ||
+				strings.Contains(line, "搜尋") || strings.Contains(line, "群組") {
+				toolbarLines++
+			}
+		}
+	}
+	assert.GreaterOrEqual(t, toolbarLines, 2, "窄寬度時工具列應分多行")
 }
 
 func TestModel_View_AISummaryShown(t *testing.T) {
