@@ -1264,9 +1264,8 @@ func (m Model) View() string {
 
 // cursorLine 將行內容加上背景色並補滿到終端寬度。
 func (m Model) cursorLine(line string) string {
-	w := lipgloss.Width(line)
-	if m.width > w {
-		line += strings.Repeat(" ", m.width-w)
+	if m.width > 0 {
+		return cursorBgStyle.Width(m.width).Render(line)
 	}
 	return cursorBgStyle.Render(line)
 }
