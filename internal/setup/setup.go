@@ -15,6 +15,7 @@ var (
 	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Bold(true)
 	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#787fa0"))
 	successStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#9ece6a"))
+	warnStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#e0af68"))
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#f7768e"))
 )
 
@@ -208,7 +209,7 @@ func (m Model) View() string {
 		}
 		if m.daemonHint != "" {
 			b.WriteString("\n")
-			b.WriteString(dimStyle.Render(m.daemonHint))
+			b.WriteString(warnStyle.Render("⚠ " + m.daemonHint))
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
