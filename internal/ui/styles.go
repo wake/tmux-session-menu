@@ -2,15 +2,17 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
+// Claude Code dark mode 配色
 var (
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#c0caf5"))
-	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Bold(true)
-	dimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#787fa0"))
-	statusRunningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9ece6a"))
-	statusWaitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#e0af68"))
-	statusIdleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#787fa0"))
-	statusErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#f7768e"))
+	headerStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#D77757"))  // claude terracotta
+	selectedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#B1B9F9")).Bold(true)   // periwinkle
+	dimStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))              // inactive
+	statusRunningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#4EBA65"))              // success green
+	statusWaitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFC107"))              // warning yellow
+	statusIdleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#505050"))              // subtle
+	statusErrorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B80"))              // error red
+	sessionNameStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))              // bright white
 	previewBorderStyle = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), true, false, false, false).
-		BorderForeground(lipgloss.Color("#414868"))
+				Border(lipgloss.NormalBorder(), true, false, false, false).
+				BorderForeground(lipgloss.Color("#505050")) // subtle
 )

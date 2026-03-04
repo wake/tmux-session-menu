@@ -161,9 +161,7 @@ func runTUIWithClient(c *client.Client, cfg config.Config) {
 	}
 
 	if m, ok := finalModel.(ui.Model); ok {
-		if selected := m.Selected(); selected != "" {
-			switchToSession(selected)
-		}
+		handlePostTUI(m)
 	}
 }
 
@@ -205,9 +203,18 @@ func runTUILegacy(cfg config.Config) {
 	}
 
 	if m, ok := finalModel.(ui.Model); ok {
-		if selected := m.Selected(); selected != "" {
-			switchToSession(selected)
-		}
+		handlePostTUI(m)
+	}
+}
+
+// handlePostTUI 處理 TUI 結束後的動作。
+func handlePostTUI(m ui.Model) {
+	if selected := m.Selected(); selected != "" {
+		switchToSession(selected)
+		return
+	}
+	if m.ExitTmux() && os.Getenv("TMUX") != "" {
+		_ = osexec.Command("tmux", "detach-client").Run()
 	}
 }
 

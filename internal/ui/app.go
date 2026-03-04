@@ -38,8 +38,9 @@ type Model struct {
 	quitting bool
 
 	deps     Deps
-	selected string // Enter 選取的 session name
-	err      error
+	selected  string // Enter 選取的 session name
+	exitTmux_ bool   // e 鍵：退出 tmux
+	err       error
 
 	// Mode 相關
 	mode        Mode
@@ -83,6 +84,11 @@ func (m Model) Items() []ListItem {
 // Selected 回傳使用者按 Enter 選取的 session name（空字串表示未選取）。
 func (m Model) Selected() string {
 	return m.selected
+}
+
+// ExitTmux 回傳使用者是否按了 e 要求退出 tmux。
+func (m Model) ExitTmux() bool {
+	return m.exitTmux_
 }
 
 // Mode 回傳目前的互動模式。
@@ -368,6 +374,10 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "esc", "ctrl+c":
 		m.quitting = true
+		return m, tea.Quit
+	case "e":
+		m.quitting = true
+		m.exitTmux_ = true
 		return m, tea.Quit
 	case "j", "down":
 		if m.cursor < len(m.items)-1 {
@@ -1101,9 +1111,9 @@ func (m Model) View() string {
 
 			switch item.Type {
 			case ItemGroup:
-				collapse := "▼"
+				collapse := "▾"
 				if item.Group.Collapsed {
-					collapse = "▶"
+					collapse = "▸"
 				}
 				b.WriteString(fmt.Sprintf("%s%s %s\n",
 					prefix,
@@ -1127,6 +1137,8 @@ func (m Model) View() string {
 				name := item.Session.DisplayName()
 				if i == m.cursor {
 					name = selectedStyle.Render(name)
+				} else {
+					name = sessionNameStyle.Render(name)
 				}
 
 				if isGroupChild {
@@ -1185,7 +1197,7 @@ func (m Model) View() string {
 			m.searchQuery))
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	default:
-		b.WriteString(fmt.Sprintf("\n  %s  %s  %s  %s  %s  %s  %s  %s\n",
+		b.WriteString(fmt.Sprintf("\n  %s  %s  %s  %s  %s  %s  %s  %s  %s\n",
 			dimStyle.Render("[n] 新建"),
 			dimStyle.Render("[d] 刪除"),
 			dimStyle.Render("[r] 更名"),
@@ -1193,6 +1205,7 @@ func (m Model) View() string {
 			dimStyle.Render("[g] 群組"),
 			dimStyle.Render("[m] 移動"),
 			dimStyle.Render("[/] 搜尋"),
+			dimStyle.Render("[e] 退出 tmux"),
 			dimStyle.Render("[q] 離開")))
 	}
 

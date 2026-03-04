@@ -115,7 +115,7 @@ func TestModel_View_TreeAndLineNumbers(t *testing.T) {
 
 	// cursor 在 index 0（group），應顯示 ►
 	assert.Contains(t, view, "►")
-	assert.Contains(t, view, "▼")
+	assert.Contains(t, view, "▾")
 	assert.Contains(t, view, "development")
 
 	// 群組子項目應有樹狀符號
@@ -1162,7 +1162,7 @@ func TestModel_Search_FiltersItems(t *testing.T) {
 	assert.Contains(t, view, "alpha-2", "搜尋 alpha 後應顯示 alpha-2")
 	assert.NotContains(t, view, "beta", "搜尋 alpha 後不應顯示 beta")
 	// 群組也不應出現
-	assert.NotContains(t, view, "▼", "搜尋時不應顯示群組標頭")
+	assert.NotContains(t, view, "▾", "搜尋時不應顯示群組標頭")
 }
 
 func TestModel_Search_EscClears(t *testing.T) {
@@ -1892,4 +1892,69 @@ func TestModel_ClearName_NoCustomName_NoOp(t *testing.T) {
 	// session 沒有自訂名稱，按 c 應無動作
 	m, cmd := applyKey(m, "c")
 	assert.Nil(t, cmd, "無自訂名稱時按 c 應無動作")
+}
+
+// --- 小箭頭展開/收合測試 ---
+
+func TestModel_View_SmallArrows(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha", GroupName: "dev"}},
+	})
+
+	view := m.View()
+	// 展開狀態應使用小箭頭 ▾，不應使用大箭頭 ▼
+	assert.Contains(t, view, "▾", "展開群組應使用小箭頭 ▾")
+	assert.NotContains(t, view, "▼", "不應使用大箭頭 ▼")
+
+	// 直接設定收合狀態的群組（toggleCollapse 需要 Store）
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "dev", Collapsed: true}},
+	})
+	view = m.View()
+	assert.Contains(t, view, "▸", "收合群組應使用小箭頭 ▸")
+	assert.NotContains(t, view, "▶", "不應使用大箭頭 ▶")
+}
+
+// --- 'e' 鍵退出 tmux 測試 ---
+
+func TestModel_ExitTmux_Key(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 e 應設定 exitTmux 旗標並退出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	model := updated.(ui.Model)
+	assert.NotNil(t, cmd, "按 e 應回傳 tea.Quit")
+	assert.True(t, model.ExitTmux(), "按 e 後 ExitTmux() 應為 true")
+}
+
+func TestModel_ExitTmux_QDoesNotSet(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 q 不應設定 exitTmux 旗標
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model := updated.(ui.Model)
+	assert.False(t, model.ExitTmux(), "按 q 後 ExitTmux() 應為 false")
+}
+
+func TestModel_ExitTmux_NotInModeInput(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 進入 ModeInput 後按 e 不應退出
+	m, _ = applyKey(m, "n") // 進入 ModeInput
+	assert.Equal(t, ui.ModeInput, m.Mode())
+
+	m, _ = applyKey(m, "e")
+	assert.Equal(t, ui.ModeInput, m.Mode(), "ModeInput 中按 e 應輸入字元，不退出")
+	assert.False(t, m.ExitTmux())
 }
