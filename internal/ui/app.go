@@ -248,9 +248,9 @@ func tickCmd(interval time.Duration) tea.Cmd {
 	})
 }
 
-// animTickCmd 排程下一次動畫 tick（100ms 週期用於平滑呼吸效果）。
+// animTickCmd 排程下一次動畫 tick（50ms 週期用於平滑呼吸效果）。
 func animTickCmd() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
 		return AnimTickMsg{}
 	})
 }
@@ -312,7 +312,6 @@ func (m Model) Init() tea.Cmd {
 		return tea.Batch(
 			tea.SetWindowTitle("tmux session menu"),
 			watchCmd(m.deps.Client),
-			animTickCmd(),
 		)
 	}
 	// 舊模式：直接輪詢
@@ -320,7 +319,6 @@ func (m Model) Init() tea.Cmd {
 		tea.SetWindowTitle("tmux session menu"),
 		loadSessionsCmd(m.deps),
 		tickCmd(m.pollInterval()),
-		animTickCmd(),
 	)
 }
 
@@ -348,11 +346,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
 		}
-		// 繼續接收下一個快照
+		// 繼續接收下一個快照；若有 running session 則啟動動畫 tick
+		var cmds []tea.Cmd
 		if m.deps.Client != nil {
-			return m, recvSnapshotCmd(m.deps.Client)
+			cmds = append(cmds, recvSnapshotCmd(m.deps.Client))
 		}
-		return m, nil
+		if m.hasRunning() {
+			cmds = append(cmds, animTickCmd())
+		}
+		return m, tea.Batch(cmds...)
 	case SessionsMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
@@ -361,6 +363,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cursorName, cursorIsGroup := m.cursorItemKey()
 		m.items = FlattenItems(msg.Groups, msg.Sessions)
 		m.restoreCursor(cursorName, cursorIsGroup)
+		if m.hasRunning() {
+			return m, animTickCmd()
+		}
 		return m, nil
 	case reconnectMsg:
 		if m.deps.Client != nil {
@@ -373,7 +378,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case AnimTickMsg:
 		m.animFrame++
-		return m, animTickCmd()
+		if m.hasRunning() {
+			return m, animTickCmd()
+		}
+		return m, nil
 	case TickMsg:
 		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
 	case tea.KeyMsg:
@@ -1314,11 +1322,14 @@ func (m Model) renderToolbar() string {
 // cursorLine 將行內容加上背景色，並用空格填充到終端寬度。
 // lipgloss Render 會插入 \033[49m（背景重置）和 \033[0m（全重置），
 // 必須將它們替換為 cursor 背景色，才能讓背景貫穿整行。
+var cursorBgReplacer = strings.NewReplacer(
+	"\033[49m", "\033[48;2;55;55;55m",
+	"\033[0m", "\033[0m\033[48;2;55;55;55m",
+)
+
 func (m Model) cursorLine(line string) string {
 	const bg = "\033[48;2;55;55;55m"
-	// 攔截 lipgloss 的背景重置，改為重新設定 cursor 背景
-	line = strings.ReplaceAll(line, "\033[49m", bg)
-	line = strings.ReplaceAll(line, "\033[0m", "\033[0m"+bg)
+	line = cursorBgReplacer.Replace(line)
 	visWidth := lipgloss.Width(line)
 	pad := ""
 	if m.width > visWidth {
@@ -1327,17 +1338,27 @@ func (m Model) cursorLine(line string) string {
 	return bg + line + pad + "\033[0m"
 }
 
-// animFrames 是呼吸動畫一個完整週期的 frame 數（30 frames × 100ms = 3 秒）。
-const animFrames = 30
+// hasRunning 回傳是否有 running 狀態的 session（決定動畫 tick 是否繼續）。
+func (m Model) hasRunning() bool {
+	for _, item := range m.items {
+		if item.Type == ItemSession && item.Session.Status == tmux.StatusRunning {
+			return true
+		}
+	}
+	return false
+}
+
+// animFrames 是呼吸動畫一個完整週期的 frame 數（40 frames × 50ms = 2 秒）。
+const animFrames = 40
 
 // styledStatusIcon 回傳帶動畫效果的狀態圖示。
 // running 狀態的 ● 會以 sine 波呼吸效果平滑變化亮度。
 func (m Model) styledStatusIcon(status tmux.SessionStatus, icon string) string {
 	switch status {
 	case tmux.StatusRunning:
-		// sine 波：0→1→0 平滑呼吸，最低亮度 35%
+		// sine 波：0→1→0 平滑呼吸，亮度 60%～100%
 		t := float64(m.animFrame%animFrames) / float64(animFrames)
-		brightness := 0.35 + 0.65*((math.Sin(t*2*math.Pi-math.Pi/2)+1)/2)
+		brightness := 0.60 + 0.40*((math.Sin(t*2*math.Pi-math.Pi/2)+1)/2)
 		r := int(float64(0x91) * brightness)
 		g := int(float64(0xE2) * brightness)
 		style := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x00", r, g)))
