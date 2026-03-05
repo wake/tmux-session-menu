@@ -232,11 +232,17 @@ func handlePostTUI(m ui.Model) {
 func switchToSession(name string, readOnly bool) {
 	var err error
 	if os.Getenv("TMUX") != "" {
-		args := []string{"switch-client", "-t", name}
-		if readOnly {
-			args = append(args, "-r")
+		err = osexec.Command("tmux", "switch-client", "-t", name).Run()
+		if err == nil {
+			if readOnly {
+				// 使用 select-pane -d 停用 pane 輸入（取代 switch-client -r），
+				// 保留 tmux 按鍵綁定（如 Ctrl+Q 開啟 tsm）正常運作。
+				_ = osexec.Command("tmux", "select-pane", "-t", name, "-d").Run()
+			} else {
+				// 確保 pane 輸入已啟用（可能先前被唯讀模式停用）
+				_ = osexec.Command("tmux", "select-pane", "-t", name, "-e").Run()
+			}
 		}
-		err = osexec.Command("tmux", args...).Run()
 	} else {
 		args := []string{"attach-session", "-t", name}
 		if readOnly {
