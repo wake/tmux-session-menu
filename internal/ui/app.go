@@ -41,9 +41,10 @@ type Model struct {
 	items    []ListItem
 	quitting bool
 
-	deps     Deps
+	deps      Deps
 	selected  string // Enter 選取的 session name
-	exitTmux_ bool   // e 鍵：退出 tmux
+	readOnly_ bool   // R 鍵：唯讀進入 session
+	exitTmux_ bool   // ctrl+e：退出 tmux
 	err       error
 
 	// 動畫
@@ -59,8 +60,9 @@ type Model struct {
 	textInputs [2]textinput.Model // [0]=名稱(CustomName), [1]=ID(session name)
 	inputRow   int                // 目前焦點行 0 or 1
 
-	confirmPrompt string
-	confirmAction func() tea.Cmd
+	confirmPrompt     string
+	confirmAction     func() tea.Cmd
+	confirmExitTmux   bool // 確認後是否退出 tmux
 
 	// Picker mode（選擇群組）
 	pickerGroups []store.Group
@@ -106,9 +108,14 @@ func (m Model) Selected() string {
 	return m.selected
 }
 
-// ExitTmux 回傳使用者是否按了 e 要求退出 tmux。
+// ExitTmux 回傳使用者是否按了 ctrl+e 要求退出 tmux。
 func (m Model) ExitTmux() bool {
 	return m.exitTmux_
+}
+
+// ReadOnly 回傳使用者是否按了 R 要求唯讀進入 session。
+func (m Model) ReadOnly() bool {
+	return m.readOnly_
 }
 
 // AnimFrame 回傳目前的動畫 frame（主要用於測試）。
@@ -335,14 +342,10 @@ func (m Model) pollInterval() time.Duration {
 func (m Model) Init() tea.Cmd {
 	if m.deps.Client != nil {
 		// gRPC daemon 模式：啟動 Watch stream
-		return tea.Batch(
-			tea.SetWindowTitle("tmux session menu"),
-			watchCmd(m.deps.Client),
-		)
+		return watchCmd(m.deps.Client)
 	}
 	// 舊模式：直接輪詢
 	return tea.Batch(
-		tea.SetWindowTitle("tmux session menu"),
 		loadSessionsCmd(m.deps),
 		tickCmd(m.pollInterval()),
 	)
@@ -430,10 +433,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateNormal 處理一般瀏覽模式的按鍵。
 func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "q", "esc", "ctrl+c":
+	case "q":
+		if m.deps.Cfg.InTmux {
+			m.mode = ModeConfirm
+			m.confirmPrompt = "是否關閉選單並退出當前 session？"
+			m.confirmExitTmux = true
+			m.confirmAction = func() tea.Cmd {
+				return tea.Quit
+			}
+			return m, nil
+		}
 		m.quitting = true
 		return m, tea.Quit
-	case "e":
+	case "esc", "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "ctrl+e":
 		m.quitting = true
 		m.exitTmux_ = true
 		return m, tea.Quit
@@ -532,9 +547,18 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchQuery = ""
 		m.cursor = 0
 		return m, nil
-	case "J":
+	case "R":
+		// 唯讀進入 session
+		if m.cursor >= 0 && m.cursor < len(m.items) && m.items[m.cursor].Type == ItemSession {
+			m.readOnly_ = true
+			m.selected = m.items[m.cursor].Session.Name
+			m.quitting = true
+			return m, tea.Quit
+		}
+		return m, nil
+	case "J", "shift+down":
 		return m.moveItem(1) // 下移
-	case "K":
+	case "K", "shift+up":
 		return m.moveItem(-1) // 上移
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
@@ -749,6 +773,11 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cmd = m.confirmAction()
 			m.confirmAction = nil
 		}
+		if m.confirmExitTmux {
+			m.exitTmux_ = true
+			m.quitting = true
+			m.confirmExitTmux = false
+		}
 		m.mode = ModeNormal
 		m.confirmPrompt = ""
 		return m, cmd
@@ -757,6 +786,7 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeNormal
 		m.confirmPrompt = ""
 		m.confirmAction = nil
+		m.confirmExitTmux = false
 		return m, nil
 	}
 	return m, nil
@@ -1359,18 +1389,16 @@ func (m Model) View() string {
 	return b.String()
 }
 
-// renderToolbar 渲染底部工具列，固定三行佈局。
+// renderToolbar 渲染底部工具列，固定兩行佈局。
 func (m Model) renderToolbar() string {
 	render := func(key, desc string) string {
 		return keyStyle.Render(key) + versionStyle.Render(" "+desc)
 	}
 	lines := []string{
+		fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
+			render("[/]", "搜尋"), render("[n]", "新建"), render("[r]", "更名"), render("[d]", "刪除"), render("[R]", "唯讀進入"), render("[q]", "關閉選單")),
 		fmt.Sprintf("  %s  %s  %s  %s",
-			render("[/]", "搜尋"), render("[n]", "新建"), render("[r]", "更名"), render("[d]", "刪除")),
-		fmt.Sprintf("  %s  %s  %s  %s  %s",
-			render("[↑/k]", "向上"), render("[↓/j]", "向下"), render("[m]", "搬移"), render("[K]", "上移"), render("[J]", "下移")),
-		fmt.Sprintf("  %s  %s",
-			render("[q]", "退出"), render("[e]", "退出tmux")),
+			render("[m]", "搬移"), render("[⇧+↑/⇧+k]", "上移"), render("[⇧+↓/⇧+j]", "下移"), render("[ctrl+e]", "退出")),
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

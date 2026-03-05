@@ -12,6 +12,7 @@ type Config struct {
 	DataDir         string `toml:"data_dir"`
 	PreviewLines    int    `toml:"preview_lines"`
 	PollIntervalSec int    `toml:"poll_interval_sec"`
+	InTmux          bool   `toml:"-"` // 執行時偵測，不寫入設定檔
 }
 
 // Default 回傳預設設定。

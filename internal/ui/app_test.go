@@ -278,7 +278,7 @@ func TestModel_View_CursorDoesNotTruncate(t *testing.T) {
 	assert.NotContains(t, view, "\033[K", "不應使用 Erase in Line（Bubble Tea 不支援）")
 }
 
-func TestModel_View_ToolbarFixedThreeLines(t *testing.T) {
+func TestModel_View_ToolbarFixedTwoLines(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", Status: tmux.StatusIdle}},
@@ -292,24 +292,24 @@ func TestModel_View_ToolbarFixedThreeLines(t *testing.T) {
 	assert.Contains(t, view, "[r]", "工具列應包含 [r]")
 	assert.Contains(t, view, "[d]", "工具列應包含 [d]")
 	assert.Contains(t, view, "[q]", "工具列應包含 [q]")
-	assert.Contains(t, view, "[e]", "工具列應包含 [e]")
+	assert.Contains(t, view, "[R]", "工具列應包含 [R]")
 	assert.Contains(t, view, "[m]", "工具列應包含 [m]")
-	// [c] 已移除
-	assert.NotContains(t, view, "清除名稱", "工具列不應包含清除名稱")
+	assert.Contains(t, view, "[ctrl+e]", "工具列應包含 [ctrl+e]")
+	assert.NotContains(t, view, "[e]", "工具列不應包含 [e]")
 
-	// 固定三行佈局
+	// 固定兩行佈局
 	toolbarLines := 0
 	for _, line := range strings.Split(view, "\n") {
 		if strings.Contains(line, "[") && strings.Contains(line, "]") {
 			if strings.Contains(line, "搜尋") || strings.Contains(line, "新建") ||
 				strings.Contains(line, "更名") || strings.Contains(line, "刪除") ||
-				strings.Contains(line, "向上") || strings.Contains(line, "向下") ||
+				strings.Contains(line, "搬移") || strings.Contains(line, "上移") ||
 				strings.Contains(line, "退出") {
 				toolbarLines++
 			}
 		}
 	}
-	assert.Equal(t, 3, toolbarLines, "工具列應固定三行")
+	assert.Equal(t, 2, toolbarLines, "工具列應固定兩行")
 }
 
 func TestModel_View_AISummaryShown(t *testing.T) {
@@ -2105,7 +2105,7 @@ func TestModel_View_SmallArrows(t *testing.T) {
 	assert.NotContains(t, view, "▶", "不應使用大箭頭 ▶")
 }
 
-// --- 'e' 鍵退出 tmux 測試 ---
+// --- ctrl+e 退出 tmux 測試 ---
 
 func TestModel_ExitTmux_Key(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
@@ -2113,11 +2113,11 @@ func TestModel_ExitTmux_Key(t *testing.T) {
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
 	})
 
-	// 按 e 應設定 exitTmux 旗標並退出
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	// 按 ctrl+e 應設定 exitTmux 旗標並退出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	model := updated.(ui.Model)
-	assert.NotNil(t, cmd, "按 e 應回傳 tea.Quit")
-	assert.True(t, model.ExitTmux(), "按 e 後 ExitTmux() 應為 true")
+	assert.NotNil(t, cmd, "按 ctrl+e 應回傳 tea.Quit")
+	assert.True(t, model.ExitTmux(), "按 ctrl+e 後 ExitTmux() 應為 true")
 }
 
 func TestModel_ExitTmux_QDoesNotSet(t *testing.T) {
@@ -2138,11 +2138,212 @@ func TestModel_ExitTmux_NotInModeInput(t *testing.T) {
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
 	})
 
-	// 進入 ModeInput 後按 e 不應退出
+	// 進入 ModeInput 後按 ctrl+e 不應退出（textinput 吃掉）
 	m, _ = applyKey(m, "n") // 進入 ModeInput
 	assert.Equal(t, ui.ModeInput, m.Mode())
 
-	m, _ = applyKey(m, "e")
-	assert.Equal(t, ui.ModeInput, m.Mode(), "ModeInput 中按 e 應輸入字元，不退出")
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeInput, model.Mode(), "ModeInput 中按 ctrl+e 不應退出")
+	assert.False(t, model.ExitTmux())
+}
+
+// --- Shift+Up/Down 作為 K/J 上移下移的別名 ---
+
+func TestModel_ShiftUp_MovesItemUp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+	groups, _ := st.ListGroups()
+	st.SetSessionGroup("a", groups[0].ID, 0)
+	st.SetSessionGroup("b", groups[0].ID, 1)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "a", GroupName: "dev", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "b", GroupName: "dev", SortOrder: 1}},
+	})
+	m.SetCursor(2) // cursor 在 b
+
+	// Shift+Up 應等同 K（上移）
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyShiftUp})
+	m = updated.(ui.Model)
+
+	assert.Equal(t, 1, m.Cursor(), "Shift+Up 應將項目上移，cursor 變為 1")
+}
+
+func TestModel_ShiftDown_MovesItemDown(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("dev", 0)
+	groups, _ := st.ListGroups()
+	st.SetSessionGroup("a", groups[0].ID, 0)
+	st.SetSessionGroup("b", groups[0].ID, 1)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "a", GroupName: "dev", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "b", GroupName: "dev", SortOrder: 1}},
+	})
+	m.SetCursor(1) // cursor 在 a
+
+	// Shift+Down 應等同 J（下移）
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyShiftDown})
+	m = updated.(ui.Model)
+
+	assert.Equal(t, 2, m.Cursor(), "Shift+Down 應將項目下移，cursor 變為 2")
+}
+
+// --- Shift+R 唯讀進入 session ---
+
+func TestModel_ShiftR_ReadOnlyEnter(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 R (Shift+R) 應選取 session 並標記唯讀
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	model := updated.(ui.Model)
+
+	assert.NotNil(t, cmd, "按 R 應回傳 tea.Quit")
+	assert.Equal(t, "dev", model.Selected(), "應選取 session")
+	assert.True(t, model.ReadOnly(), "按 R 後 ReadOnly() 應為 true")
+}
+
+func TestModel_ShiftR_OnGroup_NoOp(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
+	})
+
+	// cursor 在群組上，按 R 應無動作
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	model := updated.(ui.Model)
+	assert.Nil(t, cmd, "群組上按 R 應無動作")
+	assert.False(t, model.ReadOnly())
+}
+
+// --- ctrl+e 取代 e 作為退出 tmux 的按鍵 ---
+
+func TestModel_CtrlE_ExitsTmux(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// ctrl+e 應設定 exitTmux 旗標並退出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	model := updated.(ui.Model)
+	assert.NotNil(t, cmd, "ctrl+e 應回傳 tea.Quit")
+	assert.True(t, model.ExitTmux(), "ctrl+e 後 ExitTmux() 應為 true")
+}
+
+func TestModel_E_NoLongerExitsTmux(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 按 e 不應再觸發退出 tmux
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	model := updated.(ui.Model)
+	assert.Nil(t, cmd, "按 e 不應觸發退出")
+	assert.False(t, model.ExitTmux(), "按 e 後 ExitTmux() 應為 false")
+}
+
+// --- 在 tmux 中按 q 應進入確認模式 ---
+
+func TestModel_Quit_InTmux_EntersConfirm(t *testing.T) {
+	m := ui.NewModel(ui.Deps{Cfg: config.Config{InTmux: true}})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 在 tmux 中按 q 應進入確認模式
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model := updated.(ui.Model)
+	assert.Nil(t, cmd, "按 q 不應直接退出")
+	assert.Equal(t, ui.ModeConfirm, model.Mode(), "應進入確認模式")
+}
+
+func TestModel_Quit_InTmux_ConfirmY_ExitsWithFlag(t *testing.T) {
+	m := ui.NewModel(ui.Deps{Cfg: config.Config{InTmux: true}})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// q → 進入確認 → y → 退出並帶 exitTmux 旗標
+	m, _ = applyKey(m, "q")
+	assert.Equal(t, ui.ModeConfirm, m.Mode())
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model := updated.(ui.Model)
+	assert.NotNil(t, cmd, "確認後應退出")
+	assert.True(t, model.ExitTmux(), "確認退出後應設定 exitTmux")
+}
+
+func TestModel_Quit_InTmux_ConfirmN_Cancels(t *testing.T) {
+	m := ui.NewModel(ui.Deps{Cfg: config.Config{InTmux: true}})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// q → 進入確認 → n → 取消
+	m, _ = applyKey(m, "q")
+	m, cmd := applyKey(m, "n")
+
+	assert.Nil(t, cmd, "取消不應退出")
+	assert.Equal(t, ui.ModeNormal, m.Mode(), "應回到 ModeNormal")
 	assert.False(t, m.ExitTmux())
+}
+
+func TestModel_Quit_NotInTmux_DirectQuit(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 不在 tmux 中，按 q 應直接退出（不經確認）
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assert.NotNil(t, cmd, "不在 tmux 中按 q 應直接退出")
+}
+
+func TestModel_Esc_InTmux_DirectQuit(t *testing.T) {
+	m := ui.NewModel(ui.Deps{Cfg: config.Config{InTmux: true}})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+
+	// 在 tmux 中按 esc 應直接退出（不經確認，只關閉選單）
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	assert.NotNil(t, cmd, "esc 應直接退出")
+}
+
+// --- 工具列佈局更新 ---
+
+func TestModel_View_ToolbarNewLayout(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", Status: tmux.StatusIdle}},
+	})
+
+	view := m.View()
+
+	// 第一行：搜尋、新建、更名、刪除、唯獨進入、關閉選單
+	assert.Contains(t, view, "唯讀進入", "工具列應包含唯讀進入")
+	assert.Contains(t, view, "關閉選單", "工具列應包含關閉選單")
+
+	// 第二行：搬移、上移（含 shift 符號）、下移（含 shift 符號）、退出（ctrl+e）
+	assert.Contains(t, view, "⇧+↑", "工具列應包含 ⇧+↑")
+	assert.Contains(t, view, "⇧+↓", "工具列應包含 ⇧+↓")
+	assert.Contains(t, view, "ctrl+e", "工具列應包含 ctrl+e")
+
+	// 不應再有舊的 [e] 退出tmux
+	assert.NotContains(t, view, "[e]", "工具列不應包含 [e]")
 }

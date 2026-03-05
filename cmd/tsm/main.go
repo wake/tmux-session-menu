@@ -130,6 +130,7 @@ func loadConfig() config.Config {
 
 func runTUI() {
 	cfg := loadConfig()
+	cfg.InTmux = os.Getenv("TMUX") != ""
 
 	// 嘗試連線 daemon（會自動啟動）
 	c, err := client.Dial(cfg)
@@ -207,10 +208,20 @@ func runTUILegacy(cfg config.Config) {
 	}
 }
 
+// restoreTermTitle 清除 pane title 並重新啟用 tmux 的 automatic-rename，
+// 避免 tsm 退出後 iTerm tab 名稱卡住。
+func restoreTermTitle() {
+	if os.Getenv("TMUX") != "" {
+		fmt.Print("\033]2;\007") // OSC 2: 清除 pane title
+		_ = osexec.Command("tmux", "set-option", "-w", "automatic-rename", "on").Run()
+	}
+}
+
 // handlePostTUI 處理 TUI 結束後的動作。
 func handlePostTUI(m ui.Model) {
+	restoreTermTitle()
 	if selected := m.Selected(); selected != "" {
-		switchToSession(selected)
+		switchToSession(selected, m.ReadOnly())
 		return
 	}
 	if m.ExitTmux() && os.Getenv("TMUX") != "" {
@@ -218,12 +229,20 @@ func handlePostTUI(m ui.Model) {
 	}
 }
 
-func switchToSession(name string) {
+func switchToSession(name string, readOnly bool) {
 	var err error
 	if os.Getenv("TMUX") != "" {
-		err = osexec.Command("tmux", "switch-client", "-t", name).Run()
+		args := []string{"switch-client", "-t", name}
+		if readOnly {
+			args = append(args, "-r")
+		}
+		err = osexec.Command("tmux", args...).Run()
 	} else {
-		cmd := osexec.Command("tmux", "attach-session", "-t", name)
+		args := []string{"attach-session", "-t", name}
+		if readOnly {
+			args = append(args, "-r")
+		}
+		cmd := osexec.Command("tmux", args...)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
