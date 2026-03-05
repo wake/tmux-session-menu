@@ -242,10 +242,14 @@ func switchToSession(name string, readOnly bool) {
 			if readOnly {
 				// 停用 pane 輸入
 				_ = osexec.Command("tmux", "select-pane", "-t", name, "-d").Run()
-				// 偵測 prefix 並動態綁定到 tsm-readonly table
+				// 動態建立完整的 tsm-readonly key table（不依賴 tmux.conf）
+				_ = osexec.Command("tmux", "bind-key", "-T", "tsm-readonly",
+					"C-q", "display-popup", "-E", "-w", "80%", "-h", "80%", "tsm", "--inline").Run()
 				prefix := detectTmuxPrefix()
 				_ = osexec.Command("tmux", "bind-key", "-T", "tsm-readonly",
 					prefix, "switch-client", "-T", "tsm-readonly-prefix").Run()
+				_ = osexec.Command("tmux", "bind-key", "-T", "tsm-readonly-prefix",
+					"d", "detach-client").Run()
 				// 切換到限制版 key table（只有 C-q 和 prefix+d）
 				_ = osexec.Command("tmux", "set-option", "key-table", "tsm-readonly").Run()
 			} else {

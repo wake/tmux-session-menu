@@ -306,6 +306,42 @@ func TestInstall_ContainsReadOnlyKeyTable(t *testing.T) {
 	}
 }
 
+func TestInstall_UpgradesOutdatedBlock(t *testing.T) {
+	tmp := t.TempDir()
+	confPath := filepath.Join(tmp, ".tmux.conf")
+	// 舊版 bind block（不含 tsm-readonly）
+	oldBlock := "set -g mouse on\n# [tsm] begin\nbind-key -n C-q display-popup -E -w 80% -h 80% \"tsm --inline\"\n# [tsm] end\n"
+	os.WriteFile(confPath, []byte(oldBlock), 0o644)
+
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return confPath, nil }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	result, err := Install(false)
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if !result.Changed {
+		t.Fatal("expected Changed=true for outdated block upgrade")
+	}
+
+	data, _ := os.ReadFile(confPath)
+	content := string(data)
+
+	// 原始內容應保留
+	if !strings.Contains(content, "set -g mouse on") {
+		t.Error("original content lost")
+	}
+	// 新 block 應包含 tsm-readonly
+	if !strings.Contains(content, "tsm-readonly") {
+		t.Error("upgraded block should contain tsm-readonly bindings")
+	}
+	// marker 應只出現一次
+	if strings.Count(content, markerBegin) != 1 {
+		t.Errorf("expected exactly 1 marker begin, got %d", strings.Count(content, markerBegin))
+	}
+}
+
 func TestRemoveBlock(t *testing.T) {
 	input := "line1\n# [tsm] begin\nbind-key stuff\n# [tsm] end\nline2\n"
 	got := removeBlock(input)

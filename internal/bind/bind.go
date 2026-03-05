@@ -121,7 +121,12 @@ func Install(dryRun bool) (*Result, error) {
 	}
 
 	if strings.Contains(content, markerBegin) {
-		return &Result{Changed: false, FilePath: confPath, Message: "Ctrl+Q 快捷鍵已存在"}, nil
+		// 檢查是否需要升級（block 內容是否與最新版一致）
+		if strings.Contains(content, bindBlock) {
+			return &Result{Changed: false, FilePath: confPath, Message: "Ctrl+Q 快捷鍵已存在"}, nil
+		}
+		// 移除舊 block，後續會重新寫入最新版
+		content = removeBlock(content)
 	}
 
 	newContent := content
