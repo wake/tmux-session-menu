@@ -273,6 +273,39 @@ func TestUninstall_NotInstalled(t *testing.T) {
 	}
 }
 
+func TestInstall_ContainsReadOnlyKeyTable(t *testing.T) {
+	tmp := t.TempDir()
+	confPath := filepath.Join(tmp, ".tmux.conf")
+
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return confPath, nil }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	_, err := Install(false)
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+
+	data, _ := os.ReadFile(confPath)
+	content := string(data)
+
+	// tsm-readonly key table 應包含 C-q 綁定（唯讀模式下唯一可用的主要按鍵）
+	if !strings.Contains(content, "-T tsm-readonly") {
+		t.Error("missing tsm-readonly key table binding")
+	}
+	if !strings.Contains(content, "tsm-readonly C-q") {
+		t.Error("missing C-q binding in tsm-readonly table")
+	}
+
+	// tsm-readonly-prefix key table 應包含 d → detach（安全出口）
+	if !strings.Contains(content, "-T tsm-readonly-prefix") {
+		t.Error("missing tsm-readonly-prefix key table binding")
+	}
+	if !strings.Contains(content, "tsm-readonly-prefix d detach-client") {
+		t.Error("missing detach-client binding in tsm-readonly-prefix table")
+	}
+}
+
 func TestRemoveBlock(t *testing.T) {
 	input := "line1\n# [tsm] begin\nbind-key stuff\n# [tsm] end\nline2\n"
 	got := removeBlock(input)

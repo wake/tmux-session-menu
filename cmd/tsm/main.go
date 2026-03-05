@@ -208,18 +208,20 @@ func runTUILegacy(cfg config.Config) {
 	}
 }
 
-// restoreTermTitle 清除 pane title 並重新啟用 tmux 的 automatic-rename，
-// 避免 tsm 退出後 iTerm tab 名稱卡住。
-func restoreTermTitle() {
-	if os.Getenv("TMUX") != "" {
-		fmt.Print("\033]2;\007") // OSC 2: 清除 pane title
-		_ = osexec.Command("tmux", "set-option", "-w", "automatic-rename", "on").Run()
+// detectTmuxPrefix 偵測目前的 tmux prefix key（預設 C-b）。
+func detectTmuxPrefix() string {
+	out, err := osexec.Command("tmux", "show-options", "-gv", "prefix").Output()
+	if err != nil {
+		return "C-b"
 	}
+	if p := strings.TrimSpace(string(out)); p != "" {
+		return p
+	}
+	return "C-b"
 }
 
 // handlePostTUI 處理 TUI 結束後的動作。
 func handlePostTUI(m ui.Model) {
-	restoreTermTitle()
 	if selected := m.Selected(); selected != "" {
 		switchToSession(selected, m.ReadOnly())
 		return
@@ -234,13 +236,22 @@ func switchToSession(name string, readOnly bool) {
 	if os.Getenv("TMUX") != "" {
 		err = osexec.Command("tmux", "switch-client", "-t", name).Run()
 		if err == nil {
+			// 修正 iTerm tab 名稱：對目標 session 的 window 重啟 automatic-rename
+			_ = osexec.Command("tmux", "set-option", "-w", "-t", name, "automatic-rename", "on").Run()
+
 			if readOnly {
-				// 使用 select-pane -d 停用 pane 輸入（取代 switch-client -r），
-				// 保留 tmux 按鍵綁定（如 Ctrl+Q 開啟 tsm）正常運作。
+				// 停用 pane 輸入
 				_ = osexec.Command("tmux", "select-pane", "-t", name, "-d").Run()
+				// 偵測 prefix 並動態綁定到 tsm-readonly table
+				prefix := detectTmuxPrefix()
+				_ = osexec.Command("tmux", "bind-key", "-T", "tsm-readonly",
+					prefix, "switch-client", "-T", "tsm-readonly-prefix").Run()
+				// 切換到限制版 key table（只有 C-q 和 prefix+d）
+				_ = osexec.Command("tmux", "set-option", "key-table", "tsm-readonly").Run()
 			} else {
-				// 確保 pane 輸入已啟用（可能先前被唯讀模式停用）
+				// 還原：啟用 pane 輸入 + 還原預設 key table
 				_ = osexec.Command("tmux", "select-pane", "-t", name, "-e").Run()
+				_ = osexec.Command("tmux", "set-option", "-u", "key-table").Run()
 			}
 		}
 	} else {
