@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -217,4 +218,114 @@ func TestNoteRendered(t *testing.T) {
 	m := NewModel(comps)
 	view := m.View()
 	assert.Contains(t, view, "這是附加說明")
+}
+
+// driveToPhraseDone 驅動 model 到 phaseDone 狀態。
+func driveToPhaseDone(t *testing.T, m Model) Model {
+	t.Helper()
+	// Enter → phaseRunning
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	require.NotNil(t, cmd)
+
+	// installMsg → runInstall
+	msg := cmd()
+	updated, cmd = m.Update(msg)
+	m = updated.(Model)
+	require.NotNil(t, cmd)
+
+	// resultMsg → phaseDone
+	msg = cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	require.Equal(t, phaseDone, m.Phase())
+	return m
+}
+
+func TestRestartPromptY(t *testing.T) {
+	called := false
+	m := NewModel(testComponents())
+	m.SetDaemonHint("daemon 需要重新啟動")
+	m.SetRestartFn(func() error {
+		called = true
+		return nil
+	})
+
+	m = driveToPhaseDone(t, m)
+
+	// phaseDone 時 View 應顯示 (Y/n) 提示
+	view := m.View()
+	assert.Contains(t, view, "重新啟動？(Y/n)")
+	assert.NotContains(t, view, "✓ daemon 已重新啟動")
+
+	// 按 Y → 執行 restartFn 並自動退出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
+	m = updated.(Model)
+	assert.NotNil(t, cmd, "應觸發 tea.Quit")
+	assert.True(t, called, "restartFn 應被呼叫")
+	assert.True(t, m.quitting)
+
+	// 最終 View 應顯示成功結果
+	view = m.View()
+	assert.Contains(t, view, "✓ daemon 已重新啟動")
+	assert.NotContains(t, view, "(Y/n)")
+}
+
+func TestRestartPromptEnter(t *testing.T) {
+	called := false
+	m := NewModel(testComponents())
+	m.SetDaemonHint("daemon 需要重新啟動")
+	m.SetRestartFn(func() error {
+		called = true
+		return nil
+	})
+
+	m = driveToPhaseDone(t, m)
+
+	// 按 Enter → 也應觸發重啟並自動退出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	assert.True(t, called)
+	assert.NotNil(t, cmd, "應觸發 tea.Quit")
+	assert.True(t, m.quitting)
+	assert.Contains(t, m.View(), "✓ daemon 已重新啟動")
+}
+
+func TestRestartPromptN(t *testing.T) {
+	called := false
+	m := NewModel(testComponents())
+	m.SetDaemonHint("daemon 需要重新啟動")
+	m.SetRestartFn(func() error {
+		called = true
+		return nil
+	})
+
+	m = driveToPhaseDone(t, m)
+
+	// 按 n → 直接退出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = updated.(Model)
+	assert.False(t, called, "restartFn 不應被呼叫")
+	assert.NotNil(t, cmd, "應觸發 tea.Quit")
+	assert.True(t, m.quitting)
+}
+
+func TestRestartPromptError(t *testing.T) {
+	m := NewModel(testComponents())
+	m.SetDaemonHint("daemon 需要重新啟動")
+	m.SetRestartFn(func() error {
+		return fmt.Errorf("connection refused")
+	})
+
+	m = driveToPhaseDone(t, m)
+
+	// 按 Y → restartFn 回傳 error，仍自動退出
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
+	m = updated.(Model)
+	assert.NotNil(t, cmd, "應觸發 tea.Quit")
+	assert.True(t, m.quitting)
+
+	view := m.View()
+	assert.Contains(t, view, "✗ daemon 重啟失敗: connection refused")
+	assert.NotContains(t, view, "(Y/n)")
 }

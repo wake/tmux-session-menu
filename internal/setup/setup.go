@@ -53,7 +53,10 @@ type Model struct {
 	phase      phase
 	results    []result
 	quitting   bool
-	daemonHint string // 安裝完成後顯示的 daemon 提示
+	daemonHint string       // 安裝完成後顯示的 daemon 提示
+	restartFn  func() error // 重啟 daemon 的 callback
+	restarted  bool         // 是否已執行重啟
+	restartErr error        // 重啟結果
 }
 
 // NewModel 建立 setup TUI model，根據各元件的 Checked 欄位初始化勾選狀態。
@@ -71,6 +74,11 @@ func NewModel(components []Component) Model {
 // SetDaemonHint 設定安裝完成後顯示的 daemon 提示訊息。
 func (m *Model) SetDaemonHint(hint string) {
 	m.daemonHint = hint
+}
+
+// SetRestartFn 設定重啟 daemon 的 callback。
+func (m *Model) SetRestartFn(fn func() error) {
+	m.restartFn = fn
 }
 
 func (m Model) Init() tea.Cmd {
@@ -101,8 +109,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.phase != phaseSelect {
-		// 完成或執行中，任意鍵退出
 		if m.phase == phaseDone {
+			// 有 restartFn 且尚未重啟：等待 Y/n 回應
+			if m.daemonHint != "" && m.restartFn != nil && !m.restarted {
+				switch msg.String() {
+				case "y", "Y", "enter":
+					m.restartErr = m.restartFn()
+					m.restarted = true
+					m.quitting = true
+					return m, tea.Quit
+				case "n", "N", "esc", "ctrl+c":
+					m.quitting = true
+					return m, tea.Quit
+				}
+				return m, nil
+			}
+			// 無 restartFn：任意鍵退出
 			m.quitting = true
 			return m, tea.Quit
 		}
@@ -151,7 +173,7 @@ func (m Model) runInstall() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	if m.quitting {
+	if m.quitting && !m.restarted {
 		return ""
 	}
 
@@ -209,11 +231,23 @@ func (m Model) View() string {
 		}
 		if m.daemonHint != "" {
 			b.WriteString("\n")
-			b.WriteString(warnStyle.Render("⚠ " + m.daemonHint))
-			b.WriteString("\n")
+			if m.restarted {
+				if m.restartErr != nil {
+					b.WriteString(errorStyle.Render(fmt.Sprintf("✗ daemon 重啟失敗: %v", m.restartErr)))
+				} else {
+					b.WriteString(successStyle.Render("✓ daemon 已重新啟動"))
+				}
+				b.WriteString("\n")
+			} else if m.restartFn != nil {
+				b.WriteString(warnStyle.Render("⚠ daemon 需要重新啟動"))
+				b.WriteString("  ")
+				b.WriteString(dimStyle.Render("重新啟動？(Y/n)"))
+				b.WriteString("\n")
+			} else {
+				b.WriteString(warnStyle.Render("⚠ " + m.daemonHint))
+				b.WriteString("\n")
+			}
 		}
-		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("按任意鍵退出"))
 	}
 
 	return b.String()

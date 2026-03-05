@@ -524,10 +524,25 @@ func runSetup(args []string) {
 
 	m := setup.NewModel(components)
 	if isDaemonRunning() {
-		m.SetDaemonHint("請手動重新啟動 daemon: tsm daemon restart")
+		m.SetDaemonHint("daemon 需要重新啟動以套用變更")
 	} else {
-		m.SetDaemonHint("請啟動 daemon: tsm daemon start")
+		m.SetDaemonHint("daemon 需要啟動以套用變更")
 	}
+	m.SetRestartFn(func() error {
+		// 抑制 daemon 的 stderr 輸出，避免干擾 Bubble Tea 渲染
+		origStderr := os.Stderr
+		if devNull, err := os.Open(os.DevNull); err == nil {
+			os.Stderr = devNull
+			defer func() { os.Stderr = origStderr; devNull.Close() }()
+		}
+		cfg := loadConfig()
+		if daemon.IsRunning(cfg) {
+			if err := daemon.Stop(cfg); err != nil {
+				return err
+			}
+		}
+		return daemon.Start(cfg)
+	})
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
