@@ -119,7 +119,7 @@ func TestClient_RenameSession(t *testing.T) {
 	client, cleanup := setupTestClient(t, exec)
 	defer cleanup()
 
-	err := client.RenameSession(context.Background(), "dev", "Development")
+	err := client.RenameSession(context.Background(), "dev", "Development", "")
 	require.NoError(t, err)
 }
 

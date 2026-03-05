@@ -278,55 +278,38 @@ func TestModel_View_CursorDoesNotTruncate(t *testing.T) {
 	assert.NotContains(t, view, "\033[K", "不應使用 Erase in Line（Bubble Tea 不支援）")
 }
 
-func TestModel_View_ToolbarFitsWidth(t *testing.T) {
+func TestModel_View_ToolbarFixedThreeLines(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 	m.SetItems([]ui.ListItem{
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", Status: tmux.StatusIdle}},
 	})
-	// 設定終端寬度為 50（較窄）
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
-	m = updated.(ui.Model)
 
 	view := m.View()
-	lines := strings.Split(view, "\n")
 
-	// 工具列應分行或縮短，每行可見寬度不超過終端寬度
-	for _, line := range lines {
-		if strings.Contains(line, "[n]") || strings.Contains(line, "[q]") {
-			w := ui.VisibleWidth(line)
-			assert.LessOrEqual(t, w, 50, "工具列行寬不應超過終端寬度: %q", line)
-		}
-	}
-
-	// 所有工具列快捷鍵都應出現（可能分佈在多行）
-	assert.Contains(t, view, "[n]", "工具列應包含 [n]")
-	assert.Contains(t, view, "[q]", "工具列應包含 [q]")
+	// 所有工具列快捷鍵都應出現
 	assert.Contains(t, view, "[/]", "工具列應包含 [/]")
-}
+	assert.Contains(t, view, "[n]", "工具列應包含 [n]")
+	assert.Contains(t, view, "[r]", "工具列應包含 [r]")
+	assert.Contains(t, view, "[d]", "工具列應包含 [d]")
+	assert.Contains(t, view, "[q]", "工具列應包含 [q]")
+	assert.Contains(t, view, "[e]", "工具列應包含 [e]")
+	assert.Contains(t, view, "[m]", "工具列應包含 [m]")
+	// [c] 已移除
+	assert.NotContains(t, view, "清除名稱", "工具列不應包含清除名稱")
 
-func TestModel_View_ToolbarWrapsAtWidth(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
-	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", Status: tmux.StatusIdle}},
-	})
-	// 設定非常窄的寬度，強制換行
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
-	m = updated.(ui.Model)
-
-	view := m.View()
-
-	// 工具列應分佈在多行
+	// 固定三行佈局
 	toolbarLines := 0
 	for _, line := range strings.Split(view, "\n") {
 		if strings.Contains(line, "[") && strings.Contains(line, "]") {
-			if strings.Contains(line, "新建") || strings.Contains(line, "刪除") ||
-				strings.Contains(line, "更名") || strings.Contains(line, "離開") ||
-				strings.Contains(line, "搜尋") || strings.Contains(line, "群組") {
+			if strings.Contains(line, "搜尋") || strings.Contains(line, "新建") ||
+				strings.Contains(line, "更名") || strings.Contains(line, "刪除") ||
+				strings.Contains(line, "向上") || strings.Contains(line, "向下") ||
+				strings.Contains(line, "退出") {
 				toolbarLines++
 			}
 		}
 	}
-	assert.GreaterOrEqual(t, toolbarLines, 2, "窄寬度時工具列應分多行")
+	assert.Equal(t, 3, toolbarLines, "工具列應固定三行")
 }
 
 func TestModel_View_AISummaryShown(t *testing.T) {
@@ -1034,17 +1017,20 @@ func TestModel_Rename_SetsCustomName(t *testing.T) {
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
 	})
 
-	// 按 r 進入 ModeInput（InputRenameSession）
+	// 按 r 進入 ModeInput（InputRenameSession）雙行模式
 	m, _ = applyKey(m, "r")
 	assert.Equal(t, ui.ModeInput, m.Mode(), "按 r 後應進入 ModeInput")
+	assert.Equal(t, 0, m.InputRow(), "預設焦點在第 0 行（名稱）")
 
-	// 輸入 "My Dev"
+	// 在第 0 行（名稱）輸入 "My Dev"
 	for _, ch := range "My Dev" {
 		m, _ = applyKey(m, string(ch))
 	}
-	assert.Equal(t, "My Dev", m.InputValue())
+	assert.Equal(t, "My Dev", m.DualInputValue(0))
+	// 第 1 行（ID）應預填 "dev"
+	assert.Equal(t, "dev", m.DualInputValue(1))
 
-	// 按 Enter 送出
+	// 按 Enter 送出（ID 不變）
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(ui.Model)
 
@@ -1057,6 +1043,64 @@ func TestModel_Rename_SetsCustomName(t *testing.T) {
 	assert.NoError(t, err)
 	if assert.Len(t, metas, 1) {
 		assert.Equal(t, "My Dev", metas[0].CustomName)
+	}
+}
+
+func TestModel_Rename_DualInput_SwitchRows(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", CustomName: "開發"}},
+	})
+
+	// 按 r 進入雙行模式
+	m, _ = applyKey(m, "r")
+	assert.Equal(t, 0, m.InputRow(), "預設在第 0 行")
+	assert.Equal(t, "開發", m.DualInputValue(0))
+	assert.Equal(t, "dev", m.DualInputValue(1))
+
+	// 按 Down 切到第 1 行
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.InputRow(), "按 Down 應切到第 1 行")
+
+	// 按 Up 切回第 0 行
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.InputRow(), "按 Up 應切回第 0 行")
+}
+
+func TestModel_Rename_ClearCustomName(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	// 先設定自訂名稱
+	st.SetCustomName("dev", "我的開發")
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", CustomName: "我的開發"}},
+	})
+
+	// 按 r 進入雙行模式
+	m, _ = applyKey(m, "r")
+	assert.Equal(t, "我的開發", m.DualInputValue(0))
+
+	// 清空第 0 行（名稱）
+	for range "我的開發" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(ui.Model)
+	}
+	assert.Equal(t, "", m.DualInputValue(0))
+
+	// 按 Enter 送出 → custom name 被清除
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.NotNil(t, cmd)
+
+	metas, _ := st.ListAllSessionMetas()
+	if assert.Len(t, metas, 1) {
+		assert.Equal(t, "", metas[0].CustomName, "custom_name 應已清空")
 	}
 }
 
@@ -1102,10 +1146,11 @@ func TestModel_Rename_PrefillsCurrentCustomName(t *testing.T) {
 		}},
 	})
 
-	// 按 r 應預填目前的 CustomName
+	// 按 r 應預填目前的 CustomName 和 session name
 	m, _ = applyKey(m, "r")
 	assert.Equal(t, ui.ModeInput, m.Mode())
-	assert.Equal(t, "原本名稱", m.InputValue(), "應預填目前的自訂名稱")
+	assert.Equal(t, "原本名稱", m.DualInputValue(0), "第 0 行應預填目前的自訂名稱")
+	assert.Equal(t, "dev", m.DualInputValue(1), "第 1 行應預填 session name")
 }
 
 // --- 新建群組 (g key) 相關測試 ---
@@ -2036,56 +2081,6 @@ func TestModel_Rename_OnGroup_Submit_Updates(t *testing.T) {
 	assert.Equal(t, "new-name", groups[0].Name)
 }
 
-// --- 清除 session 自訂名稱 (c key) 相關測試 ---
-
-func TestModel_ClearName_Session(t *testing.T) {
-	st := openUITestDB(t)
-	defer st.Close()
-
-	// 先設定自訂名稱
-	st.SetCustomName("dev", "我的開發")
-	metas, _ := st.ListAllSessionMetas()
-	assert.Equal(t, "我的開發", metas[0].CustomName)
-
-	m := ui.NewModel(ui.Deps{Store: st})
-	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", CustomName: "我的開發"}},
-	})
-
-	// 按 c 清除自訂名稱
-	m, cmd := applyKey(m, "c")
-
-	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
-	assert.Equal(t, ui.ModeNormal, m.Mode(), "應保持 ModeNormal")
-
-	// 驗證 store 中 custom_name 已清空
-	metas, _ = st.ListAllSessionMetas()
-	assert.Equal(t, "", metas[0].CustomName, "custom_name 應已清空")
-}
-
-func TestModel_ClearName_OnGroup_NoOp(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
-	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemGroup, Group: store.Group{Name: "dev"}},
-		{Type: ui.ItemSession, Session: tmux.Session{Name: "alpha"}},
-	})
-
-	// cursor 在群組上，按 c 應無動作
-	m, cmd := applyKey(m, "c")
-	assert.Nil(t, cmd, "群組上按 c 應無動作")
-	assert.Equal(t, ui.ModeNormal, m.Mode())
-}
-
-func TestModel_ClearName_NoCustomName_NoOp(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
-	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
-	})
-
-	// session 沒有自訂名稱，按 c 應無動作
-	m, cmd := applyKey(m, "c")
-	assert.Nil(t, cmd, "無自訂名稱時按 c 應無動作")
-}
 
 // --- 小箭頭展開/收合測試 ---
 

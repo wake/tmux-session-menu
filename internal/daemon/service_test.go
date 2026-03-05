@@ -181,6 +181,43 @@ func TestService_RenameSession(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestService_RenameSession_WithNewSessionName(t *testing.T) {
+	now := time.Now().Unix()
+	exec := &fakeExecutor{
+		listOutput: fmt.Sprintf("dev:$1:1:/home:0:%d", now),
+	}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 先設定自訂名稱
+	_, err := client.RenameSession(ctx, &tsmv1.RenameSessionRequest{
+		SessionName: "dev",
+		CustomName:  "開發環境",
+	})
+	require.NoError(t, err)
+
+	// 使用 new_session_name 重命名 tmux session
+	_, err = client.RenameSession(ctx, &tsmv1.RenameSessionRequest{
+		SessionName:    "dev",
+		CustomName:     "新名稱",
+		NewSessionName: "dev-renamed",
+	})
+	require.NoError(t, err)
+
+	// 驗證 tmux rename-session 有被呼叫
+	found := false
+	for _, call := range exec.calls {
+		if len(call) >= 4 && call[0] == "rename-session" {
+			found = true
+			assert.Equal(t, "dev", call[2])
+			assert.Equal(t, "dev-renamed", call[3])
+		}
+	}
+	assert.True(t, found, "應呼叫 tmux rename-session")
+}
+
 func TestService_DaemonStatus(t *testing.T) {
 	exec := &fakeExecutor{listOutput: ""}
 	client, _, cleanup := setupTestService(t, exec)

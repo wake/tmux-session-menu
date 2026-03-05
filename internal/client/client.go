@@ -95,11 +95,12 @@ func (c *Client) KillSession(ctx context.Context, name string) error {
 	return err
 }
 
-// RenameSession 設定 session 的自訂顯示名稱。
-func (c *Client) RenameSession(ctx context.Context, sessionName, customName string) error {
+// RenameSession 設定 session 的自訂顯示名稱，並可選擇重命名 tmux session。
+func (c *Client) RenameSession(ctx context.Context, sessionName, customName, newSessionName string) error {
 	_, err := c.rpc.RenameSession(ctx, &tsmv1.RenameSessionRequest{
-		SessionName: sessionName,
-		CustomName:  customName,
+		SessionName:    sessionName,
+		CustomName:     customName,
+		NewSessionName: newSessionName,
 	})
 	return err
 }

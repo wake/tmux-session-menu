@@ -158,6 +158,28 @@ func TestSetCustomName(t *testing.T) {
 	assert.Equal(t, "我的開發環境", metas[0].CustomName)
 }
 
+func TestRenameSessionKey(t *testing.T) {
+	s := newTestStore(t)
+
+	// 設定初始資料
+	require.NoError(t, s.CreateGroup("dev", 0))
+	groups, _ := s.ListGroups()
+	require.NoError(t, s.SetSessionGroup("old-name", groups[0].ID, 0))
+	require.NoError(t, s.SetCustomName("old-name", "我的專案"))
+
+	// 遷移 key
+	err := s.RenameSessionKey("old-name", "new-name")
+	require.NoError(t, err)
+
+	// 驗證舊 key 不存在、新 key 保留所有欄位
+	metas, err := s.ListAllSessionMetas()
+	require.NoError(t, err)
+	require.Len(t, metas, 1)
+	assert.Equal(t, "new-name", metas[0].SessionName)
+	assert.Equal(t, "我的專案", metas[0].CustomName)
+	assert.Equal(t, groups[0].ID, metas[0].GroupID)
+}
+
 func TestSetCustomName_Update(t *testing.T) {
 	s := newTestStore(t)
 

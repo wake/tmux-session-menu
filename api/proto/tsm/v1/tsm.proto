@@ -58,10 +58,11 @@ message KillSessionRequest {
   string name = 1;
 }
 
-// RenameSessionRequest 設定 session 的自訂顯示名稱。
+// RenameSessionRequest 設定 session 的自訂顯示名稱，並可選擇重命名 tmux session。
 message RenameSessionRequest {
   string session_name = 1;
   string custom_name = 2;
+  string new_session_name = 3;  // 重命名 tmux session（空 = 不變）
 }
 
 // RenameGroupRequest 重命名群組。

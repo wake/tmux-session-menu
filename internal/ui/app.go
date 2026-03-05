@@ -55,6 +55,10 @@ type Model struct {
 	inputPrompt string
 	textInput   textinput.Model
 
+	// 雙行輸入（用於 Session rename）
+	textInputs [2]textinput.Model // [0]=名稱(CustomName), [1]=ID(session name)
+	inputRow   int                // 目前焦點行 0 or 1
+
 	confirmPrompt string
 	confirmAction func() tea.Cmd
 
@@ -73,7 +77,16 @@ func NewModel(deps Deps) Model {
 	ti.PromptStyle = selectedStyle
 	ti.TextStyle = lipgloss.NewStyle()
 	ti.Cursor.Style = selectedStyle
-	return Model{deps: deps, textInput: ti}
+
+	var tis [2]textinput.Model
+	for i := range tis {
+		tis[i] = textinput.New()
+		tis[i].PromptStyle = selectedStyle
+		tis[i].TextStyle = lipgloss.NewStyle()
+		tis[i].Cursor.Style = selectedStyle
+	}
+
+	return Model{deps: deps, textInput: ti, textInputs: tis}
 }
 
 // SessionsMsg 是 loadSessions 完成後的回傳訊息。
@@ -116,6 +129,19 @@ func (m Model) InputTarget() InputTarget {
 // InputValue 回傳目前的輸入值（主要用於測試）。
 func (m Model) InputValue() string {
 	return m.textInput.Value()
+}
+
+// InputRow 回傳目前雙行輸入的焦點行（主要用於測試）。
+func (m Model) InputRow() int {
+	return m.inputRow
+}
+
+// DualInputValue 回傳雙行輸入指定行的值（主要用於測試）。
+func (m Model) DualInputValue(row int) string {
+	if row < 0 || row > 1 {
+		return ""
+	}
+	return m.textInputs[row].Value()
 }
 
 // Err 回傳目前的錯誤（主要用於測試）。
@@ -453,16 +479,18 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textInput.Focus()
 		return m, nil
 	case "r":
-		// 重命名：session 設定自訂名稱，群組重命名
+		// 重命名：session 雙行輸入（名稱+ID），群組單行重命名
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			item := m.items[m.cursor]
 			switch item.Type {
 			case ItemSession:
 				m.mode = ModeInput
 				m.inputTarget = InputRenameSession
-				m.inputPrompt = "自訂名稱"
-				m.textInput.SetValue(item.Session.CustomName)
-				m.textInput.Focus()
+				m.inputRow = 0
+				m.textInputs[0].SetValue(item.Session.CustomName)
+				m.textInputs[0].Focus()
+				m.textInputs[1].SetValue(item.Session.Name)
+				m.textInputs[1].Blur()
 			case ItemGroup:
 				m.mode = ModeInput
 				m.inputTarget = InputRenameGroup
@@ -495,28 +523,6 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pickerGroups = groups
 				m.pickerCursor = 0
 				m.pickerTarget = item.Session.Name
-			}
-		}
-		return m, nil
-	case "c":
-		// 清除 session 自訂名稱：僅對有 CustomName 的 ItemSession 生效
-		if m.cursor >= 0 && m.cursor < len(m.items) {
-			item := m.items[m.cursor]
-			if item.Type == ItemSession && item.Session.CustomName != "" {
-				name := item.Session.Name
-				if m.deps.Client != nil {
-					if err := m.deps.Client.RenameSession(context.Background(), name, ""); err != nil {
-						m.err = err
-					}
-					return m, nil // 變更透過 Watch stream 自動推送
-				}
-				if m.deps.Store != nil {
-					if err := m.deps.Store.SetCustomName(name, ""); err != nil {
-						m.err = err
-						return m, nil
-					}
-					return m, loadSessionsCmd(m.deps)
-				}
 			}
 		}
 		return m, nil
@@ -562,6 +568,11 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // updateInput 處理文字輸入模式的按鍵。
 func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// InputRenameSession 使用雙行輸入，特殊處理
+	if m.inputTarget == InputRenameSession {
+		return m.updateDualInput(msg)
+	}
+
 	switch msg.Type {
 	case tea.KeyEsc:
 		// 取消輸入，回到一般模式
@@ -591,26 +602,6 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			if m.deps.TmuxMgr != nil {
 				if err := m.deps.TmuxMgr.NewSession(value, ""); err != nil {
-					m.err = err
-					return m, nil
-				}
-			}
-			return m, loadSessionsCmd(m.deps)
-		case InputRenameSession:
-			m.mode = ModeNormal
-			if m.deps.Client != nil {
-				if m.cursor >= 0 && m.cursor < len(m.items) {
-					name := m.items[m.cursor].Session.Name
-					if err := m.deps.Client.RenameSession(context.Background(), name, value); err != nil {
-						m.err = err
-						return m, nil
-					}
-				}
-				return m, nil // 變更透過 Watch stream 自動推送
-			}
-			if m.deps.Store != nil && m.cursor >= 0 && m.cursor < len(m.items) {
-				name := m.items[m.cursor].Session.Name
-				if err := m.deps.Store.SetCustomName(name, value); err != nil {
 					m.err = err
 					return m, nil
 				}
@@ -659,6 +650,91 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// 委託給 textinput 處理所有其他按鍵（含空格、方向鍵、Backspace 等）
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
+// updateDualInput 處理 InputRenameSession 的雙行輸入按鍵。
+func (m Model) updateDualInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.mode = ModeNormal
+		m.textInputs[0].SetValue("")
+		m.textInputs[0].Blur()
+		m.textInputs[1].SetValue("")
+		m.textInputs[1].Blur()
+		return m, nil
+	case tea.KeyUp:
+		if m.inputRow > 0 {
+			m.inputRow = 0
+			m.textInputs[0].Focus()
+			m.textInputs[1].Blur()
+		}
+		return m, nil
+	case tea.KeyDown:
+		if m.inputRow < 1 {
+			m.inputRow = 1
+			m.textInputs[1].Focus()
+			m.textInputs[0].Blur()
+		}
+		return m, nil
+	case tea.KeyEnter:
+		if m.cursor < 0 || m.cursor >= len(m.items) {
+			m.mode = ModeNormal
+			return m, nil
+		}
+		origName := m.items[m.cursor].Session.Name
+		customName := m.textInputs[0].Value() // 允許空（清除自訂名稱）
+		newID := strings.TrimSpace(m.textInputs[1].Value())
+		if newID == "" {
+			newID = origName // ID 留空 = 不變更
+		}
+
+		m.textInputs[0].SetValue("")
+		m.textInputs[0].Blur()
+		m.textInputs[1].SetValue("")
+		m.textInputs[1].Blur()
+		m.mode = ModeNormal
+
+		newSessionName := ""
+		if newID != origName {
+			newSessionName = newID
+		}
+
+		if m.deps.Client != nil {
+			if err := m.deps.Client.RenameSession(context.Background(), origName, customName, newSessionName); err != nil {
+				m.err = err
+				return m, nil
+			}
+			return m, nil // 變更透過 Watch stream 自動推送
+		}
+		// 舊模式：先 tmux rename，再 store 遷移，再設 custom name
+		if newSessionName != "" && m.deps.TmuxMgr != nil {
+			if err := m.deps.TmuxMgr.RenameSession(origName, newSessionName); err != nil {
+				m.err = err
+				return m, nil
+			}
+			if m.deps.Store != nil {
+				if err := m.deps.Store.RenameSessionKey(origName, newSessionName); err != nil {
+					m.err = err
+					return m, nil
+				}
+			}
+		}
+		storeName := origName
+		if newSessionName != "" {
+			storeName = newSessionName
+		}
+		if m.deps.Store != nil {
+			if err := m.deps.Store.SetCustomName(storeName, customName); err != nil {
+				m.err = err
+				return m, nil
+			}
+		}
+		return m, loadSessionsCmd(m.deps)
+	default:
+		var cmd tea.Cmd
+		m.textInputs[m.inputRow], cmd = m.textInputs[m.inputRow].Update(msg)
 		return m, cmd
 	}
 }
@@ -1101,16 +1177,10 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// Header（依終端寬度決定顯示內容）
+	// Header
 	title := headerStyle.Render("tmux session menu")
 	ver := versionStyle.Render("  " + version.String())
-	hint := versionStyle.Render("  (↑↓/jk, Enter, q)")
-
-	header := title + ver
-	if m.width <= 0 || lipgloss.Width(header+hint) <= m.width {
-		header += hint
-	}
-	b.WriteString(header + "\n")
+	b.WriteString(title + ver + "\n")
 
 	// Items list
 	displayItems := m.visibleItems()
@@ -1236,11 +1306,32 @@ func (m Model) View() string {
 	// 模式相關的底部列
 	switch m.mode {
 	case ModeInput:
-		b.WriteString(fmt.Sprintf("\n  %s: %s\n",
-			selectedStyle.Render(m.inputPrompt),
-			m.textInput.View()))
-		b.WriteString(fmt.Sprintf("  %s\n",
-			dimStyle.Render("[Esc] 取消")))
+		if m.inputTarget == InputRenameSession {
+			// 雙行輸入
+			row0Marker := "  "
+			row1Marker := "  "
+			if m.inputRow == 0 {
+				row0Marker = selectedStyle.Render("► ")
+			} else {
+				row1Marker = selectedStyle.Render("► ")
+			}
+			b.WriteString(fmt.Sprintf("\n  %s%s: %s\n",
+				row0Marker,
+				selectedStyle.Render("名稱"),
+				m.textInputs[0].View()))
+			b.WriteString(fmt.Sprintf("  %s%s: %s\n",
+				row1Marker,
+				selectedStyle.Render("ID"),
+				m.textInputs[1].View()))
+			b.WriteString(fmt.Sprintf("  %s\n",
+				dimStyle.Render("[↑↓] 切換  [Enter] 確認  [Esc] 取消")))
+		} else {
+			b.WriteString(fmt.Sprintf("\n  %s: %s\n",
+				selectedStyle.Render(m.inputPrompt),
+				m.textInput.View()))
+			b.WriteString(fmt.Sprintf("  %s\n",
+				dimStyle.Render("[Esc] 取消")))
+		}
 	case ModeConfirm:
 		b.WriteString(fmt.Sprintf("\n  %s  %s\n",
 			selectedStyle.Render(m.confirmPrompt),
@@ -1268,55 +1359,20 @@ func (m Model) View() string {
 	return b.String()
 }
 
-// toolbarItem 代表工具列上的一個快捷鍵項目。
-type toolbarItem struct {
-	key  string // e.g. "[n]"
-	desc string // e.g. "新建"
-}
-
-// renderToolbar 渲染底部工具列，自動依終端寬度換行。
+// renderToolbar 渲染底部工具列，固定三行佈局。
 func (m Model) renderToolbar() string {
-	items := []toolbarItem{
-		{"[n]", "新建"}, {"[d]", "刪除"}, {"[r]", "更名"},
-		{"[c]", "清除名稱"}, {"[g]", "群組"}, {"[m]", "移動"},
-		{"[/]", "搜尋"}, {"[e]", "退出tmux"}, {"[q]", "離開"},
+	render := func(key, desc string) string {
+		return keyStyle.Render(key) + versionStyle.Render(" "+desc)
 	}
-
-	maxWidth := m.width
-	if maxWidth <= 0 {
-		maxWidth = 80
+	lines := []string{
+		fmt.Sprintf("  %s  %s  %s  %s",
+			render("[/]", "搜尋"), render("[n]", "新建"), render("[r]", "更名"), render("[d]", "刪除")),
+		fmt.Sprintf("  %s  %s  %s  %s  %s",
+			render("[↑/k]", "向上"), render("[↓/j]", "向下"), render("[m]", "搬移"), render("[K]", "上移"), render("[J]", "下移")),
+		fmt.Sprintf("  %s  %s",
+			render("[q]", "退出"), render("[e]", "退出tmux")),
 	}
-
-	var result strings.Builder
-	indent := "  "
-	lineWidth := 0
-	first := true
-
-	for _, item := range items {
-		seg := keyStyle.Render(item.key) + versionStyle.Render(" "+item.desc)
-		segWidth := lipgloss.Width(seg)
-
-		if first {
-			result.WriteString(indent)
-			lineWidth = 2 // indent width
-			first = false
-		} else {
-			// 兩個 space 間隔
-			nextWidth := lineWidth + 2 + segWidth
-			if nextWidth > maxWidth {
-				// 換行
-				result.WriteString("\n" + indent)
-				lineWidth = 2
-			} else {
-				result.WriteString("  ")
-				lineWidth += 2
-			}
-		}
-		result.WriteString(seg)
-		lineWidth += segWidth
-	}
-	result.WriteString("\n")
-	return result.String()
+	return strings.Join(lines, "\n") + "\n"
 }
 
 // cursorLine 將行內容加上背景色，並用空格填充到終端寬度。

@@ -157,6 +157,14 @@ func (s *Store) SetGroupOrder(id int64, sortOrder int) error {
 	return err
 }
 
+// RenameSessionKey 將 session_meta 中的 session_name 主鍵從 oldName 遷移到 newName。
+func (s *Store) RenameSessionKey(oldName, newName string) error {
+	_, err := s.db.Exec(
+		"UPDATE session_meta SET session_name = ? WHERE session_name = ?",
+		newName, oldName)
+	return err
+}
+
 // SetCustomName 設定 session 的自訂顯示名稱（UPSERT）。
 func (s *Store) SetCustomName(sessionName, customName string) error {
 	_, err := s.db.Exec(`

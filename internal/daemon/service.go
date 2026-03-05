@@ -80,12 +80,26 @@ func (s *Service) KillSession(_ context.Context, req *tsmv1.KillSessionRequest) 
 	return &emptypb.Empty{}, nil
 }
 
-// RenameSession 設定 session 的自訂顯示名稱。
+// RenameSession 設定 session 的自訂顯示名稱，並可選擇重命名 tmux session。
 func (s *Service) RenameSession(_ context.Context, req *tsmv1.RenameSessionRequest) (*emptypb.Empty, error) {
 	if s.store == nil {
 		return &emptypb.Empty{}, nil
 	}
-	if err := s.store.SetCustomName(req.SessionName, req.CustomName); err != nil {
+
+	sessionName := req.SessionName
+
+	// 若 NewSessionName 非空且與原名不同，先重命名 tmux session + 遷移 store key
+	if newName := req.NewSessionName; newName != "" && newName != sessionName {
+		if err := s.tmuxMgr.RenameSession(sessionName, newName); err != nil {
+			return nil, err
+		}
+		if err := s.store.RenameSessionKey(sessionName, newName); err != nil {
+			return nil, err
+		}
+		sessionName = newName
+	}
+
+	if err := s.store.SetCustomName(sessionName, req.CustomName); err != nil {
 		return nil, err
 	}
 	s.state.Scan()

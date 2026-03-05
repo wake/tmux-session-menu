@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v6.33.4
-// source: tsm/v1/tsm.proto
+// source: api/proto/tsm/v1/tsm.proto
 
 package tsmv1
 
@@ -60,11 +60,11 @@ func (x SessionStatus) String() string {
 }
 
 func (SessionStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_tsm_v1_tsm_proto_enumTypes[0].Descriptor()
+	return file_api_proto_tsm_v1_tsm_proto_enumTypes[0].Descriptor()
 }
 
 func (SessionStatus) Type() protoreflect.EnumType {
-	return &file_tsm_v1_tsm_proto_enumTypes[0]
+	return &file_api_proto_tsm_v1_tsm_proto_enumTypes[0]
 }
 
 func (x SessionStatus) Number() protoreflect.EnumNumber {
@@ -73,7 +73,7 @@ func (x SessionStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SessionStatus.Descriptor instead.
 func (SessionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{0}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{0}
 }
 
 // Session 對應 tmux.Session。
@@ -96,7 +96,7 @@ type Session struct {
 
 func (x *Session) Reset() {
 	*x = Session{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[0]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -108,7 +108,7 @@ func (x *Session) String() string {
 func (*Session) ProtoMessage() {}
 
 func (x *Session) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[0]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -121,7 +121,7 @@ func (x *Session) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Session.ProtoReflect.Descriptor instead.
 func (*Session) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{0}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Session) GetName() string {
@@ -214,7 +214,7 @@ type Group struct {
 
 func (x *Group) Reset() {
 	*x = Group{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[1]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -226,7 +226,7 @@ func (x *Group) String() string {
 func (*Group) ProtoMessage() {}
 
 func (x *Group) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[1]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -239,7 +239,7 @@ func (x *Group) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Group.ProtoReflect.Descriptor instead.
 func (*Group) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{1}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Group) GetId() int64 {
@@ -281,7 +281,7 @@ type StateSnapshot struct {
 
 func (x *StateSnapshot) Reset() {
 	*x = StateSnapshot{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[2]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -293,7 +293,7 @@ func (x *StateSnapshot) String() string {
 func (*StateSnapshot) ProtoMessage() {}
 
 func (x *StateSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[2]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -306,7 +306,7 @@ func (x *StateSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StateSnapshot.ProtoReflect.Descriptor instead.
 func (*StateSnapshot) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{2}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StateSnapshot) GetSessions() []*Session {
@@ -332,7 +332,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[3]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -344,7 +344,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[3]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -357,7 +357,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{3}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{3}
 }
 
 // CreateSessionRequest 建立新的 tmux session。
@@ -371,7 +371,7 @@ type CreateSessionRequest struct {
 
 func (x *CreateSessionRequest) Reset() {
 	*x = CreateSessionRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[4]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -383,7 +383,7 @@ func (x *CreateSessionRequest) String() string {
 func (*CreateSessionRequest) ProtoMessage() {}
 
 func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[4]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -396,7 +396,7 @@ func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateSessionRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{4}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateSessionRequest) GetName() string {
@@ -423,7 +423,7 @@ type KillSessionRequest struct {
 
 func (x *KillSessionRequest) Reset() {
 	*x = KillSessionRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[5]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +435,7 @@ func (x *KillSessionRequest) String() string {
 func (*KillSessionRequest) ProtoMessage() {}
 
 func (x *KillSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[5]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +448,7 @@ func (x *KillSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillSessionRequest.ProtoReflect.Descriptor instead.
 func (*KillSessionRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{5}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *KillSessionRequest) GetName() string {
@@ -458,18 +458,19 @@ func (x *KillSessionRequest) GetName() string {
 	return ""
 }
 
-// RenameSessionRequest 設定 session 的自訂顯示名稱。
+// RenameSessionRequest 設定 session 的自訂顯示名稱，並可選擇重命名 tmux session。
 type RenameSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionName   string                 `protobuf:"bytes,1,opt,name=session_name,json=sessionName,proto3" json:"session_name,omitempty"`
-	CustomName    string                 `protobuf:"bytes,2,opt,name=custom_name,json=customName,proto3" json:"custom_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionName    string                 `protobuf:"bytes,1,opt,name=session_name,json=sessionName,proto3" json:"session_name,omitempty"`
+	CustomName     string                 `protobuf:"bytes,2,opt,name=custom_name,json=customName,proto3" json:"custom_name,omitempty"`
+	NewSessionName string                 `protobuf:"bytes,3,opt,name=new_session_name,json=newSessionName,proto3" json:"new_session_name,omitempty"` // 重命名 tmux session（空 = 不變）
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *RenameSessionRequest) Reset() {
 	*x = RenameSessionRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[6]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -481,7 +482,7 @@ func (x *RenameSessionRequest) String() string {
 func (*RenameSessionRequest) ProtoMessage() {}
 
 func (x *RenameSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[6]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -494,7 +495,7 @@ func (x *RenameSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameSessionRequest.ProtoReflect.Descriptor instead.
 func (*RenameSessionRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{6}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RenameSessionRequest) GetSessionName() string {
@@ -511,6 +512,13 @@ func (x *RenameSessionRequest) GetCustomName() string {
 	return ""
 }
 
+func (x *RenameSessionRequest) GetNewSessionName() string {
+	if x != nil {
+		return x.NewSessionName
+	}
+	return ""
+}
+
 // RenameGroupRequest 重命名群組。
 type RenameGroupRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -522,7 +530,7 @@ type RenameGroupRequest struct {
 
 func (x *RenameGroupRequest) Reset() {
 	*x = RenameGroupRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[7]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -534,7 +542,7 @@ func (x *RenameGroupRequest) String() string {
 func (*RenameGroupRequest) ProtoMessage() {}
 
 func (x *RenameGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[7]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -547,7 +555,7 @@ func (x *RenameGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameGroupRequest.ProtoReflect.Descriptor instead.
 func (*RenameGroupRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{7}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RenameGroupRequest) GetGroupId() int64 {
@@ -575,7 +583,7 @@ type CreateGroupRequest struct {
 
 func (x *CreateGroupRequest) Reset() {
 	*x = CreateGroupRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[8]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -587,7 +595,7 @@ func (x *CreateGroupRequest) String() string {
 func (*CreateGroupRequest) ProtoMessage() {}
 
 func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[8]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -600,7 +608,7 @@ func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGroupRequest.ProtoReflect.Descriptor instead.
 func (*CreateGroupRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{8}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CreateGroupRequest) GetName() string {
@@ -629,7 +637,7 @@ type MoveSessionRequest struct {
 
 func (x *MoveSessionRequest) Reset() {
 	*x = MoveSessionRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[9]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +649,7 @@ func (x *MoveSessionRequest) String() string {
 func (*MoveSessionRequest) ProtoMessage() {}
 
 func (x *MoveSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[9]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +662,7 @@ func (x *MoveSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveSessionRequest.ProtoReflect.Descriptor instead.
 func (*MoveSessionRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{9}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MoveSessionRequest) GetSessionName() string {
@@ -694,7 +702,7 @@ type ReorderRequest struct {
 
 func (x *ReorderRequest) Reset() {
 	*x = ReorderRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[10]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -706,7 +714,7 @@ func (x *ReorderRequest) String() string {
 func (*ReorderRequest) ProtoMessage() {}
 
 func (x *ReorderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[10]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -719,7 +727,7 @@ func (x *ReorderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReorderRequest.ProtoReflect.Descriptor instead.
 func (*ReorderRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{10}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ReorderRequest) GetTarget() isReorderRequest_Target {
@@ -773,7 +781,7 @@ type GroupReorder struct {
 
 func (x *GroupReorder) Reset() {
 	*x = GroupReorder{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[11]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -785,7 +793,7 @@ func (x *GroupReorder) String() string {
 func (*GroupReorder) ProtoMessage() {}
 
 func (x *GroupReorder) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[11]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -798,7 +806,7 @@ func (x *GroupReorder) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupReorder.ProtoReflect.Descriptor instead.
 func (*GroupReorder) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{11}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GroupReorder) GetGroupId() int64 {
@@ -826,7 +834,7 @@ type SessionReorder struct {
 
 func (x *SessionReorder) Reset() {
 	*x = SessionReorder{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[12]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -838,7 +846,7 @@ func (x *SessionReorder) String() string {
 func (*SessionReorder) ProtoMessage() {}
 
 func (x *SessionReorder) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[12]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -851,7 +859,7 @@ func (x *SessionReorder) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionReorder.ProtoReflect.Descriptor instead.
 func (*SessionReorder) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{12}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SessionReorder) GetSessionName() string {
@@ -885,7 +893,7 @@ type ToggleCollapseRequest struct {
 
 func (x *ToggleCollapseRequest) Reset() {
 	*x = ToggleCollapseRequest{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[13]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -897,7 +905,7 @@ func (x *ToggleCollapseRequest) String() string {
 func (*ToggleCollapseRequest) ProtoMessage() {}
 
 func (x *ToggleCollapseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[13]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -910,7 +918,7 @@ func (x *ToggleCollapseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToggleCollapseRequest.ProtoReflect.Descriptor instead.
 func (*ToggleCollapseRequest) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{13}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ToggleCollapseRequest) GetGroupId() int64 {
@@ -932,7 +940,7 @@ type DaemonStatusResponse struct {
 
 func (x *DaemonStatusResponse) Reset() {
 	*x = DaemonStatusResponse{}
-	mi := &file_tsm_v1_tsm_proto_msgTypes[14]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -944,7 +952,7 @@ func (x *DaemonStatusResponse) String() string {
 func (*DaemonStatusResponse) ProtoMessage() {}
 
 func (x *DaemonStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tsm_v1_tsm_proto_msgTypes[14]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -957,7 +965,7 @@ func (x *DaemonStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonStatusResponse.ProtoReflect.Descriptor instead.
 func (*DaemonStatusResponse) Descriptor() ([]byte, []int) {
-	return file_tsm_v1_tsm_proto_rawDescGZIP(), []int{14}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DaemonStatusResponse) GetPid() int32 {
@@ -981,11 +989,11 @@ func (x *DaemonStatusResponse) GetWatcherCount() int32 {
 	return 0
 }
 
-var File_tsm_v1_tsm_proto protoreflect.FileDescriptor
+var File_api_proto_tsm_v1_tsm_proto protoreflect.FileDescriptor
 
-const file_tsm_v1_tsm_proto_rawDesc = "" +
+const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"\n" +
-	"\x10tsm/v1/tsm.proto\x12\x06tsm.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\x02\n" +
+	"\x1aapi/proto/tsm/v1/tsm.proto\x12\x06tsm.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\x02\n" +
 	"\aSession\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
@@ -1017,11 +1025,12 @@ const file_tsm_v1_tsm_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"(\n" +
 	"\x12KillSessionRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"Z\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x84\x01\n" +
 	"\x14RenameSessionRequest\x12!\n" +
 	"\fsession_name\x18\x01 \x01(\tR\vsessionName\x12\x1f\n" +
 	"\vcustom_name\x18\x02 \x01(\tR\n" +
-	"customName\"J\n" +
+	"customName\x12(\n" +
+	"\x10new_session_name\x18\x03 \x01(\tR\x0enewSessionName\"J\n" +
 	"\x12RenameGroupRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\x03R\agroupId\x12\x19\n" +
 	"\bnew_name\x18\x02 \x01(\tR\anewName\"G\n" +
@@ -1070,20 +1079,20 @@ const file_tsm_v1_tsm_proto_rawDesc = "" +
 	"\fDaemonStatus\x12\x16.google.protobuf.Empty\x1a\x1c.tsm.v1.DaemonStatusResponseB4Z2github.com/wake/tmux-session-menu/api/tsm/v1;tsmv1b\x06proto3"
 
 var (
-	file_tsm_v1_tsm_proto_rawDescOnce sync.Once
-	file_tsm_v1_tsm_proto_rawDescData []byte
+	file_api_proto_tsm_v1_tsm_proto_rawDescOnce sync.Once
+	file_api_proto_tsm_v1_tsm_proto_rawDescData []byte
 )
 
-func file_tsm_v1_tsm_proto_rawDescGZIP() []byte {
-	file_tsm_v1_tsm_proto_rawDescOnce.Do(func() {
-		file_tsm_v1_tsm_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_tsm_v1_tsm_proto_rawDesc), len(file_tsm_v1_tsm_proto_rawDesc)))
+func file_api_proto_tsm_v1_tsm_proto_rawDescGZIP() []byte {
+	file_api_proto_tsm_v1_tsm_proto_rawDescOnce.Do(func() {
+		file_api_proto_tsm_v1_tsm_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_proto_tsm_v1_tsm_proto_rawDesc), len(file_api_proto_tsm_v1_tsm_proto_rawDesc)))
 	})
-	return file_tsm_v1_tsm_proto_rawDescData
+	return file_api_proto_tsm_v1_tsm_proto_rawDescData
 }
 
-var file_tsm_v1_tsm_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tsm_v1_tsm_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
-var file_tsm_v1_tsm_proto_goTypes = []any{
+var file_api_proto_tsm_v1_tsm_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_api_proto_tsm_v1_tsm_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_api_proto_tsm_v1_tsm_proto_goTypes = []any{
 	(SessionStatus)(0),            // 0: tsm.v1.SessionStatus
 	(*Session)(nil),               // 1: tsm.v1.Session
 	(*Group)(nil),                 // 2: tsm.v1.Group
@@ -1103,7 +1112,7 @@ var file_tsm_v1_tsm_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
 	(*emptypb.Empty)(nil),         // 17: google.protobuf.Empty
 }
-var file_tsm_v1_tsm_proto_depIdxs = []int32{
+var file_api_proto_tsm_v1_tsm_proto_depIdxs = []int32{
 	16, // 0: tsm.v1.Session.activity:type_name -> google.protobuf.Timestamp
 	0,  // 1: tsm.v1.Session.status:type_name -> tsm.v1.SessionStatus
 	1,  // 2: tsm.v1.StateSnapshot.sessions:type_name -> tsm.v1.Session
@@ -1138,12 +1147,12 @@ var file_tsm_v1_tsm_proto_depIdxs = []int32{
 	0,  // [0:7] is the sub-list for field type_name
 }
 
-func init() { file_tsm_v1_tsm_proto_init() }
-func file_tsm_v1_tsm_proto_init() {
-	if File_tsm_v1_tsm_proto != nil {
+func init() { file_api_proto_tsm_v1_tsm_proto_init() }
+func file_api_proto_tsm_v1_tsm_proto_init() {
+	if File_api_proto_tsm_v1_tsm_proto != nil {
 		return
 	}
-	file_tsm_v1_tsm_proto_msgTypes[10].OneofWrappers = []any{
+	file_api_proto_tsm_v1_tsm_proto_msgTypes[10].OneofWrappers = []any{
 		(*ReorderRequest_Group)(nil),
 		(*ReorderRequest_Session)(nil),
 	}
@@ -1151,18 +1160,18 @@ func file_tsm_v1_tsm_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tsm_v1_tsm_proto_rawDesc), len(file_tsm_v1_tsm_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_tsm_v1_tsm_proto_rawDesc), len(file_api_proto_tsm_v1_tsm_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_tsm_v1_tsm_proto_goTypes,
-		DependencyIndexes: file_tsm_v1_tsm_proto_depIdxs,
-		EnumInfos:         file_tsm_v1_tsm_proto_enumTypes,
-		MessageInfos:      file_tsm_v1_tsm_proto_msgTypes,
+		GoTypes:           file_api_proto_tsm_v1_tsm_proto_goTypes,
+		DependencyIndexes: file_api_proto_tsm_v1_tsm_proto_depIdxs,
+		EnumInfos:         file_api_proto_tsm_v1_tsm_proto_enumTypes,
+		MessageInfos:      file_api_proto_tsm_v1_tsm_proto_msgTypes,
 	}.Build()
-	File_tsm_v1_tsm_proto = out.File
-	file_tsm_v1_tsm_proto_goTypes = nil
-	file_tsm_v1_tsm_proto_depIdxs = nil
+	File_api_proto_tsm_v1_tsm_proto = out.File
+	file_api_proto_tsm_v1_tsm_proto_goTypes = nil
+	file_api_proto_tsm_v1_tsm_proto_depIdxs = nil
 }

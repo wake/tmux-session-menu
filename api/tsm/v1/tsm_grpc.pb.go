@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v6.33.4
-// source: tsm/v1/tsm.proto
+// source: api/proto/tsm/v1/tsm.proto
 
 package tsmv1
 
@@ -476,5 +476,5 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "tsm/v1/tsm.proto",
+	Metadata: "api/proto/tsm/v1/tsm.proto",
 }
