@@ -304,6 +304,7 @@ func TestInstall_ContainsReadOnlyKeyTable(t *testing.T) {
 	if !strings.Contains(content, "tsm-readonly-prefix d detach-client") {
 		t.Error("missing detach-client binding in tsm-readonly-prefix table")
 	}
+
 }
 
 func TestInstall_UpgradesOutdatedBlock(t *testing.T) {

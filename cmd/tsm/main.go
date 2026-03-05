@@ -234,6 +234,13 @@ func handlePostTUI(m ui.Model) {
 func switchToSession(name string, readOnly bool) {
 	var err error
 	if os.Getenv("TMUX") != "" {
+		// 清除殘留的 CLIENT_READONLY（若存在），避免 display-popup 等指令被阻擋
+		if out, e := osexec.Command("tmux", "display-message", "-p", "#{client_readonly}").Output(); e == nil {
+			if strings.TrimSpace(string(out)) == "1" {
+				_ = osexec.Command("tmux", "switch-client", "-r").Run() // toggle off
+			}
+		}
+
 		err = osexec.Command("tmux", "switch-client", "-t", name).Run()
 		if err == nil {
 			// 修正 iTerm tab 名稱：對目標 session 的 window 重啟 automatic-rename
