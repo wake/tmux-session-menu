@@ -47,12 +47,12 @@ func (d *Daemon) Run() error {
 	sockPath := SocketPath(d.cfg)
 	pidPath := PidPath(d.cfg)
 
-	// 檢查是否已有 daemon 在執行
-	if isRunning(pidPath) {
-		return fmt.Errorf("daemon already running (pid file: %s)", pidPath)
+	// 防護：socket 或 PID 任一存活則拒絕啟動
+	if err := guardAlreadyRunning(sockPath, pidPath); err != nil {
+		return err
 	}
 
-	// 清理舊 socket
+	// socket 不可用（殘留或不存在），安全清理
 	os.Remove(sockPath)
 
 	// 寫入 PID 檔案
@@ -138,9 +138,10 @@ func (d *Daemon) Shutdown() {
 
 // Start 以 re-exec 模式在背景啟動 daemon。
 func Start(cfg config.Config) error {
+	sockPath := SocketPath(cfg)
 	pidPath := PidPath(cfg)
-	if isRunning(pidPath) {
-		return fmt.Errorf("daemon already running (pid file: %s)", pidPath)
+	if err := guardAlreadyRunning(sockPath, pidPath); err != nil {
+		return err
 	}
 
 	exe, err := os.Executable()
@@ -160,7 +161,6 @@ func Start(cfg config.Config) error {
 	go cmd.Wait()
 
 	// 輪詢等待 socket 就緒
-	sockPath := SocketPath(cfg)
 	ready := false
 	for i := 0; i < 30; i++ {
 		time.Sleep(100 * time.Millisecond)
@@ -262,6 +262,27 @@ func Status(cfg config.Config) (string, error) {
 // IsRunning 檢查 daemon 是否正在執行。
 func IsRunning(cfg config.Config) bool {
 	return isRunning(PidPath(cfg))
+}
+
+// socketAlive 嘗試連線到 unix socket，判斷是否有 daemon 正在服務。
+func socketAlive(sockPath string) bool {
+	conn, err := net.DialTimeout("unix", sockPath, 200*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// guardAlreadyRunning 檢查是否已有 daemon 在執行（socket 或 PID）。
+func guardAlreadyRunning(sockPath, pidPath string) error {
+	if socketAlive(sockPath) {
+		return fmt.Errorf("daemon already running (socket active: %s)", sockPath)
+	}
+	if isRunning(pidPath) {
+		return fmt.Errorf("daemon already running (pid file: %s)", pidPath)
+	}
+	return nil
 }
 
 // isRunning 檢查 PID 檔案中的程序是否仍在執行。
