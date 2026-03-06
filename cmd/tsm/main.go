@@ -208,20 +208,16 @@ func runTUILegacy(cfg config.Config) {
 	}
 }
 
-// detectTmuxPrefix 偵測目前的 tmux prefix key（預設 C-b）。
-func detectTmuxPrefix() string {
-	out, err := osexec.Command("tmux", "show-options", "-gv", "prefix").Output()
-	if err != nil {
-		return "C-b"
-	}
-	if p := strings.TrimSpace(string(out)); p != "" {
-		return p
-	}
-	return "C-b"
+// postTUIPath 回傳 post-TUI tmux 指令檔的路徑。
+func postTUIPath() string {
+	return config.ExpandPath("~/.config/tsm/post-tui.conf")
 }
 
 // handlePostTUI 處理 TUI 結束後的動作。
 func handlePostTUI(m ui.Model) {
+	// 先清除舊的 post-tui 檔案，避免 popup 關閉後執行過期指令
+	os.Remove(postTUIPath())
+
 	if selected := m.Selected(); selected != "" {
 		switchToSession(selected, m.ReadOnly())
 		return
@@ -241,29 +237,22 @@ func switchToSession(name string, readOnly bool) {
 			}
 		}
 
+		if readOnly {
+			// 停用 pane 輸入 — 必須在 switch-client 之前執行，
+			// 否則從 popup 內執行時會因 popup 關閉而被撤銷
+			_ = osexec.Command("tmux", "select-pane", "-t", name, "-d").Run()
+		} else {
+			// 還原：啟用 pane 輸入（同樣在 switch-client 前）
+			_ = osexec.Command("tmux", "select-pane", "-t", name, "-e").Run()
+		}
+
 		err = osexec.Command("tmux", "switch-client", "-t", name).Run()
 		if err == nil {
 			// 修正 iTerm tab 名稱：對目標 session 的 window 重啟 automatic-rename
 			_ = osexec.Command("tmux", "set-option", "-w", "-t", name, "automatic-rename", "on").Run()
 
-			if readOnly {
-				// 停用 pane 輸入
-				_ = osexec.Command("tmux", "select-pane", "-t", name, "-d").Run()
-				// 動態建立完整的 tsm-readonly key table（不依賴 tmux.conf）
-				_ = osexec.Command("tmux", "bind-key", "-T", "tsm-readonly",
-					"C-q", "display-popup", "-E", "-w", "80%", "-h", "80%", "tsm", "--inline").Run()
-				prefix := detectTmuxPrefix()
-				_ = osexec.Command("tmux", "bind-key", "-T", "tsm-readonly",
-					prefix, "switch-client", "-T", "tsm-readonly-prefix").Run()
-				_ = osexec.Command("tmux", "bind-key", "-T", "tsm-readonly-prefix",
-					"d", "detach-client").Run()
-				// 切換到限制版 key table（只有 C-q 和 prefix+d）
-				_ = osexec.Command("tmux", "set-option", "key-table", "tsm-readonly").Run()
-			} else {
-				// 還原：啟用 pane 輸入 + 還原預設 key table
-				_ = osexec.Command("tmux", "select-pane", "-t", name, "-e").Run()
-				_ = osexec.Command("tmux", "set-option", "-u", "key-table").Run()
-			}
+			// 清除可能殘留的舊版 key-table 設定（升級相容）
+			_ = osexec.Command("tmux", "set-option", "-t", name, "-u", "key-table").Run()
 		}
 	} else {
 		args := []string{"attach-session", "-t", name}

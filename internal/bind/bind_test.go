@@ -273,7 +273,7 @@ func TestUninstall_NotInstalled(t *testing.T) {
 	}
 }
 
-func TestInstall_ContainsReadOnlyKeyTable(t *testing.T) {
+func TestInstall_ContainsBindKey(t *testing.T) {
 	tmp := t.TempDir()
 	confPath := filepath.Join(tmp, ".tmux.conf")
 
@@ -289,29 +289,20 @@ func TestInstall_ContainsReadOnlyKeyTable(t *testing.T) {
 	data, _ := os.ReadFile(confPath)
 	content := string(data)
 
-	// tsm-readonly key table 應包含 C-q 綁定（唯讀模式下唯一可用的主要按鍵）
-	if !strings.Contains(content, "-T tsm-readonly") {
-		t.Error("missing tsm-readonly key table binding")
+	if !strings.Contains(content, `bind-key -n C-q`) {
+		t.Error("missing C-q binding")
 	}
-	if !strings.Contains(content, "tsm-readonly C-q") {
-		t.Error("missing C-q binding in tsm-readonly table")
+	// 不應包含已棄用的 tsm-readonly key table
+	if strings.Contains(content, "tsm-readonly") {
+		t.Error("should not contain deprecated tsm-readonly key table")
 	}
-
-	// tsm-readonly-prefix key table 應包含 d → detach（安全出口）
-	if !strings.Contains(content, "-T tsm-readonly-prefix") {
-		t.Error("missing tsm-readonly-prefix key table binding")
-	}
-	if !strings.Contains(content, "tsm-readonly-prefix d detach-client") {
-		t.Error("missing detach-client binding in tsm-readonly-prefix table")
-	}
-
 }
 
 func TestInstall_UpgradesOutdatedBlock(t *testing.T) {
 	tmp := t.TempDir()
 	confPath := filepath.Join(tmp, ".tmux.conf")
-	// 舊版 bind block（不含 tsm-readonly）
-	oldBlock := "set -g mouse on\n# [tsm] begin\nbind-key -n C-q display-popup -E -w 80% -h 80% \"tsm --inline\"\n# [tsm] end\n"
+	// 舊版 bind block（含已棄用的 tsm-readonly）
+	oldBlock := "set -g mouse on\n# [tsm] begin\nbind-key -n C-q display-popup -E -w 80% -h 80% \"tsm --inline\" \\; source-file -q ~/.config/tsm/post-tui.conf\nbind-key -T tsm-readonly C-q display-popup -E -w 80% -h 80% \"tsm --inline\"\n# [tsm] end\n"
 	os.WriteFile(confPath, []byte(oldBlock), 0o644)
 
 	origFn := tmuxConfPathFn
@@ -333,9 +324,9 @@ func TestInstall_UpgradesOutdatedBlock(t *testing.T) {
 	if !strings.Contains(content, "set -g mouse on") {
 		t.Error("original content lost")
 	}
-	// 新 block 應包含 tsm-readonly
-	if !strings.Contains(content, "tsm-readonly") {
-		t.Error("upgraded block should contain tsm-readonly bindings")
+	// 升級後不應包含 tsm-readonly
+	if strings.Contains(content, "tsm-readonly") {
+		t.Error("upgraded block should not contain deprecated tsm-readonly bindings")
 	}
 	// marker 應只出現一次
 	if strings.Count(content, markerBegin) != 1 {

@@ -15,8 +15,6 @@ const (
 	markerEnd   = "# [tsm] end"
 	bindBlock = `# [tsm] begin
 bind-key -n C-q display-popup -E -w 80% -h 80% "tsm --inline"
-bind-key -T tsm-readonly C-q display-popup -E -w 80% -h 80% "tsm --inline"
-bind-key -T tsm-readonly-prefix d detach-client
 # [tsm] end`
 )
 
