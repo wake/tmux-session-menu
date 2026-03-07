@@ -2499,3 +2499,27 @@ func TestModel_Sort_SessionWrapUp(t *testing.T) {
 
 	assert.Equal(t, 2, m.Cursor(), "cursor 應循環到底部")
 }
+
+// --- Remote 模式 Watch stream 斷線測試 ---
+
+func TestSnapshotMsg_RemoteMode_WatchError_SetsWatchFailed(t *testing.T) {
+	// Remote 模式下 Watch stream 錯誤應設定 watchFailed 並退出
+	m := ui.NewModel(ui.Deps{RemoteMode: true})
+	updated, cmd := m.Update(ui.SnapshotMsg{Err: fmt.Errorf("connection reset")})
+	rm := updated.(ui.Model)
+	assert.True(t, rm.WatchFailed(), "remote 模式 watch 錯誤應設定 watchFailed")
+	assert.NotNil(t, cmd) // 應為 tea.Quit
+}
+
+func TestSnapshotMsg_LocalMode_WatchError_DoesNotSetWatchFailed(t *testing.T) {
+	// 非 remote 模式下 Watch stream 錯誤應重試，不設定 watchFailed
+	m := ui.NewModel(ui.Deps{})
+	updated, _ := m.Update(ui.SnapshotMsg{Err: fmt.Errorf("connection reset")})
+	rm := updated.(ui.Model)
+	assert.False(t, rm.WatchFailed(), "本地模式不應設定 watchFailed")
+}
+
+func TestWatchFailed_InitiallyFalse(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	assert.False(t, m.WatchFailed())
+}

@@ -23,11 +23,12 @@ import (
 // 當 Client 不為 nil 時使用 gRPC daemon 模式；
 // 否則使用舊的 TmuxMgr+Store 直接模式（主要用於測試）。
 type Deps struct {
-	Client    *client.Client // gRPC client（daemon 模式）
-	TmuxMgr   *tmux.Manager  // 舊模式：直接 tmux 操作
-	Store     *store.Store   // 舊模式：直接 SQLite 操作
-	Cfg       config.Config
-	StatusDir string
+	Client     *client.Client // gRPC client（daemon 模式）
+	TmuxMgr    *tmux.Manager  // 舊模式：直接 tmux 操作
+	Store      *store.Store   // 舊模式：直接 SQLite 操作
+	Cfg        config.Config
+	StatusDir  string
+	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
 }
 
 // AnimTickMsg 表示動畫定時更新觸發。
@@ -42,10 +43,11 @@ type Model struct {
 	quitting bool
 
 	deps      Deps
-	selected  string // Enter 選取的 session name
-	readOnly_ bool   // R 鍵：唯讀進入 session
-	exitTmux_ bool   // ctrl+e：退出 tmux
-	err       error
+	selected    string // Enter 選取的 session name
+	readOnly_   bool   // R 鍵：唯讀進入 session
+	exitTmux_   bool   // ctrl+e：退出 tmux
+	watchFailed bool   // remote 模式 Watch stream 失敗
+	err         error
 
 	// 動畫
 	animFrame int // running 狀態閃動用的 frame 計數器
@@ -107,6 +109,9 @@ func (m Model) Items() []ListItem {
 func (m Model) Selected() string {
 	return m.selected
 }
+
+// WatchFailed 回傳 remote 模式下 Watch stream 是否失敗。
+func (m Model) WatchFailed() bool { return m.watchFailed }
 
 // ExitTmux 回傳使用者是否按了 ctrl+e 要求退出 tmux。
 func (m Model) ExitTmux() bool {
@@ -361,7 +366,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SnapshotMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
-			// Watch stream 斷線後延遲 2 秒重連
+			// Remote 模式：Watch 錯誤代表 tunnel 已斷，退出讓 runRemote 處理重連
+			if m.deps.RemoteMode {
+				m.watchFailed = true
+				m.quitting = true
+				return m, tea.Quit
+			}
+			// 本地模式：延遲 2 秒重連 Watch stream
 			if m.deps.Client != nil {
 				return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 					return reconnectMsg{}
