@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 )
@@ -23,10 +24,12 @@ func classifyExit(exitCode int) AttachResult {
 	return AttachDisconnected
 }
 
-// Attach 啟動 `ssh -t host tmux attach-session -t sessionName` 並阻塞至結束。
+// Attach 啟動 `ssh -t host` 並透過遠端 login shell 執行 tmux attach-session。
+// 使用 login shell 確保 PATH 包含 Homebrew 等非系統路徑。
 // 使用者正常 detach 回傳 AttachDetached，連線中斷回傳 AttachDisconnected。
 func Attach(host, sessionName string) AttachResult {
-	cmd := exec.Command("ssh", "-t", host, "tmux", "attach-session", "-t", sessionName)
+	remoteCmd := fmt.Sprintf("exec $SHELL -lc 'tmux attach-session -t %q'", sessionName)
+	cmd := exec.Command("ssh", "-t", host, remoteCmd)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
