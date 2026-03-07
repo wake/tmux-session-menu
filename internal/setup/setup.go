@@ -36,6 +36,7 @@ type Component struct {
 	Disabled    bool   // 禁用：不可切換/安裝
 	Note        string // 附加資訊，顯示在 Label 下方
 	FullOnly    bool   // 僅完整模式安裝
+	Installed   bool   // 偵測到已安裝
 }
 
 // result 記錄單一元件的安裝結果。
@@ -204,16 +205,23 @@ func (m Model) runInstall() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		var results []result
 		for i, comp := range m.components {
-			disabled := comp.Disabled || (comp.FullOnly && m.installMode == ModeClient)
-			if !m.checked[i] || disabled {
+			if comp.Disabled {
+				continue
+			}
+
+			isClientFullOnly := comp.FullOnly && m.installMode == ModeClient
+			if isClientFullOnly && comp.Installed && comp.UninstallFn != nil {
+				// [-] 已安裝的 FullOnly 元件在 client mode 執行移除
+				msg, err := comp.UninstallFn()
+				results = append(results, result{label: comp.Label, message: msg, err: err})
+				continue
+			}
+
+			if !m.checked[i] || isClientFullOnly {
 				continue
 			}
 			msg, err := comp.InstallFn()
-			results = append(results, result{
-				label:   comp.Label,
-				message: msg,
-				err:     err,
-			})
+			results = append(results, result{label: comp.Label, message: msg, err: err})
 		}
 		return resultMsg{results: results}
 	}
@@ -233,13 +241,21 @@ func (m Model) View() string {
 
 	switch m.phase {
 	case phaseSelect:
-		// 模式選擇器
-		modeName := "完整模式"
-		if m.installMode == ModeClient {
-			modeName = "純客戶端"
+		// 模式選擇器 — 水平 tab
+		tabs := []string{"完整模式", "純客戶端"}
+		b.WriteString("  ")
+		for i, tab := range tabs {
+			if i > 0 {
+				b.WriteString(dimStyle.Render(" │ "))
+			}
+			if i == int(m.installMode) {
+				b.WriteString(selectedStyle.Render(tab))
+			} else {
+				b.WriteString(dimStyle.Render(tab))
+			}
 		}
-		b.WriteString(fmt.Sprintf("  ◀ %s ▶  ", selectedStyle.Render(modeName)))
-		b.WriteString(dimStyle.Render("← → 切換模式"))
+		b.WriteString("    ")
+		b.WriteString(dimStyle.Render("← → 切換"))
 		b.WriteString("\n\n")
 		b.WriteString(dimStyle.Render("選擇要安裝的元件 (Space 切換, Enter 確認, q 取消)"))
 		b.WriteString("\n\n")
@@ -249,12 +265,28 @@ func (m Model) View() string {
 				cursor = selectedStyle.Render("► ")
 			}
 
-			disabled := comp.Disabled || (comp.FullOnly && m.installMode == ModeClient)
-			if disabled {
+			if comp.Disabled {
 				label := errorStyle.Render(comp.Label)
 				b.WriteString(fmt.Sprintf("%s[-] %s\n", cursor, label))
 				if comp.Note != "" {
 					b.WriteString(fmt.Sprintf("       %s\n", errorStyle.Render(comp.Note)))
+				}
+				continue
+			}
+
+			isClientFullOnly := comp.FullOnly && m.installMode == ModeClient
+			if isClientFullOnly {
+				if comp.Installed {
+					// [-] 已安裝，將移除
+					label := warnStyle.Render(comp.Label)
+					b.WriteString(fmt.Sprintf("%s[-] %s\n", cursor, label))
+					if comp.Note != "" {
+						b.WriteString(fmt.Sprintf("       %s\n", dimStyle.Render(comp.Note)))
+					}
+				} else {
+					// [ ] 未安裝，不適用
+					label := dimStyle.Render(comp.Label)
+					b.WriteString(fmt.Sprintf("%s[ ] %s\n", cursor, label))
 				}
 				continue
 			}

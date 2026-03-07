@@ -371,11 +371,16 @@ func TestInstallMode_LeftArrowToggles(t *testing.T) {
 func TestInstallMode_ViewShowsMode(t *testing.T) {
 	m := NewModel(fullClientComponents())
 	view := m.View()
+	// 兩個 tab 應同時可見
 	assert.Contains(t, view, "完整模式")
+	assert.Contains(t, view, "純客戶端")
+	assert.Contains(t, view, "│")
 
+	// 切到 client — 兩個 tab 仍可見
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(Model)
 	view = m.View()
+	assert.Contains(t, view, "完整模式")
 	assert.Contains(t, view, "純客戶端")
 }
 
@@ -410,15 +415,66 @@ func TestInstallMode_BackToFullRestoresChecked(t *testing.T) {
 }
 
 func TestInstallMode_ClientViewShowsDisabled(t *testing.T) {
-	m := NewModel(fullClientComponents())
+	comps := fullClientComponents()
+	comps[1].Installed = true // 標記為已安裝才會顯示 [-]
+	comps[2].Installed = true
+	m := NewModel(comps)
 
 	// 切到 client
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(Model)
 
 	view := m.View()
-	// FullOnly 元件在 client 模式應以 [-] 顯示
+	// FullOnly+Installed 元件在 client 模式應以 [-] 顯示
 	assert.Contains(t, view, "[-]")
+}
+
+func TestSymbol_InstalledFullOnlyInClient_ShowsDash(t *testing.T) {
+	comps := []Component{
+		{Label: "Binary", InstallFn: func() (string, error) { return "", nil }, Checked: true},
+		{Label: "Hooks", InstallFn: func() (string, error) { return "", nil },
+			UninstallFn: func() (string, error) { return "removed", nil },
+			Checked: false, FullOnly: true, Installed: true},
+	}
+	m := NewModel(comps)
+	m.SetInstallMode(ModeClient)
+
+	view := m.View()
+	assert.Contains(t, view, "[-]", "Installed+FullOnly+client 應顯示 [-]")
+}
+
+func TestSymbol_NotInstalledFullOnlyInClient_ShowsEmpty(t *testing.T) {
+	comps := []Component{
+		{Label: "Binary", InstallFn: func() (string, error) { return "", nil }, Checked: true},
+		{Label: "Hooks", InstallFn: func() (string, error) { return "", nil },
+			Checked: true, FullOnly: true, Installed: false},
+	}
+	m := NewModel(comps)
+	m.SetInstallMode(ModeClient)
+
+	view := m.View()
+	assert.Contains(t, view, "[ ]", "NotInstalled+FullOnly+client 應顯示 [ ]")
+	assert.NotContains(t, view, "[-]")
+}
+
+func TestRunInstall_ClientMode_UninstallsInstalledFullOnly(t *testing.T) {
+	uninstalled := false
+	comps := []Component{
+		{Label: "Binary", InstallFn: func() (string, error) { return "ok", nil }, Checked: true},
+		{Label: "Hooks",
+			InstallFn:   func() (string, error) { return "", nil },
+			UninstallFn: func() (string, error) { uninstalled = true; return "removed hooks", nil },
+			Checked: false, FullOnly: true, Installed: true},
+	}
+	m := NewModel(comps)
+	m.SetInstallMode(ModeClient)
+
+	m = driveToPhaseDone(t, m)
+
+	assert.True(t, uninstalled, "Installed+FullOnly+client 應執行 UninstallFn")
+	results := m.Results()
+	assert.Len(t, results, 2)
+	assert.Equal(t, "removed hooks", results[1].message)
 }
 
 func TestRestartPromptError(t *testing.T) {
