@@ -26,19 +26,19 @@ lint:
 PLATFORMS = darwin/arm64 darwin/amd64 linux/amd64 linux/arm64
 
 release:
-	@mkdir -p dist
+	@mkdir -p bin
 	@for platform in $(PLATFORMS); do \
 		os=$${platform%/*}; \
 		arch=$${platform#*/}; \
-		output=dist/$(BINARY)-$$os-$$arch; \
+		output=bin/$(BINARY)-$$os-$$arch; \
 		echo "Building $$output ..."; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
 			go build -ldflags "$(LDFLAGS)" -o $$output ./cmd/tsm || exit 1; \
 	done
-	@echo "Done. Binaries in dist/"
+	@echo "Done. Binaries in bin/"
 
 clean:
-	rm -rf bin/$(BINARY) dist coverage.out
+	rm -rf bin/ dist/ coverage.out
 
 install: build
 	install -m 755 bin/$(BINARY) $$(go env GOPATH)/bin/$(BINARY)
