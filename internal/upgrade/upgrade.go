@@ -3,6 +3,10 @@ package upgrade
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	osexec "os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -63,6 +67,75 @@ func NeedsUpgrade(current, latest string) bool {
 		}
 	}
 	return false
+}
+
+// releaseURL 為 GitHub releases API 的 URL。
+const releaseURL = "https://api.github.com/repos/wake/tmux-session-menu/releases/latest"
+
+// Upgrader 封裝升級操作的依賴（HTTP 下載 + 執行程式）。
+type Upgrader struct {
+	HTTPGet  func(url string) ([]byte, error)            // 下載檔案內容
+	ExecFunc func(binary string, args ...string) error    // 執行外部程式
+}
+
+// DefaultUpgrader 使用標準 HTTP 和 os/exec。
+func DefaultUpgrader() *Upgrader {
+	return &Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			resp, err := http.Get(url)
+			if err != nil {
+				return nil, err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+			}
+			return io.ReadAll(resp.Body)
+		},
+		ExecFunc: func(binary string, args ...string) error {
+			cmd := osexec.Command(binary, args...)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		},
+	}
+}
+
+// CheckLatest 從 GitHub 取得最新 release 資訊。
+func (u *Upgrader) CheckLatest() (Release, error) {
+	body, err := u.HTTPGet(releaseURL)
+	if err != nil {
+		return Release{}, fmt.Errorf("fetch latest release: %w", err)
+	}
+	return ParseRelease(body)
+}
+
+// Download 下載指定 URL 到暫存目錄並設為可執行。回傳暫存檔路徑。
+func (u *Upgrader) Download(url string) (string, error) {
+	data, err := u.HTTPGet(url)
+	if err != nil {
+		return "", fmt.Errorf("download binary: %w", err)
+	}
+
+	f, err := os.CreateTemp("", "tsm-upgrade-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+	path := f.Name()
+
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(path)
+		return "", fmt.Errorf("write binary: %w", err)
+	}
+	f.Close()
+
+	if err := os.Chmod(path, 0o755); err != nil {
+		os.Remove(path)
+		return "", fmt.Errorf("chmod: %w", err)
+	}
+	return path, nil
 }
 
 // parseVersion 將 "x.y.z" 解析為 [3]int，失敗回傳 nil。

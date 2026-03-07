@@ -1,6 +1,8 @@
 package upgrade
 
 import (
+	"fmt"
+	"os"
 	"runtime"
 	"testing"
 
@@ -69,4 +71,56 @@ func TestNeedsUpgrade_PatchBump(t *testing.T) {
 func TestNeedsUpgrade_DevVersion(t *testing.T) {
 	// "dev" 版本（未注入版本號）一律不升級
 	assert.False(t, NeedsUpgrade("dev", "0.15.0"))
+}
+
+func TestUpgrader_CheckLatest_Success(t *testing.T) {
+	u := &Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			assert.Contains(t, url, "api.github.com")
+			return []byte(`{"tag_name": "v1.0.0", "assets": [{"name": "tsm-linux-amd64", "browser_download_url": "https://example.com/dl"}]}`), nil
+		},
+	}
+	rel, err := u.CheckLatest()
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0", rel.Version)
+}
+
+func TestUpgrader_CheckLatest_NetworkError(t *testing.T) {
+	u := &Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return nil, fmt.Errorf("network error")
+		},
+	}
+	_, err := u.CheckLatest()
+	assert.Error(t, err)
+}
+
+func TestUpgrader_Download_Success(t *testing.T) {
+	content := []byte("#!/bin/sh\necho hello")
+	u := &Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return content, nil
+		},
+	}
+	path, err := u.Download("https://example.com/tsm-linux-amd64")
+	require.NoError(t, err)
+	defer os.Remove(path)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, content, data)
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.True(t, info.Mode()&0o111 != 0, "should be executable")
+}
+
+func TestUpgrader_Download_NetworkError(t *testing.T) {
+	u := &Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return nil, fmt.Errorf("download failed")
+		},
+	}
+	_, err := u.Download("https://example.com/bad")
+	assert.Error(t, err)
 }

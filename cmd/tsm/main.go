@@ -21,6 +21,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
+	"github.com/wake/tmux-session-menu/internal/upgrade"
 	"github.com/wake/tmux-session-menu/internal/version"
 )
 
@@ -107,6 +108,11 @@ func main() {
 
 	if args[0] == "setup" {
 		runSetup(args[1:])
+		return
+	}
+
+	if args[0] == "upgrade" {
+		runUpgrade()
 		return
 	}
 
@@ -571,6 +577,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  daemon status      顯示 daemon 狀態")
 	fmt.Fprintln(os.Stderr, "  hooks install      安裝 tsm hooks 到 Claude Code settings")
 	fmt.Fprintln(os.Stderr, "  hooks uninstall    移除 tsm hooks")
+	fmt.Fprintln(os.Stderr, "  upgrade            檢查並升級到最新版本")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  --version, -v      顯示版本號")
@@ -772,6 +779,48 @@ func runSetup(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func runUpgrade() {
+	u := upgrade.DefaultUpgrader()
+
+	fmt.Printf("目前版本: %s\n", version.Version)
+	fmt.Println("檢查最新版本...")
+
+	rel, err := u.CheckLatest()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 無法取得最新版本: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !upgrade.NeedsUpgrade(version.Version, rel.Version) {
+		fmt.Printf("已是最新版本 v%s\n", version.Version)
+		return
+	}
+
+	fmt.Printf("發現新版本: v%s\n", rel.Version)
+
+	asset := upgrade.AssetName()
+	url, ok := rel.Assets[asset]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Error: 找不到適用於此平台的檔案 (%s)\n", asset)
+		os.Exit(1)
+	}
+
+	fmt.Printf("下載 %s ...\n", asset)
+	tmpPath, err := u.Download(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 下載失敗: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("啟動安裝程式...")
+	if err := u.ExecFunc(tmpPath, "setup"); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 無法執行安裝程式: %v\n", err)
+		os.Remove(tmpPath)
+		os.Exit(1)
+	}
+	os.Remove(tmpPath)
 }
 
 // isDaemonRunning 檢查 daemon 是否正在運行。
