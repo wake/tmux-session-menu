@@ -15,6 +15,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/daemon"
 	"github.com/wake/tmux-session-menu/internal/hooks"
+	"github.com/wake/tmux-session-menu/internal/launcher"
 	"github.com/wake/tmux-session-menu/internal/remote"
 	"github.com/wake/tmux-session-menu/internal/selfinstall"
 	"github.com/wake/tmux-session-menu/internal/setup"
@@ -122,6 +123,13 @@ func main() {
 
 // runWithMode 根據指定模式啟動 TUI
 func runWithMode(mode runMode) {
+	// Client mode：顯示 launcher 選單
+	dataDir := config.ExpandPath(config.Default().DataDir)
+	if config.LoadInstallMode(dataDir) == config.ModeClient {
+		runClientLauncher(dataDir)
+		return
+	}
+
 	// 自動偵測：若在 tmux 內，使用 popup 模式
 	if mode == modeAuto && os.Getenv("TMUX") != "" {
 		mode = modePopup
@@ -146,6 +154,42 @@ func runWithMode(mode runMode) {
 	}
 
 	runTUI()
+}
+
+func runClientLauncher(dataDir string) {
+	placeholder := config.LoadLastRemoteHost(dataDir)
+	m := launcher.NewModel(placeholder)
+	p := tea.NewProgram(m)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fm, ok := finalModel.(launcher.Model)
+	if !ok || fm.Choice() == launcher.ChoiceNone {
+		return
+	}
+
+	switch fm.Choice() {
+	case launcher.ChoiceRemote:
+		host := fm.Host()
+		_ = config.SaveLastRemoteHost(dataDir, host)
+		runRemote(host)
+
+	case launcher.ChoiceLocal:
+		cfg := loadConfig()
+		cfg.InTmux = os.Getenv("TMUX") != ""
+		cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+		runTUILegacy(cfg)
+
+	case launcher.ChoiceFullSetup:
+		// 切換到 full mode 並執行 setup
+		_ = config.SaveInstallMode(dataDir, config.ModeFull)
+		runSetup(nil)
+		runTUI()
+	}
 }
 
 func runRemote(host string) {
