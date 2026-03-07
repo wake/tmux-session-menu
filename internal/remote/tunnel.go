@@ -18,10 +18,16 @@ func LocalSocketPath(host string) string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("tsm-%x.sock", h[:8]))
 }
 
-// tunnelArgs 建構 SSH 通道轉發所需的命令列參數。
+// tunnelArgs 建構 SSH 通道轉發所需的命令列參數，含 keepalive 偵測斷線。
 func tunnelArgs(host, localSock, remoteSock string) []string {
 	fwd := fmt.Sprintf("%s:%s", localSock, remoteSock)
-	return []string{"ssh", "-N", "-o", "ExitOnForwardFailure=yes", "-L", fwd, host}
+	return []string{
+		"ssh", "-N",
+		"-o", "ExitOnForwardFailure=yes",
+		"-o", "ServerAliveInterval=5",
+		"-o", "ServerAliveCountMax=3",
+		"-L", fwd, host,
+	}
 }
 
 // CmdResult 封裝命令執行的輸出與錯誤。

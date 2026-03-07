@@ -21,9 +21,18 @@ type ReconnSessionGoneMsg struct{}
 // AnimTickMsg 用於重連動畫的 tick 訊息。
 type AnimTickMsg struct{}
 
+// CountdownTickMsg 倒數計時的每秒 tick。
+type CountdownTickMsg struct{}
+
 func animTickCmd() tea.Cmd {
 	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg {
 		return AnimTickMsg{}
+	})
+}
+
+func countdownTickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return CountdownTickMsg{}
 	})
 }
 
@@ -34,6 +43,7 @@ type ReconnectModel struct {
 	state      ReconnState
 	attempt    int
 	frame      int
+	countdown  int
 	quit       bool
 	backToMenu bool
 	width      int
@@ -43,9 +53,10 @@ type ReconnectModel struct {
 // NewReconnectModel 建立新的重連 modal model。
 func NewReconnectModel(host, session string) ReconnectModel {
 	return ReconnectModel{
-		host:    host,
-		session: session,
-		state:   StateDisconnected,
+		host:      host,
+		session:   session,
+		state:     StateDisconnected,
+		countdown: CountdownSec,
 	}
 }
 
@@ -58,11 +69,14 @@ func (m ReconnectModel) Attempt() int { return m.attempt }
 // Quit 回傳使用者是否選擇退出。
 func (m ReconnectModel) Quit() bool { return m.quit }
 
+// Countdown 回傳目前倒數秒數。
+func (m ReconnectModel) Countdown() int { return m.countdown }
+
 // BackToMenu 回傳是否應回到選單。
 func (m ReconnectModel) BackToMenu() bool { return m.backToMenu }
 
-// Init 實作 tea.Model 介面。
-func (m ReconnectModel) Init() tea.Cmd { return nil }
+// Init 實作 tea.Model 介面，啟動倒數計時。
+func (m ReconnectModel) Init() tea.Cmd { return countdownTickCmd() }
 
 // Update 處理訊息更新。
 func (m ReconnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -71,7 +85,43 @@ func (m ReconnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+	case CountdownTickMsg:
+		if m.countdown > 1 {
+			m.countdown--
+			return m, countdownTickCmd()
+		}
+		if m.countdown == 1 {
+			m.countdown = 0
+			m.state = StateAskContinue
+			return m, nil
+		}
+		return m, nil
 	case tea.KeyMsg:
+		// StateAskContinue 時優先處理 Y/N
+		if m.state == StateAskContinue {
+			switch msg.Type {
+			case tea.KeyEscape:
+				m.backToMenu = true
+				return m, tea.Quit
+			case tea.KeyRunes:
+				switch string(msg.Runes) {
+				case "y", "Y":
+					m.countdown = CountdownSec
+					m.state = StateConnecting
+					return m, countdownTickCmd()
+				case "n", "N":
+					m.quit = true
+					return m, tea.Quit
+				case "q":
+					m.quit = true
+					return m, tea.Quit
+				}
+			case tea.KeyCtrlC:
+				m.quit = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		switch msg.Type {
 		case tea.KeyEscape:
 			m.backToMenu = true
@@ -105,7 +155,7 @@ func (m ReconnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View 渲染重連 modal 畫面。
+// View 渲染重連 modal 畫面（1/2 寬高的 popup）。
 func (m ReconnectModel) View() string {
 	if m.quit || m.backToMenu {
 		return ""
@@ -115,6 +165,7 @@ func (m ReconnectModel) View() string {
 	iconDisconnected := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff5555"))
 	iconConnecting := lipgloss.NewStyle().Foreground(lipgloss.Color("#f1fa8c"))
 	iconConnected := lipgloss.NewStyle().Foreground(lipgloss.Color("#50fa7b"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6272a4"))
 
 	switch m.state {
 	case StateDisconnected:
@@ -123,20 +174,41 @@ func (m ReconnectModel) View() string {
 	case StateConnecting:
 		frames := []string{"◐", "◓", "◑", "◒"}
 		icon = iconConnecting.Render(frames[m.frame%len(frames)])
-		status = fmt.Sprintf("重新連線中... (第 %d 次)", m.attempt)
+		status = fmt.Sprintf("重新連線中...  %d 秒", m.countdown)
 	case StateConnected:
 		icon = iconConnected.Render("●")
 		status = "已連線"
+	case StateAskContinue:
+		icon = iconDisconnected.Render("✗")
+		status = "連線逾時"
 	}
 
-	line1 := fmt.Sprintf("  %s %s", icon, status)
-	line2 := lipgloss.NewStyle().Foreground(lipgloss.Color("#6272a4")).Render(
-		"  [Esc] 回到選單  [q] 退出")
+	var lines []string
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("  %s %s", icon, status))
+	lines = append(lines, "")
 
-	box := strings.Join([]string{"", line1, "", line2, ""}, "\n")
+	if m.state == StateAskContinue {
+		lines = append(lines, "  是否繼續嘗試連線？")
+		lines = append(lines, "")
+		lines = append(lines, dimStyle.Render("  [Y] 繼續  [N] 退出  [Esc] 回到選單"))
+	} else {
+		lines = append(lines, dimStyle.Render("  [Esc] 回到選單  [q] 退出"))
+	}
+	lines = append(lines, "")
+
+	content := strings.Join(lines, "\n")
 
 	if m.width > 0 && m.height > 0 {
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+		popupW := m.width / 2
+		popupH := m.height / 2
+		bordered := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#6272a4")).
+			Width(popupW).
+			Height(popupH).
+			Render(content)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, bordered)
 	}
-	return box
+	return content
 }

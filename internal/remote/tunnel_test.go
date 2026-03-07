@@ -32,10 +32,19 @@ func TestLocalSocketPath_Format(t *testing.T) {
 func TestTunnelArgs(t *testing.T) {
 	args := tunnelArgs("user@host", "/tmp/local.sock", "/home/user/.config/tsm/tsm.sock")
 	assert.Equal(t, []string{
-		"ssh", "-N", "-o", "ExitOnForwardFailure=yes",
+		"ssh", "-N",
+		"-o", "ExitOnForwardFailure=yes",
+		"-o", "ServerAliveInterval=5",
+		"-o", "ServerAliveCountMax=3",
 		"-L", "/tmp/local.sock:/home/user/.config/tsm/tsm.sock",
 		"user@host",
 	}, args)
+}
+
+func TestTunnelArgs_IncludesKeepalive(t *testing.T) {
+	args := tunnelArgs("user@host", "/tmp/l.sock", "/home/u/r.sock")
+	assert.Contains(t, args, "ServerAliveInterval=5")
+	assert.Contains(t, args, "ServerAliveCountMax=3")
 }
 
 func TestTunnel_Close_RemovesSocket(t *testing.T) {

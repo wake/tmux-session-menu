@@ -205,15 +205,12 @@ func runRemote(host string) {
 		resultCh := make(chan reconnResult, 1)
 		ctx, cancel := context.WithCancel(context.Background())
 
-		// 背景執行重連（可透過 ctx 取消）
+		// 背景每秒嘗試重連（可透過 ctx 取消）
 		go func() {
 			defer close(resultCh)
-			attempt := 0
 			for {
-				attempt++
-				reconnProg.Send(remote.ReconnStateMsg{State: remote.StateConnecting, Attempt: attempt})
+				reconnProg.Send(remote.ReconnStateMsg{State: remote.StateConnecting})
 
-				// 檢查是否已取消
 				select {
 				case <-ctx.Done():
 					return
@@ -223,11 +220,10 @@ func runRemote(host string) {
 				// 重建 SSH tunnel
 				tun.Close()
 				if err := tun.Start(); err != nil {
-					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
 					select {
 					case <-ctx.Done():
 						return
-					case <-time.After(wait):
+					case <-time.After(time.Second):
 					}
 					continue
 				}
@@ -235,11 +231,10 @@ func runRemote(host string) {
 				// 重新連線 gRPC
 				newC, err := client.DialSocket(tun.LocalSocket())
 				if err != nil {
-					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
 					select {
 					case <-ctx.Done():
 						return
-					case <-time.After(wait):
+					case <-time.After(time.Second):
 					}
 					continue
 				}
@@ -250,11 +245,10 @@ func runRemote(host string) {
 				dcancel()
 				if err != nil {
 					newC.Close()
-					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
 					select {
 					case <-ctx.Done():
 						return
-					case <-time.After(wait):
+					case <-time.After(time.Second):
 					}
 					continue
 				}

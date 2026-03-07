@@ -30,4 +30,9 @@ func TestReconnState_String(t *testing.T) {
 	assert.Equal(t, "disconnected", StateDisconnected.String())
 	assert.Equal(t, "connecting", StateConnecting.String())
 	assert.Equal(t, "connected", StateConnected.String())
+	assert.Equal(t, "ask_continue", StateAskContinue.String())
+}
+
+func TestCountdownSec_Is60(t *testing.T) {
+	assert.Equal(t, 60, CountdownSec)
 }

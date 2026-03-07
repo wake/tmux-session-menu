@@ -18,6 +18,13 @@ func TestReconnectModel_InitialState(t *testing.T) {
 	assert.Equal(t, 0, m.Attempt())
 	assert.False(t, m.Quit())
 	assert.False(t, m.BackToMenu())
+	assert.Equal(t, CountdownSec, m.Countdown())
+}
+
+func TestReconnectModel_Init_ReturnsCountdownTick(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	cmd := m.Init()
+	assert.NotNil(t, cmd)
 }
 
 func TestReconnectModel_EscGoesBackToMenu(t *testing.T) {
@@ -62,4 +69,88 @@ func TestReconnectModel_SessionGone_BackToMenu(t *testing.T) {
 	rm := updated.(ReconnectModel)
 	assert.True(t, rm.BackToMenu())
 	assert.NotNil(t, cmd)
+}
+
+// --- 倒數計時測試 ---
+
+func TestReconnectModel_CountdownTick_Decrements(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	updated, cmd := m.Update(CountdownTickMsg{})
+	rm := updated.(ReconnectModel)
+	assert.Equal(t, CountdownSec-1, rm.Countdown())
+	assert.NotNil(t, cmd) // 應繼續下一次 tick
+}
+
+func TestReconnectModel_CountdownZero_EntersAskContinue(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.countdown = 1
+	updated, cmd := m.Update(CountdownTickMsg{})
+	rm := updated.(ReconnectModel)
+	assert.Equal(t, 0, rm.Countdown())
+	assert.Equal(t, StateAskContinue, rm.State())
+	assert.Nil(t, cmd) // 停止 tick
+}
+
+func TestReconnectModel_AskContinue_YRestartsCountdown(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.state = StateAskContinue
+	m.countdown = 0
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	rm := updated.(ReconnectModel)
+	assert.Equal(t, CountdownSec, rm.Countdown())
+	assert.Equal(t, StateConnecting, rm.State())
+	assert.NotNil(t, cmd) // 重啟 countdown tick
+}
+
+func TestReconnectModel_AskContinue_NQuits(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.state = StateAskContinue
+	m.countdown = 0
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	rm := updated.(ReconnectModel)
+	assert.True(t, rm.Quit())
+	assert.NotNil(t, cmd) // tea.Quit
+}
+
+func TestReconnectModel_AskContinue_EscBackToMenu(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.state = StateAskContinue
+	m.countdown = 0
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	rm := updated.(ReconnectModel)
+	assert.True(t, rm.BackToMenu())
+	assert.NotNil(t, cmd) // tea.Quit
+}
+
+func TestReconnectModel_Connected_DuringAskContinue(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.state = StateAskContinue
+	m.countdown = 0
+	updated, cmd := m.Update(ReconnStateMsg{State: StateConnected})
+	rm := updated.(ReconnectModel)
+	assert.Equal(t, StateConnected, rm.State())
+	assert.NotNil(t, cmd) // tea.Quit（自動接回）
+}
+
+func TestReconnectModel_View_ShowsCountdown(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.state = StateConnecting
+	view := m.View()
+	assert.Contains(t, view, "60")
+}
+
+func TestReconnectModel_View_AskContinue_ShowsPrompt(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.state = StateAskContinue
+	m.countdown = 0
+	view := m.View()
+	assert.Contains(t, view, "是否繼續")
+}
+
+func TestReconnectModel_View_HasBorder(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.width = 80
+	m.height = 24
+	view := m.View()
+	assert.Contains(t, view, "╭")
 }

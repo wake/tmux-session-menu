@@ -12,7 +12,12 @@ const (
 	StateConnecting
 	// StateConnected 表示已連線。
 	StateConnected
+	// StateAskContinue 表示倒數結束，詢問使用者是否繼續。
+	StateAskContinue
 )
+
+// CountdownSec 是重連倒數計時的秒數。
+const CountdownSec = 60
 
 // String 回傳狀態名稱。
 func (s ReconnState) String() string {
@@ -23,6 +28,8 @@ func (s ReconnState) String() string {
 		return "connecting"
 	case StateConnected:
 		return "connected"
+	case StateAskContinue:
+		return "ask_continue"
 	default:
 		return "unknown"
 	}
