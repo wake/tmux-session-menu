@@ -162,6 +162,7 @@ func BuildComponent() setup.Component {
 		return setup.Component{
 			Label:       "Claude Code hooks",
 			Checked:     true,
+			Note:        fmt.Sprintf("將寫入 %s", settingsPath),
 			InstallFn:   installFn,
 			UninstallFn: uninstallFn,
 		}

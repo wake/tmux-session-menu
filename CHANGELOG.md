@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.19.1] - 2026-03-08
+
+### Fixed
+- Claude Code hooks 元件缺少寫入路徑說明（新增 Note 顯示 settings.json 路徑）
+- 主 TUI 與 setup TUI 左側增加 1 格內距，避免內容貼齊邊框
+
 ## [0.19.0] - 2026-03-08
 
 ### Changed

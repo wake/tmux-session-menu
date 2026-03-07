@@ -102,6 +102,19 @@ func TestBuildComponent_NotInstalled(t *testing.T) {
 	assert.True(t, comp.Checked)
 	assert.False(t, comp.Disabled)
 	assert.Equal(t, "Claude Code hooks", comp.Label)
+	assert.Contains(t, comp.Note, "將寫入")
+	assert.Contains(t, comp.Note, "settings.json")
+}
+
+func TestBuildComponent_NoSettings_HasNote(t *testing.T) {
+	saveAndRestoreDetect(t)
+
+	dir := t.TempDir()
+	settingsPathFn = func() string { return filepath.Join(dir, "nonexistent", "settings.json") }
+	scriptPathFn = func() string { return filepath.Join(dir, "tsm-hook.sh") }
+
+	comp := BuildComponent()
+	assert.Contains(t, comp.Note, "將寫入")
 }
 
 func TestBuildComponent_Installed(t *testing.T) {

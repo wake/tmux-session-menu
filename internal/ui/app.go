@@ -1416,13 +1416,15 @@ func (m Model) View() string {
 	}
 
 	output := b.String()
-	if m.deps.Cfg.InPopup {
-		lines := strings.Split(output, "\n")
-		for i, line := range lines {
-			lines[i] = " " + line + " "
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		if m.deps.Cfg.InPopup {
+			lines[i] = "  " + line + " "
+		} else {
+			lines[i] = " " + line
 		}
-		output = strings.Join(lines, "\n")
 	}
+	output = strings.Join(lines, "\n")
 	return output
 }
 

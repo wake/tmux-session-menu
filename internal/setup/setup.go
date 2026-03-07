@@ -342,7 +342,14 @@ func (m Model) View() string {
 		}
 	}
 
-	return b.String()
+	output := b.String()
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = " " + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Checked 回傳各元件的勾選狀態（用於測試）。

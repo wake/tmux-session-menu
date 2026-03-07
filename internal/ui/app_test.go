@@ -2491,10 +2491,10 @@ func TestWatchFailed_InitiallyFalse(t *testing.T) {
 	assert.False(t, m.WatchFailed())
 }
 
-// --- Popup padding 測試 ---
+// --- 左側 padding 測試 ---
 
-func TestView_InPopup_HasLeftPadding(t *testing.T) {
-	m := ui.NewModel(ui.Deps{Cfg: config.Config{InPopup: true}})
+func TestView_HasLeftPadding(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
 	view := m.View()
 	lines := strings.Split(view, "\n")
 	for _, line := range lines {
@@ -2502,17 +2502,19 @@ func TestView_InPopup_HasLeftPadding(t *testing.T) {
 			continue
 		}
 		assert.True(t, strings.HasPrefix(line, " "),
-			"popup 模式每行應有左側 padding: %q", line)
+			"每行應有左側 padding: %q", line)
 	}
 }
 
-func TestView_NotInPopup_NoExtraPadding(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+func TestView_InPopup_HasExtraPadding(t *testing.T) {
+	m := ui.NewModel(ui.Deps{Cfg: config.Config{InPopup: true}})
 	view := m.View()
-	// header 第一行不應以空格開頭
 	lines := strings.Split(view, "\n")
-	if len(lines) > 0 && lines[0] != "" {
-		assert.False(t, strings.HasPrefix(lines[0], " "),
-			"非 popup 模式不應有額外 padding")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		assert.True(t, strings.HasPrefix(line, "  "),
+			"popup 模式每行應有雙倍左側 padding: %q", line)
 	}
 }

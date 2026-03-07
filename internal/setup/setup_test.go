@@ -2,6 +2,7 @@ package setup
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -528,6 +529,19 @@ func TestRunInstall_ClientMode_FullOnlyNotInstalled_Checked_Runs(t *testing.T) {
 	results := m.Results()
 	assert.Len(t, results, 2)
 	assert.Equal(t, "installed hooks", results[1].message)
+}
+
+func TestView_HasLeftPadding(t *testing.T) {
+	m := NewModel(testComponents())
+	view := m.View()
+	lines := strings.Split(view, "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		assert.True(t, strings.HasPrefix(line, " "),
+			"每行應有左側 padding: %q", line)
+	}
 }
 
 func TestRestartPromptError(t *testing.T) {
