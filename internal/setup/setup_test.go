@@ -520,8 +520,8 @@ func TestRunInstall_ClientMode_FullOnlyNotInstalled_Checked_Runs(t *testing.T) {
 	m := NewModel(comps)
 	m.SetInstallMode(ModeClient)
 
-	// 手動勾選 Hooks（模擬使用者 Space toggle）
-	m.checked[1] = true
+	// 手動設定為 ActionInstall（模擬使用者 Space toggle）
+	m.actions[1] = ActionInstall
 
 	m = driveToPhaseDone(t, m)
 
@@ -562,4 +562,178 @@ func TestRestartPromptError(t *testing.T) {
 	view := m.View()
 	assert.Contains(t, view, "✗ daemon 操作失敗: connection refused")
 	assert.NotContains(t, view, "(Y/n)")
+}
+
+// --- Installed 元件三態切換測試 ---
+
+func TestInstalled_DefaultActionKeep(t *testing.T) {
+	comps := []Component{
+		{Label: "A", Installed: true, Checked: false,
+			InstallFn:   func() (string, error) { return "", nil },
+			UninstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	actions := m.Actions()
+	assert.Equal(t, ActionKeep, actions[0], "Installed 元件預設為 ActionKeep")
+	// Checked() 應回傳 true（[x] dim 仍算 checked）
+	assert.True(t, m.Checked()[0])
+}
+
+func TestInstalled_SpaceCyclesThreeStates(t *testing.T) {
+	comps := []Component{
+		{Label: "A", Installed: true,
+			InstallFn:   func() (string, error) { return "", nil },
+			UninstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	assert.Equal(t, ActionKeep, m.Actions()[0])
+
+	// Space 1: Keep → Reinstall
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	assert.Equal(t, ActionReinstall, m.Actions()[0])
+	assert.True(t, m.Checked()[0])
+
+	// Space 2: Reinstall → Remove
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	assert.Equal(t, ActionRemove, m.Actions()[0])
+	assert.False(t, m.Checked()[0])
+
+	// Space 3: Remove → Keep
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	assert.Equal(t, ActionKeep, m.Actions()[0])
+	assert.True(t, m.Checked()[0])
+}
+
+func TestInstalled_ViewKeepShowsDimCheck(t *testing.T) {
+	comps := []Component{
+		{Label: "KeepComp", Installed: true,
+			InstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	view := m.View()
+	// ActionKeep: [x] 應存在且 Label 以 dim 顯示
+	assert.Contains(t, view, "[x]")
+	assert.Contains(t, view, "KeepComp")
+	assert.NotContains(t, view, "[-]")
+}
+
+func TestInstalled_ViewReinstallShowsNormalCheck(t *testing.T) {
+	comps := []Component{
+		{Label: "ReinstComp", Installed: true,
+			InstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	// Space → Reinstall
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	view := m.View()
+	assert.Contains(t, view, "[x]")
+	assert.Contains(t, view, "ReinstComp")
+	assert.NotContains(t, view, "[-]")
+}
+
+func TestInstalled_ViewRemoveShowsDash(t *testing.T) {
+	comps := []Component{
+		{Label: "RemComp", Installed: true,
+			InstallFn:   func() (string, error) { return "", nil },
+			UninstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	// Space twice → Remove
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	view := m.View()
+	assert.Contains(t, view, "[-]")
+	assert.Contains(t, view, "RemComp")
+}
+
+func TestInstalled_RunInstall_KeepSkips(t *testing.T) {
+	called := false
+	comps := []Component{
+		{Label: "A", Installed: true,
+			InstallFn:   func() (string, error) { called = true; return "", nil },
+			UninstallFn: func() (string, error) { called = true; return "", nil }},
+	}
+	m := NewModel(comps)
+	// ActionKeep — should skip
+	m = driveToPhaseDone(t, m)
+	assert.False(t, called, "ActionKeep 不應呼叫任何 Fn")
+	assert.Len(t, m.Results(), 0)
+}
+
+func TestInstalled_RunInstall_ReinstallCallsInstallFn(t *testing.T) {
+	installed := false
+	comps := []Component{
+		{Label: "A", Installed: true,
+			InstallFn:   func() (string, error) { installed = true; return "reinstalled", nil },
+			UninstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	m.actions[0] = ActionReinstall
+	m = driveToPhaseDone(t, m)
+	assert.True(t, installed)
+	assert.Equal(t, "reinstalled", m.Results()[0].message)
+}
+
+func TestInstalled_RunInstall_RemoveCallsUninstallFn(t *testing.T) {
+	uninstalled := false
+	comps := []Component{
+		{Label: "A", Installed: true,
+			InstallFn:   func() (string, error) { return "", nil },
+			UninstallFn: func() (string, error) { uninstalled = true; return "removed", nil }},
+	}
+	m := NewModel(comps)
+	m.actions[0] = ActionRemove
+	m = driveToPhaseDone(t, m)
+	assert.True(t, uninstalled)
+	assert.Equal(t, "removed", m.Results()[0].message)
+}
+
+func TestInstalled_FullOnly_ClientMode_DefaultRemove(t *testing.T) {
+	comps := []Component{
+		{Label: "Hooks", Installed: true, FullOnly: true,
+			InstallFn:   func() (string, error) { return "", nil },
+			UninstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	assert.Equal(t, ActionKeep, m.Actions()[0])
+
+	// 切到 client → 應自動設為 ActionRemove
+	m.SetInstallMode(ModeClient)
+	assert.Equal(t, ActionRemove, m.Actions()[0])
+
+	// 切回 full → 應恢復 ActionKeep
+	m.SetInstallMode(ModeFull)
+	assert.Equal(t, ActionKeep, m.Actions()[0])
+}
+
+func TestInstalled_FullOnly_ClientMode_CanCycle(t *testing.T) {
+	comps := []Component{
+		{Label: "Hooks", Installed: true, FullOnly: true,
+			InstallFn:   func() (string, error) { return "", nil },
+			UninstallFn: func() (string, error) { return "", nil }},
+	}
+	m := NewModel(comps)
+	m.SetInstallMode(ModeClient)
+	assert.Equal(t, ActionRemove, m.Actions()[0])
+
+	// Space: Remove → Keep
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	assert.Equal(t, ActionKeep, m.Actions()[0])
+
+	// Space: Keep → Reinstall
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	assert.Equal(t, ActionReinstall, m.Actions()[0])
+
+	// Space: Reinstall → Remove
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	assert.Equal(t, ActionRemove, m.Actions()[0])
 }

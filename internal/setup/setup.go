@@ -38,6 +38,17 @@ const (
 	ModeClient                    // 純客戶端模式
 )
 
+// ComponentAction 代表元件的操作狀態。
+type ComponentAction int
+
+const (
+	ActionSkip      ComponentAction = iota // [ ] 不安裝
+	ActionInstall                          // [x] 將安裝
+	ActionKeep                             // [x] dim — 已安裝，不重複安裝
+	ActionReinstall                        // [x] 覆蓋安裝
+	ActionRemove                           // [-] 移除安裝
+)
+
 // Component 代表一個可安裝/卸載的元件。
 type Component struct {
 	Label       string
@@ -69,7 +80,7 @@ const (
 // Model 是 setup TUI 的 Bubble Tea model。
 type Model struct {
 	components  []Component
-	checked     []bool
+	actions     []ComponentAction
 	cursor      int
 	phase       phase
 	results     []result
@@ -81,19 +92,25 @@ type Model struct {
 	installMode InstallMode  // 安裝模式
 }
 
-// NewModel 建立 setup TUI model，根據各元件的 Checked 欄位初始化勾選狀態。
+// NewModel 建立 setup TUI model，根據各元件狀態初始化 action。
 func NewModel(components []Component) Model {
-	checked := make([]bool, len(components))
+	actions := make([]ComponentAction, len(components))
 	for i, comp := range components {
-		checked[i] = comp.Checked
+		if comp.Installed {
+			actions[i] = ActionKeep
+		} else if comp.Checked {
+			actions[i] = ActionInstall
+		} else {
+			actions[i] = ActionSkip
+		}
 	}
 	return Model{
 		components: components,
-		checked:    checked,
+		actions:    actions,
 	}
 }
 
-// SetInstallMode 設定安裝模式，並更新元件勾選狀態。
+// SetInstallMode 設定安裝模式，並更新元件 action。
 func (m *Model) SetInstallMode(mode InstallMode) {
 	m.installMode = mode
 	m.applyMode()
@@ -104,14 +121,24 @@ func (m Model) InstallMode() InstallMode {
 	return m.installMode
 }
 
-// applyMode 根據當前模式更新元件的勾選與禁用狀態。
+// applyMode 根據當前模式更新 FullOnly 元件的 action。
 func (m *Model) applyMode() {
 	for i, comp := range m.components {
 		if comp.FullOnly {
 			if m.installMode == ModeClient {
-				m.checked[i] = false
+				if comp.Installed {
+					m.actions[i] = ActionRemove
+				} else {
+					m.actions[i] = ActionSkip
+				}
 			} else {
-				m.checked[i] = comp.Checked
+				if comp.Installed {
+					m.actions[i] = ActionKeep
+				} else if comp.Checked {
+					m.actions[i] = ActionInstall
+				} else {
+					m.actions[i] = ActionSkip
+				}
 			}
 		}
 	}
@@ -198,11 +225,28 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.applyMode()
 		return m, nil
 	case " ":
-		if m.cursor < len(m.checked) {
+		if m.cursor < len(m.actions) {
 			comp := m.components[m.cursor]
-			disabled := comp.Disabled || (comp.FullOnly && m.installMode == ModeClient && comp.Installed)
-			if !disabled {
-				m.checked[m.cursor] = !m.checked[m.cursor]
+			if comp.Disabled {
+				break
+			}
+			if comp.Installed {
+				// 已安裝：三態循環 Keep → Reinstall → Remove → Keep
+				switch m.actions[m.cursor] {
+				case ActionKeep:
+					m.actions[m.cursor] = ActionReinstall
+				case ActionReinstall:
+					m.actions[m.cursor] = ActionRemove
+				case ActionRemove:
+					m.actions[m.cursor] = ActionKeep
+				}
+			} else {
+				// 未安裝：二態切換 Skip ↔ Install
+				if m.actions[m.cursor] == ActionInstall {
+					m.actions[m.cursor] = ActionSkip
+				} else {
+					m.actions[m.cursor] = ActionInstall
+				}
 			}
 		}
 	case "enter":
@@ -219,20 +263,17 @@ func (m Model) runInstall() (tea.Model, tea.Cmd) {
 			if comp.Disabled {
 				continue
 			}
-
-			// [-] 已安裝的 FullOnly 元件在 client mode 執行移除
-			isRemoval := comp.FullOnly && m.installMode == ModeClient && comp.Installed
-			if isRemoval && comp.UninstallFn != nil {
-				msg, err := comp.UninstallFn()
+			switch m.actions[i] {
+			case ActionInstall, ActionReinstall:
+				msg, err := comp.InstallFn()
 				results = append(results, result{label: comp.Label, message: msg, err: err})
-				continue
+			case ActionRemove:
+				if comp.UninstallFn != nil {
+					msg, err := comp.UninstallFn()
+					results = append(results, result{label: comp.Label, message: msg, err: err})
+				}
+			// ActionSkip, ActionKeep: 不執行
 			}
-
-			if !m.checked[i] {
-				continue
-			}
-			msg, err := comp.InstallFn()
-			results = append(results, result{label: comp.Label, message: msg, err: err})
 		}
 		return resultMsg{results: results}
 	}
@@ -285,26 +326,28 @@ func (m Model) View() string {
 				continue
 			}
 
-			isClientFullOnly := comp.FullOnly && m.installMode == ModeClient
-			if isClientFullOnly && comp.Installed {
-				// [-] 已安裝，將移除
+			switch m.actions[i] {
+			case ActionKeep:
+				// [x] dim — 已安裝，不重複安裝
+				check := dimStyle.Render("[x]")
+				label := dimStyle.Render(comp.Label)
+				b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, check, label))
+			case ActionRemove:
+				// [-] 移除
 				label := warnStyle.Render(comp.Label)
 				b.WriteString(fmt.Sprintf("%s[-] %s\n", cursor, label))
-				if comp.Note != "" {
-					b.WriteString(fmt.Sprintf("       %s\n", dimStyle.Render(comp.Note)))
+			default:
+				// ActionInstall, ActionReinstall, ActionSkip
+				check := "[ ]"
+				if m.actions[i] == ActionInstall || m.actions[i] == ActionReinstall {
+					check = "[x]"
 				}
-				continue
+				label := comp.Label
+				if i == m.cursor {
+					label = selectedStyle.Render(label)
+				}
+				b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, check, label))
 			}
-
-			check := "[ ]"
-			if m.checked[i] {
-				check = "[x]"
-			}
-			label := comp.Label
-			if i == m.cursor {
-				label = selectedStyle.Render(label)
-			}
-			b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, check, label))
 			if comp.Note != "" {
 				b.WriteString(fmt.Sprintf("       %s\n", dimStyle.Render(comp.Note)))
 			}
@@ -352,10 +395,19 @@ func (m Model) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// Checked 回傳各元件的勾選狀態（用於測試）。
+// Checked 回傳各元件的勾選狀態（向後相容：Install/Reinstall/Keep 為 true）。
 func (m Model) Checked() []bool {
-	out := make([]bool, len(m.checked))
-	copy(out, m.checked)
+	out := make([]bool, len(m.actions))
+	for i, a := range m.actions {
+		out[i] = a == ActionInstall || a == ActionReinstall || a == ActionKeep
+	}
+	return out
+}
+
+// Actions 回傳各元件的操作狀態。
+func (m Model) Actions() []ComponentAction {
+	out := make([]ComponentAction, len(m.actions))
+	copy(out, m.actions)
 	return out
 }
 

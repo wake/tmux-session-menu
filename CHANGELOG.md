@@ -2,6 +2,16 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.20.0] - 2026-03-08
+
+### Changed
+- 已安裝元件符號與操作改為三態循環：
+  - `[x]`（淡灰）— 已安裝，不重複安裝（預設）
+  - `[x]`（一般白）— 覆蓋安裝
+  - `[-]` — 移除安裝
+- Space 鍵在已安裝元件上循環切換三個狀態
+- 內部資料模型從 `checked []bool` 重構為 `actions []ComponentAction`
+
 ## [0.19.1] - 2026-03-08
 
 ### Fixed
