@@ -2,6 +2,11 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.20.1] - 2026-03-08
+
+### Fixed
+- ActionKeep 狀態 `[x]` 僅 checkbox 淡灰，label 維持正常亮度以增加對比
+
 ## [0.20.0] - 2026-03-08
 
 ### Changed

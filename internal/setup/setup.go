@@ -328,9 +328,12 @@ func (m Model) View() string {
 
 			switch m.actions[i] {
 			case ActionKeep:
-				// [x] dim — 已安裝，不重複安裝
+				// [x] dim — 已安裝，不重複安裝（僅 checkbox dim，label 正常）
 				check := dimStyle.Render("[x]")
-				label := dimStyle.Render(comp.Label)
+				label := comp.Label
+				if i == m.cursor {
+					label = selectedStyle.Render(label)
+				}
 				b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, check, label))
 			case ActionRemove:
 				// [-] 移除
