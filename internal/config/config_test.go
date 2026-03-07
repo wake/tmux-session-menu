@@ -47,6 +47,39 @@ func TestLoadFromTOML_InvalidInput(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// --- InstallMode 測試 ---
+
+func TestInstallMode_Constants(t *testing.T) {
+	assert.Equal(t, config.InstallMode("full"), config.ModeFull)
+	assert.Equal(t, config.InstallMode("client"), config.ModeClient)
+}
+
+func TestSaveAndLoadInstallMode(t *testing.T) {
+	dir := t.TempDir()
+
+	err := config.SaveInstallMode(dir, config.ModeFull)
+	require.NoError(t, err)
+
+	mode := config.LoadInstallMode(dir)
+	assert.Equal(t, config.ModeFull, mode)
+}
+
+func TestSaveAndLoadInstallMode_Client(t *testing.T) {
+	dir := t.TempDir()
+
+	err := config.SaveInstallMode(dir, config.ModeClient)
+	require.NoError(t, err)
+
+	mode := config.LoadInstallMode(dir)
+	assert.Equal(t, config.ModeClient, mode)
+}
+
+func TestLoadInstallMode_NoFile_DefaultsFull(t *testing.T) {
+	dir := t.TempDir()
+	mode := config.LoadInstallMode(dir)
+	assert.Equal(t, config.ModeFull, mode)
+}
+
 func TestExpandPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
 

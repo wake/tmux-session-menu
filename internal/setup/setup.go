@@ -19,6 +19,14 @@ var (
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#f7768e"))
 )
 
+// InstallMode 代表安裝模式（與 config.InstallMode 對應）。
+type InstallMode int
+
+const (
+	ModeFull   InstallMode = iota // 完整模式
+	ModeClient                    // 純客戶端模式
+)
+
 // Component 代表一個可安裝/卸載的元件。
 type Component struct {
 	Label       string
@@ -27,6 +35,7 @@ type Component struct {
 	Checked     bool   // 初始勾選狀態
 	Disabled    bool   // 禁用：不可切換/安裝
 	Note        string // 附加資訊，顯示在 Label 下方
+	FullOnly    bool   // 僅完整模式安裝
 }
 
 // result 記錄單一元件的安裝結果。
@@ -47,16 +56,17 @@ const (
 
 // Model 是 setup TUI 的 Bubble Tea model。
 type Model struct {
-	components []Component
-	checked    []bool
-	cursor     int
-	phase      phase
-	results    []result
-	quitting   bool
-	daemonHint string       // 安裝完成後顯示的 daemon 提示
-	restartFn  func() error // 重啟 daemon 的 callback
-	restarted  bool         // 是否已執行重啟
-	restartErr error        // 重啟結果
+	components  []Component
+	checked     []bool
+	cursor      int
+	phase       phase
+	results     []result
+	quitting    bool
+	daemonHint  string       // 安裝完成後顯示的 daemon 提示
+	restartFn   func() error // 重啟 daemon 的 callback
+	restarted   bool         // 是否已執行重啟
+	restartErr  error        // 重啟結果
+	installMode InstallMode  // 安裝模式
 }
 
 // NewModel 建立 setup TUI model，根據各元件的 Checked 欄位初始化勾選狀態。
@@ -68,6 +78,30 @@ func NewModel(components []Component) Model {
 	return Model{
 		components: components,
 		checked:    checked,
+	}
+}
+
+// SetInstallMode 設定安裝模式，並更新元件勾選狀態。
+func (m *Model) SetInstallMode(mode InstallMode) {
+	m.installMode = mode
+	m.applyMode()
+}
+
+// InstallMode 回傳當前安裝模式。
+func (m Model) InstallMode() InstallMode {
+	return m.installMode
+}
+
+// applyMode 根據當前模式更新元件的勾選與禁用狀態。
+func (m *Model) applyMode() {
+	for i, comp := range m.components {
+		if comp.FullOnly {
+			if m.installMode == ModeClient {
+				m.checked[i] = false
+			} else {
+				m.checked[i] = comp.Checked
+			}
+		}
 	}
 }
 
@@ -143,9 +177,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.components)-1 {
 			m.cursor++
 		}
+	case "left", "right":
+		if m.installMode == ModeFull {
+			m.installMode = ModeClient
+		} else {
+			m.installMode = ModeFull
+		}
+		m.applyMode()
+		return m, nil
 	case " ":
-		if m.cursor < len(m.checked) && !m.components[m.cursor].Disabled {
-			m.checked[m.cursor] = !m.checked[m.cursor]
+		if m.cursor < len(m.checked) {
+			comp := m.components[m.cursor]
+			disabled := comp.Disabled || (comp.FullOnly && m.installMode == ModeClient)
+			if !disabled {
+				m.checked[m.cursor] = !m.checked[m.cursor]
+			}
 		}
 	case "enter":
 		m.phase = phaseRunning
@@ -158,7 +204,8 @@ func (m Model) runInstall() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		var results []result
 		for i, comp := range m.components {
-			if !m.checked[i] || comp.Disabled {
+			disabled := comp.Disabled || (comp.FullOnly && m.installMode == ModeClient)
+			if !m.checked[i] || disabled {
 				continue
 			}
 			msg, err := comp.InstallFn()
@@ -186,6 +233,14 @@ func (m Model) View() string {
 
 	switch m.phase {
 	case phaseSelect:
+		// 模式選擇器
+		modeName := "完整模式"
+		if m.installMode == ModeClient {
+			modeName = "純客戶端"
+		}
+		b.WriteString(fmt.Sprintf("  ◀ %s ▶  ", selectedStyle.Render(modeName)))
+		b.WriteString(dimStyle.Render("← → 切換模式"))
+		b.WriteString("\n\n")
 		b.WriteString(dimStyle.Render("選擇要安裝的元件 (Space 切換, Enter 確認, q 取消)"))
 		b.WriteString("\n\n")
 		for i, comp := range m.components {
@@ -194,7 +249,8 @@ func (m Model) View() string {
 				cursor = selectedStyle.Render("► ")
 			}
 
-			if comp.Disabled {
+			disabled := comp.Disabled || (comp.FullOnly && m.installMode == ModeClient)
+			if disabled {
 				label := errorStyle.Render(comp.Label)
 				b.WriteString(fmt.Sprintf("%s[-] %s\n", cursor, label))
 				if comp.Note != "" {

@@ -134,6 +134,7 @@ func runWithMode(mode runMode) {
 			os.Exit(1)
 		}
 		cmd := osexec.Command("tmux", "display-popup", "-E", "-w", "80%", "-h", "80%", exe, "--inline")
+		cmd.Env = append(os.Environ(), "TSM_IN_POPUP=1")
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -333,6 +334,7 @@ func loadConfig() config.Config {
 func runTUI() {
 	cfg := loadConfig()
 	cfg.InTmux = os.Getenv("TMUX") != ""
+	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
 
 	// 嘗試連線 daemon（會自動啟動）
 	c, err := client.Dial(cfg)
@@ -762,7 +764,19 @@ func runSetup(args []string) {
 		return
 	}
 
+	dataDir := config.ExpandPath(config.Default().DataDir)
+	_ = os.MkdirAll(dataDir, 0o755)
+
+	// 載入上次的安裝模式
+	savedMode := config.LoadInstallMode(dataDir)
+
 	m := setup.NewModel(components)
+
+	// 將 config.InstallMode 映射到 setup.InstallMode
+	if savedMode == config.ModeClient {
+		m.SetInstallMode(setup.ModeClient)
+	}
+
 	if isDaemonRunning() {
 		m.SetDaemonHint("daemon 需要重新啟動以套用變更")
 	} else {
@@ -784,9 +798,19 @@ func runSetup(args []string) {
 		return daemon.Start(cfg)
 	})
 	p := tea.NewProgram(m)
-	if _, err := p.Run(); err != nil {
+	finalModel, err := p.Run()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	// 儲存使用者選擇的安裝模式
+	if fm, ok := finalModel.(setup.Model); ok {
+		cfgMode := config.ModeFull
+		if fm.InstallMode() == setup.ModeClient {
+			cfgMode = config.ModeClient
+		}
+		_ = config.SaveInstallMode(dataDir, cfgMode)
 	}
 }
 
@@ -838,9 +862,13 @@ func isDaemonRunning() bool {
 }
 
 func buildSetupComponents() []setup.Component {
+	bindComp := bind.BuildComponent()
+	bindComp.FullOnly = true
+	hooksComp := hooks.BuildComponent()
+	hooksComp.FullOnly = true
 	return []setup.Component{
 		selfinstall.BuildComponent(),
-		bind.BuildComponent(),
-		hooks.BuildComponent(),
+		bindComp,
+		hooksComp,
 	}
 }

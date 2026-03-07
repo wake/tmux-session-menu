@@ -310,6 +310,117 @@ func TestRestartPromptN(t *testing.T) {
 	assert.True(t, m.quitting)
 }
 
+// --- InstallMode 模式選擇器測試 ---
+
+func fullClientComponents() []Component {
+	return []Component{
+		{
+			Label:     "安裝 tsm binary",
+			InstallFn: func() (string, error) { return "installed", nil },
+			Checked:   true,
+		},
+		{
+			Label:     "安裝 tmux 快捷鍵",
+			InstallFn: func() (string, error) { return "installed", nil },
+			Checked:   true,
+			FullOnly:  true,
+		},
+		{
+			Label:     "安裝 hooks",
+			InstallFn: func() (string, error) { return "installed", nil },
+			Checked:   true,
+			FullOnly:  true,
+		},
+	}
+}
+
+func TestInstallMode_DefaultFull(t *testing.T) {
+	m := NewModel(fullClientComponents())
+	assert.Equal(t, ModeFull, m.InstallMode())
+}
+
+func TestInstallMode_SetInitialMode(t *testing.T) {
+	m := NewModel(fullClientComponents())
+	m.SetInstallMode(ModeClient)
+	assert.Equal(t, ModeClient, m.InstallMode())
+}
+
+func TestInstallMode_RightArrowToggles(t *testing.T) {
+	m := NewModel(fullClientComponents())
+	assert.Equal(t, ModeFull, m.InstallMode())
+
+	// → 切到 client
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	assert.Equal(t, ModeClient, m.InstallMode())
+
+	// → 再按一次回到 full
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	assert.Equal(t, ModeFull, m.InstallMode())
+}
+
+func TestInstallMode_LeftArrowToggles(t *testing.T) {
+	m := NewModel(fullClientComponents())
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(Model)
+	assert.Equal(t, ModeClient, m.InstallMode())
+}
+
+func TestInstallMode_ViewShowsMode(t *testing.T) {
+	m := NewModel(fullClientComponents())
+	view := m.View()
+	assert.Contains(t, view, "完整模式")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	view = m.View()
+	assert.Contains(t, view, "純客戶端")
+}
+
+func TestInstallMode_ClientDisablesFullOnly(t *testing.T) {
+	m := NewModel(fullClientComponents())
+
+	// 切到 client 模式
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+
+	checked := m.Checked()
+	assert.True(t, checked[0], "binary 仍應勾選")
+	assert.False(t, checked[1], "FullOnly 元件應取消勾選")
+	assert.False(t, checked[2], "FullOnly 元件應取消勾選")
+}
+
+func TestInstallMode_BackToFullRestoresChecked(t *testing.T) {
+	m := NewModel(fullClientComponents())
+
+	// → client
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+
+	// → full
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+
+	checked := m.Checked()
+	assert.True(t, checked[0])
+	assert.True(t, checked[1], "FullOnly 元件切回 full 應恢復勾選")
+	assert.True(t, checked[2], "FullOnly 元件切回 full 應恢復勾選")
+}
+
+func TestInstallMode_ClientViewShowsDisabled(t *testing.T) {
+	m := NewModel(fullClientComponents())
+
+	// 切到 client
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+
+	view := m.View()
+	// FullOnly 元件在 client 模式應以 [-] 顯示
+	assert.Contains(t, view, "[-]")
+}
+
 func TestRestartPromptError(t *testing.T) {
 	m := NewModel(testComponents())
 	m.SetDaemonHint("daemon 需要重新啟動")

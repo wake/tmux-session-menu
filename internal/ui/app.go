@@ -445,15 +445,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q":
-		if m.deps.Cfg.InTmux {
-			m.mode = ModeConfirm
-			m.confirmPrompt = "是否關閉選單並退出當前 session？"
-			m.confirmExitTmux = true
-			m.confirmAction = func() tea.Cmd {
-				return tea.Quit
-			}
-			return m, nil
-		}
 		m.quitting = true
 		return m, tea.Quit
 	case "esc", "ctrl+c":
@@ -1424,7 +1415,15 @@ func (m Model) View() string {
 		b.WriteString(m.renderToolbar())
 	}
 
-	return b.String()
+	output := b.String()
+	if m.deps.Cfg.InPopup {
+		lines := strings.Split(output, "\n")
+		for i, line := range lines {
+			lines[i] = " " + line + " "
+		}
+		output = strings.Join(lines, "\n")
+	}
+	return output
 }
 
 // renderToolbar 渲染底部工具列，固定兩行佈局。

@@ -2257,48 +2257,15 @@ func TestModel_E_NoLongerExitsTmux(t *testing.T) {
 
 // --- 在 tmux 中按 q 應進入確認模式 ---
 
-func TestModel_Quit_InTmux_EntersConfirm(t *testing.T) {
+func TestModel_Quit_InTmux_DirectQuit(t *testing.T) {
 	m := ui.NewModel(ui.Deps{Cfg: config.Config{InTmux: true}})
 	m.SetItems([]ui.ListItem{
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
 	})
 
-	// 在 tmux 中按 q 應進入確認模式
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	model := updated.(ui.Model)
-	assert.Nil(t, cmd, "按 q 不應直接退出")
-	assert.Equal(t, ui.ModeConfirm, model.Mode(), "應進入確認模式")
-}
-
-func TestModel_Quit_InTmux_ConfirmY_ExitsWithFlag(t *testing.T) {
-	m := ui.NewModel(ui.Deps{Cfg: config.Config{InTmux: true}})
-	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
-	})
-
-	// q → 進入確認 → y → 退出並帶 exitTmux 旗標
-	m, _ = applyKey(m, "q")
-	assert.Equal(t, ui.ModeConfirm, m.Mode())
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	model := updated.(ui.Model)
-	assert.NotNil(t, cmd, "確認後應退出")
-	assert.True(t, model.ExitTmux(), "確認退出後應設定 exitTmux")
-}
-
-func TestModel_Quit_InTmux_ConfirmN_Cancels(t *testing.T) {
-	m := ui.NewModel(ui.Deps{Cfg: config.Config{InTmux: true}})
-	m.SetItems([]ui.ListItem{
-		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
-	})
-
-	// q → 進入確認 → n → 取消
-	m, _ = applyKey(m, "q")
-	m, cmd := applyKey(m, "n")
-
-	assert.Nil(t, cmd, "取消不應退出")
-	assert.Equal(t, ui.ModeNormal, m.Mode(), "應回到 ModeNormal")
-	assert.False(t, m.ExitTmux())
+	// 在 tmux 中按 q 應直接退出，不經確認
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assert.NotNil(t, cmd, "tmux 中按 q 應直接退出")
 }
 
 func TestModel_Quit_NotInTmux_DirectQuit(t *testing.T) {
@@ -2522,4 +2489,30 @@ func TestSnapshotMsg_LocalMode_WatchError_DoesNotSetWatchFailed(t *testing.T) {
 func TestWatchFailed_InitiallyFalse(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 	assert.False(t, m.WatchFailed())
+}
+
+// --- Popup padding 測試 ---
+
+func TestView_InPopup_HasLeftPadding(t *testing.T) {
+	m := ui.NewModel(ui.Deps{Cfg: config.Config{InPopup: true}})
+	view := m.View()
+	lines := strings.Split(view, "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		assert.True(t, strings.HasPrefix(line, " "),
+			"popup 模式每行應有左側 padding: %q", line)
+	}
+}
+
+func TestView_NotInPopup_NoExtraPadding(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	view := m.View()
+	// header 第一行不應以空格開頭
+	lines := strings.Split(view, "\n")
+	if len(lines) > 0 && lines[0] != "" {
+		assert.False(t, strings.HasPrefix(lines[0], " "),
+			"非 popup 模式不應有額外 padding")
+	}
 }
