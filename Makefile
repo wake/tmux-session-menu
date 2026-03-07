@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install uninstall release
+.PHONY: build test lint clean install uninstall release publish
 
 BINARY=tsm
 MODULE=github.com/wake/tmux-session-menu
@@ -36,6 +36,20 @@ release:
 			go build -ldflags "$(LDFLAGS)" -o $$output ./cmd/tsm || exit 1; \
 	done
 	@echo "Done. Binaries in bin/"
+
+REPO = wake/tmux-session-menu
+ASSETS = $(foreach p,$(PLATFORMS),bin/$(BINARY)-$(subst /,-,$(p)))
+
+publish: release
+	@if gh release view v$(VERSION) -R $(REPO) >/dev/null 2>&1; then \
+		echo "Error: release v$(VERSION) already exists"; exit 1; \
+	fi
+	git tag v$(VERSION)
+	git push origin v$(VERSION)
+	gh release create v$(VERSION) $(ASSETS) \
+		-R $(REPO) \
+		--title "v$(VERSION)" \
+		--generate-notes
 
 clean:
 	rm -rf bin/ dist/ coverage.out
