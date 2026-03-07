@@ -113,7 +113,8 @@ func main() {
 	}
 
 	if args[0] == "upgrade" {
-		runUpgrade()
+		force := containsFlag(args[1:], "--force") || containsFlag(args[1:], "-f")
+		runUpgrade(force)
 		return
 	}
 
@@ -632,7 +633,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  daemon status      顯示 daemon 狀態")
 	fmt.Fprintln(os.Stderr, "  hooks install      安裝 tsm hooks 到 Claude Code settings")
 	fmt.Fprintln(os.Stderr, "  hooks uninstall    移除 tsm hooks")
-	fmt.Fprintln(os.Stderr, "  upgrade            檢查並升級到最新版本")
+	fmt.Fprintln(os.Stderr, "  upgrade [--force]  檢查並升級到最新版本")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  --version, -v      顯示版本號")
@@ -861,7 +862,7 @@ func runSetup(args []string) {
 	}
 }
 
-func runUpgrade() {
+func runUpgrade(force bool) {
 	u := upgrade.DefaultUpgrader()
 
 	fmt.Printf("目前版本: %s\n", version.Version)
@@ -873,12 +874,16 @@ func runUpgrade() {
 		os.Exit(1)
 	}
 
-	if !upgrade.NeedsUpgrade(version.Version, rel.Version) {
+	if !force && !upgrade.NeedsUpgrade(version.Version, rel.Version) {
 		fmt.Printf("已是最新版本 v%s\n", version.Version)
 		return
 	}
 
-	fmt.Printf("發現新版本: v%s\n", rel.Version)
+	if force && !upgrade.NeedsUpgrade(version.Version, rel.Version) {
+		fmt.Printf("版本相同 v%s，強制升級\n", rel.Version)
+	} else {
+		fmt.Printf("發現新版本: v%s\n", rel.Version)
+	}
 
 	asset := upgrade.AssetName()
 	url, ok := rel.Assets[asset]
