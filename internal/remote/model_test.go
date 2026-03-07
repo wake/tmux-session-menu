@@ -42,7 +42,7 @@ func TestReconnectModel_View_ContainsHost(t *testing.T) {
 
 func TestReconnectModel_StateTransition(t *testing.T) {
 	m := NewReconnectModel("user@host", "my-session")
-	updated, _ := m.Update(reconnStateMsg{state: StateConnecting, attempt: 1})
+	updated, _ := m.Update(ReconnStateMsg{State: StateConnecting, Attempt: 1})
 	rm := updated.(ReconnectModel)
 	assert.Equal(t, StateConnecting, rm.State())
 	assert.Equal(t, 1, rm.Attempt())
@@ -50,7 +50,7 @@ func TestReconnectModel_StateTransition(t *testing.T) {
 
 func TestReconnectModel_Connected_Quits(t *testing.T) {
 	m := NewReconnectModel("user@host", "my-session")
-	updated, cmd := m.Update(reconnStateMsg{state: StateConnected})
+	updated, cmd := m.Update(ReconnStateMsg{State: StateConnected})
 	rm := updated.(ReconnectModel)
 	assert.Equal(t, StateConnected, rm.State())
 	assert.NotNil(t, cmd) // should be tea.Quit to return control
@@ -58,7 +58,7 @@ func TestReconnectModel_Connected_Quits(t *testing.T) {
 
 func TestReconnectModel_SessionGone_BackToMenu(t *testing.T) {
 	m := NewReconnectModel("user@host", "my-session")
-	updated, cmd := m.Update(reconnSessionGoneMsg{})
+	updated, cmd := m.Update(ReconnSessionGoneMsg{})
 	rm := updated.(ReconnectModel)
 	assert.True(t, rm.BackToMenu())
 	assert.NotNil(t, cmd)

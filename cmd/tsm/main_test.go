@@ -6,6 +6,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestParseRemoteHost(t *testing.T) {
+	host := parseRemoteHost([]string{"--remote", "myhost"})
+	assert.Equal(t, "myhost", host)
+}
+
+func TestParseRemoteHost_Empty(t *testing.T) {
+	host := parseRemoteHost([]string{"--inline"})
+	assert.Equal(t, "", host)
+}
+
+func TestParseRemoteHost_NoValue(t *testing.T) {
+	host := parseRemoteHost([]string{"--remote"})
+	assert.Equal(t, "", host)
+}
+
 func TestParseRunMode(t *testing.T) {
 	tests := []struct {
 		name     string

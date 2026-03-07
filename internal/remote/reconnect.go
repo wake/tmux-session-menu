@@ -31,9 +31,9 @@ func (s ReconnState) String() string {
 // MaxBackoff 是重連延遲的上限。
 const MaxBackoff = 30 * time.Second
 
-// backoff 根據嘗試次數（0 起算）回傳延遲時間。
+// Backoff 根據嘗試次數（0 起算）回傳延遲時間。
 // 使用指數退避：1s, 2s, 4s, 8s, 16s，不超過 max。
-func backoff(attempt int, max time.Duration) time.Duration {
+func Backoff(attempt int, max time.Duration) time.Duration {
 	if attempt >= 63 {
 		return max
 	}

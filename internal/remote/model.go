@@ -9,14 +9,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// reconnStateMsg 從重連 goroutine 回報狀態變更。
-type reconnStateMsg struct {
-	state   ReconnState
-	attempt int
+// ReconnStateMsg 從重連 goroutine 回報狀態變更。
+type ReconnStateMsg struct {
+	State   ReconnState
+	Attempt int
 }
 
-// reconnSessionGoneMsg 表示目標 session 已不存在。
-type reconnSessionGoneMsg struct{}
+// ReconnSessionGoneMsg 表示目標 session 已不存在。
+type ReconnSessionGoneMsg struct{}
 
 // AnimTickMsg 用於重連動畫的 tick 訊息。
 type AnimTickMsg struct{}
@@ -85,14 +85,17 @@ func (m ReconnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quit = true
 			return m, tea.Quit
 		}
-	case reconnStateMsg:
-		m.state = msg.state
-		m.attempt = msg.attempt
+	case ReconnStateMsg:
+		m.state = msg.State
+		m.attempt = msg.Attempt
 		if m.state == StateConnected {
 			return m, tea.Quit
 		}
+		if m.state == StateConnecting {
+			return m, animTickCmd()
+		}
 		return m, nil
-	case reconnSessionGoneMsg:
+	case ReconnSessionGoneMsg:
 		m.backToMenu = true
 		return m, tea.Quit
 	case AnimTickMsg:

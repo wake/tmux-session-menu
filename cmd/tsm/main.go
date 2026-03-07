@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wake/tmux-session-menu/internal/bind"
@@ -13,6 +15,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/daemon"
 	"github.com/wake/tmux-session-menu/internal/hooks"
+	"github.com/wake/tmux-session-menu/internal/remote"
 	"github.com/wake/tmux-session-menu/internal/selfinstall"
 	"github.com/wake/tmux-session-menu/internal/setup"
 	"github.com/wake/tmux-session-menu/internal/store"
@@ -43,6 +46,16 @@ func parseRunMode(args []string) runMode {
 	return modeAuto
 }
 
+// parseRemoteHost 從命令列參數中提取 --remote <host> 的主機名稱。
+func parseRemoteHost(args []string) string {
+	for i, a := range args {
+		if a == "--remote" && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
 func main() {
 	args := os.Args[1:]
 
@@ -59,6 +72,17 @@ func main() {
 	if args[0] == "--help" || args[0] == "-h" {
 		printUsage()
 		return // exit 0
+	}
+
+	if args[0] == "--remote" {
+		if remoteHost := parseRemoteHost(args); remoteHost != "" {
+			runRemote(remoteHost)
+		} else {
+			fmt.Fprintln(os.Stderr, "Error: --remote 需要指定主機名稱")
+			fmt.Fprintln(os.Stderr, "Usage: tsm --remote <host>")
+			os.Exit(1)
+		}
+		return
 	}
 
 	if args[0] == "--inline" || args[0] == "--popup" {
@@ -115,6 +139,120 @@ func runWithMode(mode runMode) {
 	}
 
 	runTUI()
+}
+
+func runRemote(host string) {
+	tun := remote.NewTunnel(host)
+	if err := tun.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 無法建立 SSH tunnel 到 %s: %v\n", host, err)
+		fmt.Fprintf(os.Stderr, "請確認遠端主機的 tsm-daemon 已啟動 (tsm daemon start)\n")
+		os.Exit(1)
+	}
+	defer tun.Close()
+
+	c, err := client.DialSocket(tun.LocalSocket())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 遠端 %s 的 tsm-daemon 未回應: %v\n", host, err)
+		fmt.Fprintf(os.Stderr, "請在遠端執行 tsm daemon start\n")
+		os.Exit(1)
+	}
+	defer c.Close()
+
+	for {
+		// 顯示 session 選單
+		cfg := loadConfig()
+		deps := ui.Deps{Client: c, Cfg: cfg}
+		m := ui.NewModel(deps)
+		p := tea.NewProgram(m, tea.WithAltScreen())
+
+		finalModel, err := p.Run()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		fm, ok := finalModel.(ui.Model)
+		if !ok {
+			return
+		}
+
+		selected := fm.Selected()
+		if selected == "" {
+			return // 使用者按 q/esc 退出
+		}
+
+		// 連線到遠端 session
+		result := remote.Attach(host, selected)
+		if result == remote.AttachDetached {
+			continue // 正常 detach → 回到選單
+		}
+
+		// 斷線 — 顯示重連 modal
+		rm := remote.NewReconnectModel(host, selected)
+		reconnProg := tea.NewProgram(rm, tea.WithAltScreen())
+
+		// 背景執行重連
+		go func() {
+			attempt := 0
+			for {
+				attempt++
+				reconnProg.Send(remote.ReconnStateMsg{State: remote.StateConnecting, Attempt: attempt})
+
+				// 重建 SSH tunnel
+				tun.Close()
+				if err := tun.Start(); err != nil {
+					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
+					time.Sleep(wait)
+					continue
+				}
+
+				// 重新連線 gRPC
+				newC, err := client.DialSocket(tun.LocalSocket())
+				if err != nil {
+					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
+					time.Sleep(wait)
+					continue
+				}
+
+				// 驗證 daemon 存活
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				_, err = newC.DaemonStatus(ctx)
+				cancel()
+				if err != nil {
+					newC.Close()
+					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
+					time.Sleep(wait)
+					continue
+				}
+
+				// 更新 client 參照
+				c.Close()
+				c = newC
+
+				reconnProg.Send(remote.ReconnStateMsg{State: remote.StateConnected})
+				return
+			}
+		}()
+
+		reconnFinal, _ := reconnProg.Run()
+		rfm := reconnFinal.(remote.ReconnectModel)
+
+		if rfm.Quit() {
+			return
+		}
+		if rfm.BackToMenu() {
+			continue
+		}
+		if rfm.State() == remote.StateConnected {
+			// 重連成功 → 重新 attach
+			result := remote.Attach(host, selected)
+			if result == remote.AttachDetached {
+				continue
+			}
+			// 又斷線 → 繼續迴圈重連
+			continue
+		}
+	}
 }
 
 func loadConfig() config.Config {
