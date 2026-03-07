@@ -49,6 +49,18 @@ func Dial(cfg config.Config) (*Client, error) {
 	}, nil
 }
 
+// DialSocket 連線到指定的 unix socket（用於 remote 模式，不觸發 auto-start daemon）。
+func DialSocket(sockPath string) (*Client, error) {
+	conn, err := tryConnect(sockPath)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		conn: conn,
+		rpc:  tsmv1.NewSessionManagerClient(conn),
+	}, nil
+}
+
 // NewFromConn 從已有的 gRPC 連線建立 Client（用於測試）。
 func NewFromConn(conn *grpc.ClientConn) *Client {
 	return &Client{

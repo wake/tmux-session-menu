@@ -167,3 +167,8 @@ func TestClient_RecvWithoutWatch(t *testing.T) {
 	_, err := client.RecvSnapshot()
 	assert.Error(t, err)
 }
+
+func TestClient_DialSocket_InvalidPath(t *testing.T) {
+	_, err := DialSocket("/nonexistent/path/tsm.sock")
+	assert.Error(t, err)
+}
