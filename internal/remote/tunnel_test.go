@@ -1,6 +1,9 @@
 package remote
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,4 +36,47 @@ func TestTunnelArgs(t *testing.T) {
 		"-L", "/tmp/local.sock:/home/user/.config/tsm/tsm.sock",
 		"user@host",
 	}, args)
+}
+
+func TestTunnel_Close_RemovesSocket(t *testing.T) {
+	sockPath := filepath.Join(t.TempDir(), "test.sock")
+	os.WriteFile(sockPath, []byte{}, 0o600)
+
+	tun := &Tunnel{
+		host:      "host",
+		localSock: sockPath,
+	}
+	tun.Close()
+
+	_, err := os.Stat(sockPath)
+	assert.True(t, os.IsNotExist(err), "socket file should be removed")
+}
+
+func TestTunnel_ResolveRemoteSocket(t *testing.T) {
+	factory := func(name string, args ...string) CmdResult {
+		return CmdResult{Output: "/home/wake/.config/tsm/tsm.sock\n", Err: nil}
+	}
+	tun := &Tunnel{host: "myhost", cmdRun: factory}
+	path, err := tun.resolveRemoteSocket()
+	assert.NoError(t, err)
+	assert.Equal(t, "/home/wake/.config/tsm/tsm.sock", path)
+}
+
+func TestTunnel_ResolveRemoteSocket_Failure(t *testing.T) {
+	factory := func(name string, args ...string) CmdResult {
+		return CmdResult{Output: "", Err: fmt.Errorf("ssh: connect refused")}
+	}
+	tun := &Tunnel{host: "badhost", cmdRun: factory}
+	_, err := tun.resolveRemoteSocket()
+	assert.Error(t, err)
+}
+
+func TestTunnel_Start_FailsOnBadHost(t *testing.T) {
+	factory := func(name string, args ...string) CmdResult {
+		return CmdResult{Output: "", Err: fmt.Errorf("ssh: connect refused")}
+	}
+	tun := NewTunnel("badhost", WithCmdRun(factory))
+	err := tun.Start()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve remote socket")
 }
