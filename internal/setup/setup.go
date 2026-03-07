@@ -189,7 +189,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case " ":
 		if m.cursor < len(m.checked) {
 			comp := m.components[m.cursor]
-			disabled := comp.Disabled || (comp.FullOnly && m.installMode == ModeClient)
+			disabled := comp.Disabled || (comp.FullOnly && m.installMode == ModeClient && comp.Installed)
 			if !disabled {
 				m.checked[m.cursor] = !m.checked[m.cursor]
 			}
@@ -209,15 +209,15 @@ func (m Model) runInstall() (tea.Model, tea.Cmd) {
 				continue
 			}
 
-			isClientFullOnly := comp.FullOnly && m.installMode == ModeClient
-			if isClientFullOnly && comp.Installed && comp.UninstallFn != nil {
-				// [-] 已安裝的 FullOnly 元件在 client mode 執行移除
+			// [-] 已安裝的 FullOnly 元件在 client mode 執行移除
+			isRemoval := comp.FullOnly && m.installMode == ModeClient && comp.Installed
+			if isRemoval && comp.UninstallFn != nil {
 				msg, err := comp.UninstallFn()
 				results = append(results, result{label: comp.Label, message: msg, err: err})
 				continue
 			}
 
-			if !m.checked[i] || isClientFullOnly {
+			if !m.checked[i] {
 				continue
 			}
 			msg, err := comp.InstallFn()
@@ -275,18 +275,12 @@ func (m Model) View() string {
 			}
 
 			isClientFullOnly := comp.FullOnly && m.installMode == ModeClient
-			if isClientFullOnly {
-				if comp.Installed {
-					// [-] 已安裝，將移除
-					label := warnStyle.Render(comp.Label)
-					b.WriteString(fmt.Sprintf("%s[-] %s\n", cursor, label))
-					if comp.Note != "" {
-						b.WriteString(fmt.Sprintf("       %s\n", dimStyle.Render(comp.Note)))
-					}
-				} else {
-					// [ ] 未安裝，不適用
-					label := dimStyle.Render(comp.Label)
-					b.WriteString(fmt.Sprintf("%s[ ] %s\n", cursor, label))
+			if isClientFullOnly && comp.Installed {
+				// [-] 已安裝，將移除
+				label := warnStyle.Render(comp.Label)
+				b.WriteString(fmt.Sprintf("%s[-] %s\n", cursor, label))
+				if comp.Note != "" {
+					b.WriteString(fmt.Sprintf("       %s\n", dimStyle.Render(comp.Note)))
 				}
 				continue
 			}
@@ -318,18 +312,17 @@ func (m Model) View() string {
 			b.WriteString("\n")
 		}
 		if m.daemonHint != "" {
-			b.WriteString("\n")
 			if m.restarted {
 				if m.restartErr != nil {
-					b.WriteString(errorStyle.Render(fmt.Sprintf("✗ daemon 重啟失敗: %v", m.restartErr)))
+					b.WriteString(errorStyle.Render(fmt.Sprintf("✗ daemon 操作失敗: %v", m.restartErr)))
 				} else {
-					b.WriteString(successStyle.Render("✓ daemon 已重新啟動"))
+					b.WriteString(successStyle.Render("✓ daemon 已啟動"))
 				}
 				b.WriteString("\n")
 			} else if m.restartFn != nil {
-				b.WriteString(warnStyle.Render("⚠ daemon 需要重新啟動"))
+				b.WriteString(warnStyle.Render("⚠ " + m.daemonHint))
 				b.WriteString("  ")
-				b.WriteString(dimStyle.Render("重新啟動？(Y/n)"))
+				b.WriteString(dimStyle.Render("(Y/n)"))
 				b.WriteString("\n")
 			} else {
 				b.WriteString(warnStyle.Render("⚠ " + m.daemonHint))

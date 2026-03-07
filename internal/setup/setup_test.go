@@ -253,10 +253,11 @@ func TestRestartPromptY(t *testing.T) {
 
 	m = driveToPhaseDone(t, m)
 
-	// phaseDone 時 View 應顯示 (Y/n) 提示
+	// phaseDone 時 View 應顯示 daemonHint + (Y/n) 提示
 	view := m.View()
-	assert.Contains(t, view, "重新啟動？(Y/n)")
-	assert.NotContains(t, view, "✓ daemon 已重新啟動")
+	assert.Contains(t, view, "(Y/n)")
+	assert.Contains(t, view, "daemon 需要重新啟動")
+	assert.NotContains(t, view, "✓ daemon 已啟動")
 
 	// 按 Y → 執行 restartFn 並自動退出
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
@@ -267,7 +268,7 @@ func TestRestartPromptY(t *testing.T) {
 
 	// 最終 View 應顯示成功結果
 	view = m.View()
-	assert.Contains(t, view, "✓ daemon 已重新啟動")
+	assert.Contains(t, view, "✓ daemon 已啟動")
 	assert.NotContains(t, view, "(Y/n)")
 }
 
@@ -288,7 +289,7 @@ func TestRestartPromptEnter(t *testing.T) {
 	assert.True(t, called)
 	assert.NotNil(t, cmd, "應觸發 tea.Quit")
 	assert.True(t, m.quitting)
-	assert.Contains(t, m.View(), "✓ daemon 已重新啟動")
+	assert.Contains(t, m.View(), "✓ daemon 已啟動")
 }
 
 func TestRestartPromptN(t *testing.T) {
@@ -453,8 +454,27 @@ func TestSymbol_NotInstalledFullOnlyInClient_ShowsEmpty(t *testing.T) {
 	m.SetInstallMode(ModeClient)
 
 	view := m.View()
-	assert.Contains(t, view, "[ ]", "NotInstalled+FullOnly+client 應顯示 [ ]")
+	// FullOnly+NotInstalled 在 client mode 應顯示正常 [ ]（可切換），非 dimmed
 	assert.NotContains(t, view, "[-]")
+}
+
+func TestSpace_FullOnlyNotInstalledInClient_CanToggle(t *testing.T) {
+	comps := []Component{
+		{Label: "Binary", InstallFn: func() (string, error) { return "", nil }, Checked: true},
+		{Label: "Hooks", InstallFn: func() (string, error) { return "", nil },
+			Checked: false, FullOnly: true, Installed: false},
+	}
+	m := NewModel(comps)
+	m.SetInstallMode(ModeClient)
+
+	// 移動游標到 hooks
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	// Space 應可切換
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+	assert.True(t, m.Checked()[1], "[ ] FullOnly+NotInstalled+Client 應可用 Space 切換")
 }
 
 func TestRunInstall_ClientMode_UninstallsInstalledFullOnly(t *testing.T) {
@@ -477,6 +497,40 @@ func TestRunInstall_ClientMode_UninstallsInstalledFullOnly(t *testing.T) {
 	assert.Equal(t, "removed hooks", results[1].message)
 }
 
+func TestDaemonPromptNoBlankLine(t *testing.T) {
+	m := NewModel(testComponents())
+	m.SetDaemonHint("daemon 需要重新啟動")
+	m.SetRestartFn(func() error { return nil })
+
+	m = driveToPhaseDone(t, m)
+
+	view := m.View()
+	// daemon 提示應緊接結果，不應有空行分隔
+	assert.NotContains(t, view, "\n\n⚠")
+}
+
+func TestRunInstall_ClientMode_FullOnlyNotInstalled_Checked_Runs(t *testing.T) {
+	installed := false
+	comps := []Component{
+		{Label: "Binary", InstallFn: func() (string, error) { return "ok", nil }, Checked: true},
+		{Label: "Hooks",
+			InstallFn: func() (string, error) { installed = true; return "installed hooks", nil },
+			Checked: false, FullOnly: true, Installed: false},
+	}
+	m := NewModel(comps)
+	m.SetInstallMode(ModeClient)
+
+	// 手動勾選 Hooks（模擬使用者 Space toggle）
+	m.checked[1] = true
+
+	m = driveToPhaseDone(t, m)
+
+	assert.True(t, installed, "FullOnly+NotInstalled+Client+Checked 應執行 InstallFn")
+	results := m.Results()
+	assert.Len(t, results, 2)
+	assert.Equal(t, "installed hooks", results[1].message)
+}
+
 func TestRestartPromptError(t *testing.T) {
 	m := NewModel(testComponents())
 	m.SetDaemonHint("daemon 需要重新啟動")
@@ -493,6 +547,6 @@ func TestRestartPromptError(t *testing.T) {
 	assert.True(t, m.quitting)
 
 	view := m.View()
-	assert.Contains(t, view, "✗ daemon 重啟失敗: connection refused")
+	assert.Contains(t, view, "✗ daemon 操作失敗: connection refused")
 	assert.NotContains(t, view, "(Y/n)")
 }
