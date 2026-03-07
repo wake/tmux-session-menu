@@ -575,6 +575,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  --version, -v      顯示版本號")
 	fmt.Fprintln(os.Stderr, "  --inline           強制使用內嵌全螢幕模式")
+	fmt.Fprintln(os.Stderr, "  --remote <host>    透過 SSH 連線遠端主機的 tsm-daemon")
 	fmt.Fprintln(os.Stderr, "  --popup            強制使用 tmux popup 模式")
 	fmt.Fprintln(os.Stderr, "  --dry-run          預覽變更，不實際寫入")
 }
