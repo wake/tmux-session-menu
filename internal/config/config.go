@@ -63,6 +63,22 @@ func LoadInstallMode(dir string) InstallMode {
 	return ModeFull
 }
 
+const lastRemoteHostFile = "last_remote_host"
+
+// SaveLastRemoteHost 儲存最後連線的遠端主機名。
+func SaveLastRemoteHost(dir, host string) error {
+	return os.WriteFile(filepath.Join(dir, lastRemoteHostFile), []byte(host), 0644)
+}
+
+// LoadLastRemoteHost 讀取最後連線的遠端主機名，不存在時回傳空字串。
+func LoadLastRemoteHost(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, lastRemoteHostFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
 // ExpandPath 將 ~ 展開為使用者家目錄。
 func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {

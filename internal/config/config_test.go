@@ -80,6 +80,24 @@ func TestLoadInstallMode_NoFile_DefaultsFull(t *testing.T) {
 	assert.Equal(t, config.ModeFull, mode)
 }
 
+// --- LastRemoteHost 測試 ---
+
+func TestSaveAndLoadLastRemoteHost(t *testing.T) {
+	dir := t.TempDir()
+
+	err := config.SaveLastRemoteHost(dir, "myserver.local")
+	require.NoError(t, err)
+
+	host := config.LoadLastRemoteHost(dir)
+	assert.Equal(t, "myserver.local", host)
+}
+
+func TestLoadLastRemoteHost_NoFile_ReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	host := config.LoadLastRemoteHost(dir)
+	assert.Equal(t, "", host)
+}
+
 func TestExpandPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
