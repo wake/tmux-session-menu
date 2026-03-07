@@ -14,6 +14,17 @@ var (
 	headerStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#c0caf5"))
 	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#7aa2f7")).Bold(true)
 	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#787fa0"))
+
+	// Tab 樣式 — 背景色塊
+	activeTabStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#1a1b26")).
+			Background(lipgloss.Color("#7aa2f7")).
+			Padding(0, 1)
+	inactiveTabStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#787fa0")).
+				Background(lipgloss.Color("#24283b")).
+				Padding(0, 1)
 )
 
 // Choice 代表使用者的選擇。
@@ -114,12 +125,12 @@ func (m Model) View() string {
 	b.WriteString("  ")
 	for i, tab := range tabLabels {
 		if i > 0 {
-			b.WriteString(dimStyle.Render(" │ "))
+			b.WriteString(" ")
 		}
 		if i == m.activeTab {
-			b.WriteString(selectedStyle.Render(tab))
+			b.WriteString(activeTabStyle.Render(tab))
 		} else {
-			b.WriteString(dimStyle.Render(tab))
+			b.WriteString(inactiveTabStyle.Render(tab))
 		}
 	}
 	b.WriteString("\n\n")

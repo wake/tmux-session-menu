@@ -375,7 +375,6 @@ func TestInstallMode_ViewShowsMode(t *testing.T) {
 	// 兩個 tab 應同時可見
 	assert.Contains(t, view, "完整模式")
 	assert.Contains(t, view, "純客戶端")
-	assert.Contains(t, view, "│")
 
 	// 切到 client — 兩個 tab 仍可見
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})

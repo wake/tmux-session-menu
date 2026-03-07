@@ -17,6 +17,17 @@ var (
 	successStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#9ece6a"))
 	warnStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#e0af68"))
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#f7768e"))
+
+	// Tab 樣式 — 背景色塊
+	activeTabStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#1a1b26")).
+			Background(lipgloss.Color("#7aa2f7")).
+			Padding(0, 1)
+	inactiveTabStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#787fa0")).
+				Background(lipgloss.Color("#24283b")).
+				Padding(0, 1)
 )
 
 // InstallMode 代表安裝模式（與 config.InstallMode 對應）。
@@ -241,21 +252,21 @@ func (m Model) View() string {
 
 	switch m.phase {
 	case phaseSelect:
-		// 模式選擇器 — 水平 tab
+		// 模式選擇器 — tab
 		tabs := []string{"完整模式", "純客戶端"}
 		b.WriteString("  ")
 		for i, tab := range tabs {
 			if i > 0 {
-				b.WriteString(dimStyle.Render(" │ "))
+				b.WriteString(" ")
 			}
 			if i == int(m.installMode) {
-				b.WriteString(selectedStyle.Render(tab))
+				b.WriteString(activeTabStyle.Render(tab))
 			} else {
-				b.WriteString(dimStyle.Render(tab))
+				b.WriteString(inactiveTabStyle.Render(tab))
 			}
 		}
-		b.WriteString("    ")
-		b.WriteString(dimStyle.Render("← → 切換"))
+		b.WriteString("  ")
+		b.WriteString(dimStyle.Render("← →"))
 		b.WriteString("\n\n")
 		b.WriteString(dimStyle.Render("選擇要安裝的元件 (Space 切換, Enter 確認, q 取消)"))
 		b.WriteString("\n\n")

@@ -123,7 +123,6 @@ func TestViewShowsAllTabs(t *testing.T) {
 	assert.Contains(t, view, "連線遠端")
 	assert.Contains(t, view, "簡易本地端")
 	assert.Contains(t, view, "完整設定")
-	assert.Contains(t, view, "│")
 }
 
 func TestViewRemoteTabShowsInput(t *testing.T) {
