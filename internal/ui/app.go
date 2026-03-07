@@ -453,13 +453,13 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.exitTmux_ = true
 		return m, tea.Quit
 	case "j", "down":
-		if m.cursor < len(m.items)-1 {
-			m.cursor++
+		if len(m.items) > 0 {
+			m.cursor = (m.cursor + 1) % len(m.items)
 		}
 		return m, nil
 	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
+		if len(m.items) > 0 {
+			m.cursor = (m.cursor - 1 + len(m.items)) % len(m.items)
 		}
 		return m, nil
 	case "enter":
@@ -971,8 +971,8 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 	if idx < 0 {
 		return m, nil
 	}
-	newIdx := idx + direction
-	if newIdx < 0 || newIdx >= len(groups) {
+	newIdx := (idx + direction + len(groups)) % len(groups)
+	if newIdx == idx {
 		return m, nil
 	}
 
@@ -980,6 +980,16 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 	if err := m.normalizeGroupOrders(groups); err != nil {
 		m.err = err
 		return m, nil
+	}
+
+	// 找到目標群組在 items 中的位置（交換後 cursor 應跟隨到此處）
+	targetID := groups[newIdx].ID
+	newCursor := m.cursor
+	for i, item := range m.items {
+		if item.Type == ItemGroup && item.Group.ID == targetID {
+			newCursor = i
+			break
+		}
 	}
 
 	if m.deps.Client != nil {
@@ -992,7 +1002,7 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 			m.err = err
 			return m, nil
 		}
-		m.cursor += direction
+		m.cursor = newCursor
 		return m, nil // 變更透過 Watch stream 自動推送
 	}
 
@@ -1005,7 +1015,7 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 		m.err = err
 		return m, nil
 	}
-	m.cursor += direction
+	m.cursor = newCursor
 	return m, loadSessionsCmd(m.deps)
 }
 
@@ -1098,8 +1108,8 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 		if idx < 0 {
 			return m, nil
 		}
-		newIdx := idx + direction
-		if newIdx < 0 || newIdx >= len(siblings) {
+		newIdx := (idx + direction + len(siblings)) % len(siblings)
+		if newIdx == idx {
 			return m, nil
 		}
 		// sort_order 重複時先正規化
@@ -1115,7 +1125,15 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 			m.err = err
 			return m, nil
 		}
-		newCursor := m.cursor + direction
+		// 找到目標 session 在 items 中的位置
+		targetName := siblings[newIdx].Name
+		newCursor := m.cursor
+		for i, item := range m.items {
+			if item.Type == ItemSession && item.Session.Name == targetName {
+				newCursor = i
+				break
+			}
+		}
 		m.items[m.cursor], m.items[newCursor] = m.items[newCursor], m.items[m.cursor]
 		m.cursor = newCursor
 		return m, nil // 變更透過 Watch stream 自動推送
@@ -1137,8 +1155,8 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 	if idx < 0 {
 		return m, nil
 	}
-	newIdx := idx + direction
-	if newIdx < 0 || newIdx >= len(metas) {
+	newIdx := (idx + direction + len(metas)) % len(metas)
+	if newIdx == idx {
 		return m, nil
 	}
 	// sort_order 重複時先正規化
@@ -1155,7 +1173,16 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 		m.err = err
 		return m, nil
 	}
-	m.cursor += direction
+	// 找到目標 session 在 items 中的位置
+	targetName := metas[newIdx].SessionName
+	newCursor := m.cursor
+	for i, item := range m.items {
+		if item.Type == ItemSession && item.Session.Name == targetName {
+			newCursor = i
+			break
+		}
+	}
+	m.cursor = newCursor
 	return m, loadSessionsCmd(m.deps)
 }
 

@@ -52,15 +52,13 @@ func TestModel_Navigation(t *testing.T) {
 	m, _ = applyKey(m, "k")
 	assert.Equal(t, 0, m.Cursor())
 
-	// Can't go past top
+	// Wrap up: at top, press up → goes to bottom
 	m, _ = applyKey(m, "k")
-	assert.Equal(t, 0, m.Cursor())
-
-	// Can't go past bottom
-	m, _ = applyKey(m, "j")
-	m, _ = applyKey(m, "j")
-	m, _ = applyKey(m, "j")
 	assert.Equal(t, 2, m.Cursor())
+
+	// Wrap down: at bottom, press down → goes to top
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 0, m.Cursor())
 }
 
 func TestModel_View_RendersSessions(t *testing.T) {
@@ -1695,7 +1693,7 @@ func TestModel_Sort_UngroupedSession_Boundary(t *testing.T) {
 	assert.Equal(t, 0, m.Cursor(), "cursor 應保持不變")
 }
 
-func TestModel_Sort_UngroupedSession_DoesNotCrossGroup(t *testing.T) {
+func TestModel_Sort_UngroupedSession_WrapsWithinGroup(t *testing.T) {
 	st := openUITestDB(t)
 	defer st.Close()
 
@@ -1719,13 +1717,13 @@ func TestModel_Sort_UngroupedSession_DoesNotCrossGroup(t *testing.T) {
 	m, _ = applyKey(m, "j")
 	assert.Equal(t, 2, m.Cursor())
 
-	// 按 K 嘗試上移（不應跨越群組邊界）
+	// 按 K 上移（第一個未分組 session 應循環到最後一個未分組 session，不會跨越群組）
 	m, cmd := applyKey(m, "K")
-	assert.Nil(t, cmd, "未分組第一個 session 按 K 不應觸發任何 cmd")
-	assert.Equal(t, 2, m.Cursor(), "cursor 應保持不變")
+	assert.NotNil(t, cmd, "循環移動應觸發 loadSessionsCmd")
+	assert.Equal(t, 3, m.Cursor(), "cursor 應循環到最後一個未分組 session")
 }
 
-func TestModel_Sort_AtBoundary_NoOp(t *testing.T) {
+func TestModel_Sort_AtBoundary_WrapsAround(t *testing.T) {
 	st := openUITestDB(t)
 	defer st.Close()
 
@@ -1744,16 +1742,16 @@ func TestModel_Sort_AtBoundary_NoOp(t *testing.T) {
 	m, _ = applyKey(m, "j")
 	assert.Equal(t, 1, m.Cursor())
 
-	// 按 J 嘗試繼續下移（已在邊界）
+	// 按 J 下移（在邊界處應循環到頂部）
 	m, cmd := applyKey(m, "J")
 
-	assert.Nil(t, cmd, "邊界處按 J 不應觸發任何 cmd")
-	assert.Equal(t, 1, m.Cursor(), "cursor 應保持不變")
+	assert.NotNil(t, cmd, "循環移動應觸發 loadSessionsCmd")
+	assert.Equal(t, 0, m.Cursor(), "cursor 應循環到頂部")
 
-	// 驗證：store 中群組順序未變
+	// 驗證：store 中群組順序已交換
 	updatedGroups, _ := st.ListGroups()
-	assert.Equal(t, "alpha", updatedGroups[0].Name, "alpha 應仍排在前面")
-	assert.Equal(t, "beta", updatedGroups[1].Name, "beta 應仍排在後面")
+	assert.Equal(t, "beta", updatedGroups[0].Name, "beta 應移到前面")
+	assert.Equal(t, "alpha", updatedGroups[1].Name, "alpha 應移到後面")
 }
 
 func TestModel_Sort_DuplicateSortOrder_GroupMoveDown(t *testing.T) {
@@ -2346,4 +2344,158 @@ func TestModel_View_ToolbarNewLayout(t *testing.T) {
 
 	// 不應再有舊的 [e] 退出tmux
 	assert.NotContains(t, view, "[e]", "工具列不應包含 [e]")
+}
+
+// ─── Wrap-around navigation ─────────────────────────────────
+
+func TestModel_Navigation_WrapDown(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "a"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "b"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "c"}},
+	})
+
+	// 移到最底
+	m, _ = applyKey(m, "j")
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 2, m.Cursor())
+
+	// 再按 down，應該循環到最上面
+	m, _ = applyKey(m, "j")
+	assert.Equal(t, 0, m.Cursor(), "cursor 應循環回到頂部")
+}
+
+func TestModel_Navigation_WrapUp(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "a"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "b"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "c"}},
+	})
+
+	assert.Equal(t, 0, m.Cursor())
+
+	// 在頂部按 up，應該循環到最底
+	m, _ = applyKey(m, "k")
+	assert.Equal(t, 2, m.Cursor(), "cursor 應循環回到底部")
+}
+
+func TestModel_Navigation_WrapDown_Arrow(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "a"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "b"}},
+	})
+
+	m, _ = applyKey(m, "down")
+	assert.Equal(t, 1, m.Cursor())
+
+	m, _ = applyKey(m, "down")
+	assert.Equal(t, 0, m.Cursor(), "down arrow 應循環回到頂部")
+}
+
+func TestModel_Navigation_WrapUp_Arrow(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "a"}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "b"}},
+	})
+
+	m, _ = applyKey(m, "up")
+	assert.Equal(t, 1, m.Cursor(), "up arrow 應循環回到底部")
+}
+
+// ─── Wrap-around item moving ────────────────────────────────
+
+func TestModel_Sort_GroupWrapDown(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("alpha", 0)
+	st.CreateGroup("beta", 1)
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]}, // alpha
+		{Type: ui.ItemGroup, Group: groups[1]}, // beta
+	})
+
+	// cursor 在 beta（最後一個群組），按 J 下移應循環到第一個
+	m.SetCursor(1)
+	m, _ = applyKey(m, "J")
+
+	assert.Equal(t, 0, m.Cursor(), "cursor 應循環到頂部")
+
+	updatedGroups, _ := st.ListGroups()
+	assert.Equal(t, "beta", updatedGroups[0].Name, "beta 應移到前面")
+	assert.Equal(t, "alpha", updatedGroups[1].Name, "alpha 應移到後面")
+}
+
+func TestModel_Sort_GroupWrapUp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.CreateGroup("alpha", 0)
+	st.CreateGroup("beta", 1)
+	groups, _ := st.ListGroups()
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemGroup, Group: groups[0]}, // alpha
+		{Type: ui.ItemGroup, Group: groups[1]}, // beta
+	})
+
+	// cursor 在 alpha（第一個群組），按 K 上移應循環到最後
+	m, _ = applyKey(m, "K")
+
+	assert.Equal(t, 1, m.Cursor(), "cursor 應循環到底部")
+
+	updatedGroups, _ := st.ListGroups()
+	assert.Equal(t, "beta", updatedGroups[0].Name, "beta 應排在前面")
+	assert.Equal(t, "alpha", updatedGroups[1].Name, "alpha 應排在後面")
+}
+
+func TestModel_Sort_SessionWrapDown(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.SetSessionGroup("sess-a", 0, 0)
+	st.SetSessionGroup("sess-b", 0, 1)
+	st.SetSessionGroup("sess-c", 0, 2)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "sess-a", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "sess-b", SortOrder: 1}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "sess-c", SortOrder: 2}},
+	})
+
+	// cursor 在最後一個 session，按 J 下移應循環
+	m.SetCursor(2)
+	m, _ = applyKey(m, "J")
+
+	assert.Equal(t, 0, m.Cursor(), "cursor 應循環到頂部")
+}
+
+func TestModel_Sort_SessionWrapUp(t *testing.T) {
+	st := openUITestDB(t)
+	defer st.Close()
+
+	st.SetSessionGroup("sess-a", 0, 0)
+	st.SetSessionGroup("sess-b", 0, 1)
+	st.SetSessionGroup("sess-c", 0, 2)
+
+	m := ui.NewModel(ui.Deps{Store: st})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "sess-a", SortOrder: 0}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "sess-b", SortOrder: 1}},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "sess-c", SortOrder: 2}},
+	})
+
+	// cursor 在第一個 session，按 K 上移應循環
+	m, _ = applyKey(m, "K")
+
+	assert.Equal(t, 2, m.Cursor(), "cursor 應循環到底部")
 }
