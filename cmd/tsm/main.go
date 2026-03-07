@@ -158,9 +158,10 @@ func runRemote(host string) {
 	}
 	defer c.Close()
 
+	cfg := loadConfig() // 設定不變，移到迴圈外
+
 	for {
 		// 顯示 session 選單
-		cfg := loadConfig()
 		deps := ui.Deps{Client: c, Cfg: cfg}
 		m := ui.NewModel(deps)
 		p := tea.NewProgram(m, tea.WithAltScreen())
@@ -191,18 +192,37 @@ func runRemote(host string) {
 		rm := remote.NewReconnectModel(host, selected)
 		reconnProg := tea.NewProgram(rm, tea.WithAltScreen())
 
-		// 背景執行重連
+		// 用 channel 傳回新的 client，避免 race condition
+		type reconnResult struct {
+			client *client.Client
+		}
+		resultCh := make(chan reconnResult, 1)
+		ctx, cancel := context.WithCancel(context.Background())
+
+		// 背景執行重連（可透過 ctx 取消）
 		go func() {
+			defer close(resultCh)
 			attempt := 0
 			for {
 				attempt++
 				reconnProg.Send(remote.ReconnStateMsg{State: remote.StateConnecting, Attempt: attempt})
 
+				// 檢查是否已取消
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
 				// 重建 SSH tunnel
 				tun.Close()
 				if err := tun.Start(); err != nil {
 					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
-					time.Sleep(wait)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(wait):
+					}
 					continue
 				}
 
@@ -210,40 +230,69 @@ func runRemote(host string) {
 				newC, err := client.DialSocket(tun.LocalSocket())
 				if err != nil {
 					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
-					time.Sleep(wait)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(wait):
+					}
 					continue
 				}
 
 				// 驗證 daemon 存活
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				_, err = newC.DaemonStatus(ctx)
-				cancel()
+				dctx, dcancel := context.WithTimeout(ctx, 2*time.Second)
+				_, err = newC.DaemonStatus(dctx)
+				dcancel()
 				if err != nil {
 					newC.Close()
 					wait := remote.Backoff(attempt-1, remote.MaxBackoff)
-					time.Sleep(wait)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(wait):
+					}
 					continue
 				}
 
-				// 更新 client 參照
-				c.Close()
-				c = newC
-
 				reconnProg.Send(remote.ReconnStateMsg{State: remote.StateConnected})
+				resultCh <- reconnResult{client: newC}
 				return
 			}
 		}()
 
-		reconnFinal, _ := reconnProg.Run()
-		rfm := reconnFinal.(remote.ReconnectModel)
+		reconnFinal, err := reconnProg.Run()
+		cancel() // 停止重連 goroutine
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		rfm, ok := reconnFinal.(remote.ReconnectModel)
+		if !ok {
+			return
+		}
 
 		if rfm.Quit() {
 			return
 		}
 		if rfm.BackToMenu() {
+			// 嘗試從 channel 取得新 client（goroutine 可能已成功但使用者按了 Esc）
+			select {
+			case res, ok := <-resultCh:
+				if ok && res.client != nil {
+					c.Close()
+					c = res.client
+				}
+			default:
+			}
 			continue
 		}
 		if rfm.State() == remote.StateConnected {
+			// 從 channel 取得新 client
+			if res, ok := <-resultCh; ok && res.client != nil {
+				c.Close()
+				c = res.client
+			}
 			// 重連成功 → 重新 attach
 			result := remote.Attach(host, selected)
 			if result == remote.AttachDetached {
