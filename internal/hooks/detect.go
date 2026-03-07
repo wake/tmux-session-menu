@@ -144,6 +144,7 @@ func BuildComponent() setup.Component {
 		return setup.Component{
 			Label:       "Claude Code hooks",
 			Checked:     false,
+			Installed:   true,
 			Note:        fmt.Sprintf("已安裝（%d/%d events）", total, total),
 			InstallFn:   installFn,
 			UninstallFn: uninstallFn,
@@ -152,6 +153,7 @@ func BuildComponent() setup.Component {
 		return setup.Component{
 			Label:       "Claude Code hooks",
 			Checked:     true,
+			Installed:   true,
 			Note:        fmt.Sprintf("部分安裝（%d/%d events）", len(r.InstalledEvents), total),
 			InstallFn:   installFn,
 			UninstallFn: uninstallFn,

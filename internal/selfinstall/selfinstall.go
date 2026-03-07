@@ -178,9 +178,10 @@ func BuildComponent() setup.Component {
 	case StatusOutdated:
 		targetDir := filepath.Dir(r.Path)
 		return setup.Component{
-			Label:   fmt.Sprintf("更新 tsm 到 %s", r.Path),
-			Checked: true,
-			Note:    fmt.Sprintf("目前版本: %s → %s", r.Version, version.String()),
+			Label:     fmt.Sprintf("更新 tsm 到 %s", r.Path),
+			Checked:   true,
+			Installed: true,
+			Note:      fmt.Sprintf("目前版本: %s → %s", r.Version, version.String()),
 			InstallFn: func() (string, error) {
 				return Install(targetDir)
 			},
@@ -195,9 +196,10 @@ func BuildComponent() setup.Component {
 	default: // StatusSameVersion
 		targetDir := filepath.Dir(r.Path)
 		return setup.Component{
-			Label:   fmt.Sprintf("覆蓋安裝 tsm 到 %s", r.Path),
-			Checked: false,
-			Note:    fmt.Sprintf("已安裝版本: %s", r.Version),
+			Label:     fmt.Sprintf("覆蓋安裝 tsm 到 %s", r.Path),
+			Checked:   false,
+			Installed: true,
+			Note:      fmt.Sprintf("已安裝版本: %s", r.Version),
 			InstallFn: func() (string, error) {
 				return Install(targetDir)
 			},

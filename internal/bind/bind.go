@@ -71,6 +71,7 @@ func BuildComponent() setup.Component {
 		return setup.Component{
 			Label:       "Ctrl+Q 快捷鍵 (tmux keybinding)",
 			Checked:     false,
+			Installed:   true,
 			Note:        fmt.Sprintf("已安裝於 %s", r.ConfPath),
 			InstallFn:   installFn,
 			UninstallFn: uninstallFn,
