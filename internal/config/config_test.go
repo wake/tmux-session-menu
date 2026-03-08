@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -162,6 +163,48 @@ bar_bg = "#ddeeff"
 	assert.Equal(t, "#ddeeff", cfg.Remote.BarBG, "已設定的 remote bar_bg 為覆蓋值")
 	assert.Equal(t, "#73daca", cfg.Remote.BadgeBG, "未設定的 remote badge_bg 保持預設")
 	assert.Equal(t, "#1a1b26", cfg.Remote.BadgeFG, "未設定的 remote badge_fg 保持預設")
+}
+
+// --- SaveConfig 測試 ---
+
+func TestSaveConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cfg := config.Default()
+	cfg.PreviewLines = 200
+	cfg.Local.BarBG = "#aabbcc"
+
+	err := config.SaveConfig(path, cfg)
+	require.NoError(t, err)
+
+	// 重新讀取驗證
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	require.NoError(t, err)
+
+	assert.Equal(t, 200, loaded.PreviewLines)
+	assert.Equal(t, "#aabbcc", loaded.Local.BarBG)
+	assert.Equal(t, "#5f8787", loaded.Local.BadgeBG)
+}
+
+func TestSaveConfig_RuntimeFieldsNotSaved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cfg := config.Default()
+	cfg.InTmux = true
+	cfg.InPopup = true
+
+	err := config.SaveConfig(path, cfg)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	assert.NotContains(t, content, "in_tmux")
+	assert.NotContains(t, content, "in_popup")
 }
 
 func TestExpandPath(t *testing.T) {

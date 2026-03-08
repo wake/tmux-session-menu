@@ -99,6 +99,17 @@ func LoadLastRemoteHost(dir string) string {
 	return strings.TrimSpace(string(data))
 }
 
+// SaveConfig 將 Config 寫入指定路徑的 TOML 檔案。
+// 標記 toml:"-" 的執行時欄位（InTmux、InPopup）不會被寫入。
+func SaveConfig(path string, cfg Config) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return toml.NewEncoder(f).Encode(cfg)
+}
+
 // ExpandPath 將 ~ 展開為使用者家目錄。
 func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
