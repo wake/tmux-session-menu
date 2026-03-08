@@ -14,15 +14,21 @@ import (
 	"github.com/wake/tmux-session-menu/internal/ai"
 	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/version"
 )
 
 // Deps 封裝 Model 的外部依賴。
+// 當 HostMgr 不為 nil 時使用多主機模式；
 // 當 Client 不為 nil 時使用 gRPC daemon 模式；
 // 否則使用舊的 TmuxMgr+Store 直接模式（主要用於測試）。
 type Deps struct {
+	// 多主機模式
+	HostMgr *hostmgr.HostManager
+
+	// 舊模式（保留向下相容）
 	Client     *client.Client // gRPC client（daemon 模式）
 	TmuxMgr    *tmux.Manager  // 舊模式：直接 tmux 操作
 	Store      *store.Store   // 舊模式：直接 SQLite 操作
@@ -314,6 +320,67 @@ func recvSnapshotCmd(c *client.Client) tea.Cmd {
 	}
 }
 
+// MultiHostSnapshotMsg 是多主機模式下從 HostManager 接收的聚合快照訊息。
+type MultiHostSnapshotMsg struct {
+	Snapshots []HostSnapshotInput // 使用 items.go 定義的 UI 端型別
+}
+
+// recvMultiHostCmd 等待 HostManager 快照通知，回傳 MultiHostSnapshotMsg。
+func recvMultiHostCmd(mgr *hostmgr.HostManager) tea.Cmd {
+	return func() tea.Msg {
+		<-mgr.SnapshotCh()
+		return buildMultiHostMsg(mgr)
+	}
+}
+
+// buildMultiHostMsg 將 hostmgr.HostSnapshot 轉換為 MultiHostSnapshotMsg。
+func buildMultiHostMsg(mgr *hostmgr.HostManager) MultiHostSnapshotMsg {
+	hostSnaps := mgr.Snapshot()
+	var inputs []HostSnapshotInput
+	for _, hs := range hostSnaps {
+		input := HostSnapshotInput{
+			HostID: hs.HostID,
+			Name:   hs.Name,
+			Color:  hs.Color,
+			Status: int(hs.Status),
+			Error:  hs.Error,
+		}
+		if hs.Snapshot != nil {
+			input.Sessions = ConvertProtoSessions(hs.Snapshot.Sessions)
+			input.Groups = ConvertProtoGroups(hs.Snapshot.Groups)
+		}
+		inputs = append(inputs, input)
+	}
+	return MultiHostSnapshotMsg{Snapshots: inputs}
+}
+
+// clientForCursor 回傳目前游標所在主機的 gRPC 客戶端。
+// 多主機模式下依 HostID 路由，否則回傳 Deps.Client。
+func (m Model) clientForCursor() *client.Client {
+	if m.deps.HostMgr != nil && m.cursor >= 0 && m.cursor < len(m.items) {
+		return m.deps.HostMgr.ClientFor(m.items[m.cursor].HostID)
+	}
+	return m.deps.Client
+}
+
+// hostForCursor 回傳目前游標所在項目的主機 ID（用於 attach 路由）。
+func (m Model) hostForCursor() string {
+	if m.cursor >= 0 && m.cursor < len(m.items) {
+		return m.items[m.cursor].HostID
+	}
+	return ""
+}
+
+// SelectedItem 回傳被選取的 ListItem（供 main.go 判斷 attach 目標主機）。
+func (m Model) SelectedItem() ListItem {
+	for _, item := range m.items {
+		if item.Type == ItemSession && item.Session.Name == m.selected {
+			return item
+		}
+	}
+	return ListItem{}
+}
+
 // detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態。
 func detectSessionStatus(deps Deps, sessionName, paneTitle, paneContent string) tmux.SessionStatus {
 	var input tmux.StatusInput
@@ -345,6 +412,10 @@ func (m Model) pollInterval() time.Duration {
 
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
+	if m.deps.HostMgr != nil {
+		// 多主機模式：等待 HostManager 快照通知
+		return recvMultiHostCmd(m.deps.HostMgr)
+	}
 	if m.deps.Client != nil {
 		// gRPC daemon 模式：啟動 Watch stream
 		return watchCmd(m.deps.Client)
@@ -391,6 +462,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.deps.Client != nil {
 			cmds = append(cmds, recvSnapshotCmd(m.deps.Client))
 		}
+		if m.hasRunning() {
+			cmds = append(cmds, animTickCmd())
+		}
+		return m, tea.Batch(cmds...)
+	case MultiHostSnapshotMsg:
+		m.items = FlattenMultiHost(msg.Snapshots)
+		if m.cursor >= len(m.items) && len(m.items) > 0 {
+			m.cursor = len(m.items) - 1
+		}
+		var cmds []tea.Cmd
+		cmds = append(cmds, recvMultiHostCmd(m.deps.HostMgr))
 		if m.hasRunning() {
 			cmds = append(cmds, animTickCmd())
 		}
@@ -468,6 +550,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			item := m.items[m.cursor]
 			switch item.Type {
+			case ItemHostTitle:
+				return m, nil // 主機標題列不可操作
 			case ItemSession:
 				m.selected = item.Session.Name
 				m.quitting = true
@@ -499,6 +583,9 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// 重命名：session 雙行輸入（名稱+ID），群組單行重命名
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			item := m.items[m.cursor]
+			if item.Type == ItemHostTitle {
+				return m, nil // 主機標題列不可操作
+			}
 			switch item.Type {
 			case ItemSession:
 				m.mode = ModeInput
@@ -518,8 +605,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "g":
-		// 新建群組：需要 Store 或 Client
-		if m.deps.Client != nil || m.deps.Store != nil {
+		// 新建群組：需要 Store、Client 或 HostMgr
+		if m.clientForCursor() != nil || m.deps.Store != nil {
 			m.mode = ModeInput
 			m.inputTarget = InputNewGroup
 			m.inputPrompt = "群組名稱"
@@ -529,8 +616,11 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "m":
 		// 移動 session 到群組：僅對 ItemSession 生效
-		if m.cursor >= 0 && m.cursor < len(m.items) && (m.deps.Client != nil || m.deps.Store != nil) {
+		if m.cursor >= 0 && m.cursor < len(m.items) && (m.clientForCursor() != nil || m.deps.Store != nil) {
 			item := m.items[m.cursor]
+			if item.Type == ItemHostTitle {
+				return m, nil // 主機標題列不可操作
+			}
 			if item.Type == ItemSession {
 				groups := m.collectGroups()
 				if len(groups) == 0 {
@@ -566,17 +656,21 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// 刪除 session：僅對 ItemSession 生效
 		if m.cursor >= 0 && m.cursor < len(m.items) {
 			item := m.items[m.cursor]
+			if item.Type == ItemHostTitle {
+				return m, nil // 主機標題列不可操作
+			}
 			if item.Type == ItemSession {
 				name := item.Session.Name
+				c := m.clientForCursor() // 閉包前取得當前游標的 client
 				deps := m.deps
 				m.mode = ModeConfirm
 				m.confirmPrompt = fmt.Sprintf("確定要刪除 session %q？", name)
 				m.confirmAction = func() tea.Cmd {
-					if deps.Client != nil {
-						if err := deps.Client.KillSession(context.Background(), name); err != nil {
+					if c != nil {
+						if err := c.KillSession(context.Background(), name); err != nil {
 							return func() tea.Msg { return errMsg{err} }
 						}
-						return nil // 變更透過 Watch stream 自動推送
+						return nil // 變更透過 Watch/MultiHost stream 自動推送
 					}
 					if deps.TmuxMgr != nil {
 						if err := deps.TmuxMgr.KillSession(name); err != nil {
@@ -619,12 +713,12 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.inputTarget {
 		case InputNewSession:
 			m.mode = ModeNormal
-			if m.deps.Client != nil {
-				if err := m.deps.Client.CreateSession(context.Background(), value, ""); err != nil {
+			if c := m.clientForCursor(); c != nil {
+				if err := c.CreateSession(context.Background(), value, ""); err != nil {
 					m.err = err
 					return m, nil
 				}
-				return m, nil // 變更透過 Watch stream 自動推送
+				return m, nil // 變更透過 Watch/MultiHost stream 自動推送
 			}
 			if m.deps.TmuxMgr != nil {
 				if err := m.deps.TmuxMgr.NewSession(value, ""); err != nil {
@@ -635,12 +729,12 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, loadSessionsCmd(m.deps)
 		case InputNewGroup:
 			m.mode = ModeNormal
-			if m.deps.Client != nil {
-				if err := m.deps.Client.CreateGroup(context.Background(), value, 0); err != nil {
+			if c := m.clientForCursor(); c != nil {
+				if err := c.CreateGroup(context.Background(), value, 0); err != nil {
 					m.err = err
 					return m, nil
 				}
-				return m, nil // 變更透過 Watch stream 自動推送
+				return m, nil // 變更透過 Watch/MultiHost stream 自動推送
 			}
 			if m.deps.Store != nil {
 				if err := m.deps.Store.CreateGroup(value, 0); err != nil {
@@ -653,12 +747,12 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = ModeNormal
 			if m.cursor >= 0 && m.cursor < len(m.items) && m.items[m.cursor].Type == ItemGroup {
 				groupID := m.items[m.cursor].Group.ID
-				if m.deps.Client != nil {
-					if err := m.deps.Client.RenameGroup(context.Background(), groupID, value); err != nil {
+				if c := m.clientForCursor(); c != nil {
+					if err := c.RenameGroup(context.Background(), groupID, value); err != nil {
 						m.err = err
 						return m, nil
 					}
-					return m, nil // 變更透過 Watch stream 自動推送
+					return m, nil // 變更透過 Watch/MultiHost stream 自動推送
 				}
 				if m.deps.Store != nil {
 					if err := m.deps.Store.RenameGroup(groupID, value); err != nil {
@@ -727,12 +821,12 @@ func (m Model) updateDualInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			newSessionName = newID
 		}
 
-		if m.deps.Client != nil {
-			if err := m.deps.Client.RenameSession(context.Background(), origName, customName, newSessionName); err != nil {
+		if c := m.clientForCursor(); c != nil {
+			if err := c.RenameSession(context.Background(), origName, customName, newSessionName); err != nil {
 				m.err = err
 				return m, nil
 			}
-			return m, nil // 變更透過 Watch stream 自動推送
+			return m, nil // 變更透過 Watch/MultiHost stream 自動推送
 		}
 		// 舊模式：先 tmux rename，再 store 遷移，再設 custom name
 		if newSessionName != "" && m.deps.TmuxMgr != nil {
@@ -808,8 +902,8 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.pickerCursor >= 0 && m.pickerCursor < len(m.pickerGroups) {
 			group := m.pickerGroups[m.pickerCursor]
-			if m.deps.Client != nil {
-				if err := m.deps.Client.MoveSession(context.Background(), m.pickerTarget, group.ID, 0); err != nil {
+			if c := m.clientForCursor(); c != nil {
+				if err := c.MoveSession(context.Background(), m.pickerTarget, group.ID, 0); err != nil {
 					m.err = err
 				}
 			} else if m.deps.Store != nil {
@@ -821,8 +915,8 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeNormal
 		m.pickerGroups = nil
 		m.pickerTarget = ""
-		if m.deps.Client != nil {
-			return m, nil // 變更透過 Watch stream 自動推送
+		if m.clientForCursor() != nil {
+			return m, nil // 變更透過 Watch/MultiHost stream 自動推送
 		}
 		return m, loadSessionsCmd(m.deps)
 	case "esc":
@@ -881,11 +975,11 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // toggleCollapse 切換群組的展開/收合狀態。
 func (m Model) toggleCollapse(item ListItem) (tea.Model, tea.Cmd) {
-	if m.deps.Client != nil {
-		if err := m.deps.Client.ToggleCollapse(context.Background(), item.Group.ID); err != nil {
+	if c := m.clientForCursor(); c != nil {
+		if err := c.ToggleCollapse(context.Background(), item.Group.ID); err != nil {
 			m.err = err
 		}
-		return m, nil // 變更透過 Watch stream 自動推送
+		return m, nil // 變更透過 Watch/MultiHost stream 自動推送
 	}
 	if m.deps.Store != nil {
 		if err := m.deps.Store.ToggleGroupCollapsed(item.Group.ID); err != nil {
@@ -915,13 +1009,16 @@ func (m Model) collectGroups() []store.Group {
 
 // moveItem 根據方向移動目前選取的項目（群組或 session）。
 func (m Model) moveItem(direction int) (tea.Model, tea.Cmd) {
-	if m.deps.Client == nil && m.deps.Store == nil {
+	if m.clientForCursor() == nil && m.deps.Store == nil {
 		return m, nil
 	}
 	if m.cursor < 0 || m.cursor >= len(m.items) {
 		return m, nil
 	}
 	item := m.items[m.cursor]
+	if item.Type == ItemHostTitle {
+		return m, nil // 主機標題列不可操作
+	}
 	switch item.Type {
 	case ItemGroup:
 		return m.moveGroup(item.Group, direction)
@@ -945,9 +1042,10 @@ func (m Model) normalizeGroupOrders(groups []store.Group) error {
 	if !needsNormalize {
 		return nil
 	}
+	c := m.clientForCursor()
 	for i, g := range groups {
-		if m.deps.Client != nil {
-			if err := m.deps.Client.ReorderGroup(context.Background(), g.ID, i); err != nil {
+		if c != nil {
+			if err := c.ReorderGroup(context.Background(), g.ID, i); err != nil {
 				return err
 			}
 		} else if m.deps.Store != nil {
@@ -994,18 +1092,18 @@ func (m Model) moveGroup(group store.Group, direction int) (tea.Model, tea.Cmd) 
 		}
 	}
 
-	if m.deps.Client != nil {
+	if c := m.clientForCursor(); c != nil {
 		// gRPC 模式：交換 sort_order
-		if err := m.deps.Client.ReorderGroup(context.Background(), groups[idx].ID, groups[newIdx].SortOrder); err != nil {
+		if err := c.ReorderGroup(context.Background(), groups[idx].ID, groups[newIdx].SortOrder); err != nil {
 			m.err = err
 			return m, nil
 		}
-		if err := m.deps.Client.ReorderGroup(context.Background(), groups[newIdx].ID, groups[idx].SortOrder); err != nil {
+		if err := c.ReorderGroup(context.Background(), groups[newIdx].ID, groups[idx].SortOrder); err != nil {
 			m.err = err
 			return m, nil
 		}
 		m.cursor = newCursor
-		return m, nil // 變更透過 Watch stream 自動推送
+		return m, nil // 變更透過 Watch/MultiHost stream 自動推送
 	}
 
 	// 舊模式
@@ -1036,9 +1134,10 @@ func (m Model) normalizeSessionOrders(siblings []tmux.Session, groupID int64) er
 	if !needsNormalize {
 		return nil
 	}
+	c := m.clientForCursor()
 	for i, s := range siblings {
-		if m.deps.Client != nil {
-			if err := m.deps.Client.ReorderSession(context.Background(), s.Name, groupID, i); err != nil {
+		if c != nil {
+			if err := c.ReorderSession(context.Background(), s.Name, groupID, i); err != nil {
 				return err
 			}
 		} else if m.deps.Store != nil {
@@ -1092,7 +1191,7 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 		}
 	}
 
-	if m.deps.Client != nil {
+	if c := m.clientForCursor(); c != nil {
 		// gRPC 模式：需要從 items 中找同群組的 session 來計算排序
 		var siblings []tmux.Session
 		for _, item := range m.items {
@@ -1119,11 +1218,11 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 			m.err = err
 			return m, nil
 		}
-		if err := m.deps.Client.ReorderSession(context.Background(), siblings[idx].Name, groupID, siblings[newIdx].SortOrder); err != nil {
+		if err := c.ReorderSession(context.Background(), siblings[idx].Name, groupID, siblings[newIdx].SortOrder); err != nil {
 			m.err = err
 			return m, nil
 		}
-		if err := m.deps.Client.ReorderSession(context.Background(), siblings[newIdx].Name, groupID, siblings[idx].SortOrder); err != nil {
+		if err := c.ReorderSession(context.Background(), siblings[newIdx].Name, groupID, siblings[idx].SortOrder); err != nil {
 			m.err = err
 			return m, nil
 		}
@@ -1138,7 +1237,7 @@ func (m Model) moveSession(session tmux.Session, direction int) (tea.Model, tea.
 		}
 		m.items[m.cursor], m.items[newCursor] = m.items[newCursor], m.items[m.cursor]
 		m.cursor = newCursor
-		return m, nil // 變更透過 Watch stream 自動推送
+		return m, nil // 變更透過 Watch/MultiHost stream 自動推送
 	}
 
 	// 舊模式
