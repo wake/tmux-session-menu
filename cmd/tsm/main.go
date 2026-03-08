@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wake/tmux-session-menu/internal/bind"
+	"github.com/wake/tmux-session-menu/internal/cfgtui"
 	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/daemon"
@@ -109,6 +110,11 @@ func main() {
 
 	if args[0] == "daemon" {
 		runDaemon(args[1:])
+		return
+	}
+
+	if args[0] == "config" {
+		runConfig()
 		return
 	}
 
@@ -415,6 +421,33 @@ func runStatusName() {
 	fmt.Print(name)
 }
 
+// runConfig 啟動設定 TUI，儲存後寫入 config.toml。
+func runConfig() {
+	cfg := loadConfig()
+	m := cfgtui.NewModel(cfg)
+
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fm, ok := finalModel.(cfgtui.Model)
+	if !ok || !fm.Saved() {
+		return
+	}
+
+	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
+	result := fm.ResultConfig()
+	result.DataDir = cfg.DataDir
+	if err := config.SaveConfig(cfgPath, result); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 儲存設定失敗: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("設定已儲存")
+}
+
 func loadConfig() config.Config {
 	cfg := config.Default()
 	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
@@ -679,6 +712,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  (no args)          啟動 TUI 選單（自動管理 daemon）")
+	fmt.Fprintln(os.Stderr, "  config             設定 tsm 參數與主題色")
 	fmt.Fprintln(os.Stderr, "  setup              互動式安裝所有元件")
 	fmt.Fprintln(os.Stderr, "  bind install       安裝 Ctrl+Q 快捷鍵到 ~/.tmux.conf")
 	fmt.Fprintln(os.Stderr, "  bind uninstall     移除 Ctrl+Q 快捷鍵")
