@@ -110,6 +110,9 @@ type Model struct {
 
 	// HostPicker mode（主機管理面板）
 	hostPickerCursor int
+
+	// NewSession 表單
+	newSession newSessionForm
 }
 
 // NewModel 建立初始 Model。
@@ -211,6 +214,11 @@ func (m Model) DualInputValue(row int) string {
 // Err 回傳目前的錯誤（主要用於測試）。
 func (m Model) Err() error {
 	return m.err
+}
+
+// NewSessionNameValue 回傳 ModeNewSession 表單的名稱欄位值（主要用於測試）。
+func (m Model) NewSessionNameValue() string {
+	return m.newSession.nameInput.Value()
 }
 
 // SearchQuery 回傳目前的搜尋字串（主要用於測試）。
@@ -574,6 +582,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateSearch(msg)
 		case ModeHostPicker:
 			return m.updateHostPicker(msg)
+		case ModeNewSession:
+			return m.updateNewSession(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -636,11 +646,12 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "n":
-		m.mode = ModeInput
-		m.inputTarget = InputNewSession
-		m.inputPrompt = "Session 名稱"
-		m.textInput.SetValue("")
-		m.textInput.Focus()
+		var recentPaths []string
+		if m.deps.Store != nil {
+			recentPaths, _ = m.deps.Store.RecentPaths(3)
+		}
+		m.newSession.initForm(m.deps.Cfg.Agents, recentPaths)
+		m.mode = ModeNewSession
 		return m, nil
 	case "r":
 		// 重命名：session 雙行輸入（名稱+ID），群組單行重命名
@@ -1663,6 +1674,8 @@ func (m Model) View() string {
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	case ModeHostPicker:
 		b.WriteString(m.renderHostPicker())
+	case ModeNewSession:
+		b.WriteString(m.renderNewSession())
 	default:
 		b.WriteString("\n")
 		b.WriteString(m.renderToolbar())
