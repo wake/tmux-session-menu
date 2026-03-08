@@ -786,7 +786,7 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case InputNewSession:
 			m.mode = ModeNormal
 			if c := m.clientForCursor(); c != nil {
-				if err := c.CreateSession(context.Background(), value, ""); err != nil {
+				if err := c.CreateSession(context.Background(), value, "", ""); err != nil {
 					m.err = err
 					return m, nil
 				}

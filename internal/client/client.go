@@ -95,9 +95,9 @@ func (c *Client) RecvSnapshot() (*tsmv1.StateSnapshot, error) {
 	return c.stream.Recv()
 }
 
-// CreateSession 建立新的 tmux session。
-func (c *Client) CreateSession(ctx context.Context, name, path string) error {
-	_, err := c.rpc.CreateSession(ctx, &tsmv1.CreateSessionRequest{Name: name, Path: path})
+// CreateSession 建立新的 tmux session。command 為可選的啟動指令（空字串表示不執行）。
+func (c *Client) CreateSession(ctx context.Context, name, path, command string) error {
+	_, err := c.rpc.CreateSession(ctx, &tsmv1.CreateSessionRequest{Name: name, Path: path, Command: command})
 	return err
 }
 
