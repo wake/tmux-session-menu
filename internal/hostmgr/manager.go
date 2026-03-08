@@ -1,6 +1,8 @@
 package hostmgr
 
 import (
+	"context"
+	"fmt"
 	"sync"
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
@@ -23,6 +25,7 @@ type HostManager struct {
 	mu         sync.RWMutex
 	hosts      []*Host
 	snapshotCh chan struct{} // 通知 UI 任一主機快照更新
+	closeOnce  sync.Once
 }
 
 // New 建立新的 HostManager。
@@ -146,4 +149,74 @@ func (m *HostManager) Remove(hostID string) {
 			return
 		}
 	}
+}
+
+// StartAll 啟動所有已啟用的主機連線。
+func (m *HostManager) StartAll(ctx context.Context) {
+	m.mu.RLock()
+	hosts := make([]*Host, len(m.hosts))
+	copy(hosts, m.hosts)
+	ch := m.snapshotCh
+	m.mu.RUnlock()
+
+	for _, h := range hosts {
+		if h.Config().Enabled {
+			h.start(ctx, ch)
+		}
+	}
+}
+
+// Enable 啟用指定主機並開始連線。
+func (m *HostManager) Enable(ctx context.Context, hostID string) error {
+	h := m.Host(hostID)
+	if h == nil {
+		return fmt.Errorf("host %q not found", hostID)
+	}
+
+	// 設定 cfg.Enabled
+	h.mu.Lock()
+	h.cfg.Enabled = true
+	h.mu.Unlock()
+
+	// 啟動連線（不持有 m.mu）
+	m.mu.RLock()
+	ch := m.snapshotCh
+	m.mu.RUnlock()
+	h.start(ctx, ch)
+
+	return nil
+}
+
+// Disable 停止指定主機並停用。
+func (m *HostManager) Disable(hostID string) error {
+	h := m.Host(hostID)
+	if h == nil {
+		return fmt.Errorf("host %q not found", hostID)
+	}
+
+	// 先 stop（不持有 m.mu），再更新 cfg
+	h.stop()
+
+	h.mu.Lock()
+	h.cfg.Enabled = false
+	h.mu.Unlock()
+
+	m.notify()
+	return nil
+}
+
+// Close 停止所有主機並關閉通知通道。可安全重複呼叫。
+func (m *HostManager) Close() {
+	m.mu.RLock()
+	hosts := make([]*Host, len(m.hosts))
+	copy(hosts, m.hosts)
+	m.mu.RUnlock()
+
+	for _, h := range hosts {
+		h.stop()
+	}
+
+	m.closeOnce.Do(func() {
+		close(m.snapshotCh)
+	})
 }

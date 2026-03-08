@@ -1,8 +1,10 @@
 package hostmgr
 
 import (
+	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -135,4 +137,111 @@ func TestHostStatusConstants(t *testing.T) {
 	assert.Equal(t, HostStatus(1), HostConnecting)
 	assert.Equal(t, HostStatus(2), HostConnected)
 	assert.Equal(t, HostStatus(3), HostDisconnected)
+}
+
+// --- Task 6: 連線生命週期相關測試 ---
+
+// TestNotifyNonBlock 驗證 notifyNonBlock 不會在通道滿時阻塞。
+func TestNotifyNonBlock(t *testing.T) {
+	ch := make(chan struct{}, 1)
+	// 填滿通道
+	ch <- struct{}{}
+
+	// 不應阻塞
+	done := make(chan struct{})
+	go func() {
+		notifyNonBlock(ch)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// 成功，沒有阻塞
+	case <-time.After(1 * time.Second):
+		t.Fatal("notifyNonBlock 在通道滿時阻塞了")
+	}
+
+	// 空通道也不應阻塞
+	ch2 := make(chan struct{}, 1)
+	notifyNonBlock(ch2)
+	assert.Len(t, ch2, 1)
+}
+
+// TestNextBackoff 驗證指數退避邏輯與上限。
+func TestNextBackoff(t *testing.T) {
+	tests := []struct {
+		current  time.Duration
+		expected time.Duration
+	}{
+		{1 * time.Second, 2 * time.Second},
+		{2 * time.Second, 4 * time.Second},
+		{4 * time.Second, 8 * time.Second},
+		{8 * time.Second, 16 * time.Second},
+		{16 * time.Second, 30 * time.Second}, // 超過上限，回傳上限
+		{30 * time.Second, 30 * time.Second}, // 已在上限
+		{60 * time.Second, 30 * time.Second}, // 超過上限
+	}
+
+	for _, tt := range tests {
+		got := nextBackoff(tt.current)
+		assert.Equal(t, tt.expected, got, "nextBackoff(%v)", tt.current)
+	}
+}
+
+// TestHostStartSetsConnecting 驗證 start() 同步設定狀態為 Connecting。
+// 使用已取消的 context 讓 run() goroutine 立即退出，以確保狀態維持在 Connecting。
+func TestHostStartSetsConnecting(t *testing.T) {
+	h := NewHost(config.HostEntry{
+		Name:    "test-host",
+		Address: "remote.example.com",
+		Enabled: true,
+	})
+	require.Equal(t, HostDisabled, h.Status())
+
+	// 使用已取消的 parent context，run() 進入後會在 ctx.Done() 立即退出
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // 立即取消
+
+	ch := make(chan struct{}, 1)
+	h.start(ctx, ch)
+
+	// start() 同步設定 Connecting；run() goroutine 偵測到 ctx.Done() 後立即退出，不會改狀態
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(t, HostConnecting, h.Status())
+}
+
+// TestHostStopSetsDisabled 驗證 stop() 會將狀態設為 Disabled 並清理資源。
+func TestHostStopSetsDisabled(t *testing.T) {
+	h := NewHost(config.HostEntry{
+		Name:    "test-host",
+		Address: "remote.example.com",
+		Enabled: true,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := make(chan struct{}, 1)
+	h.start(ctx, ch)
+	time.Sleep(50 * time.Millisecond)
+
+	h.stop()
+
+	assert.Equal(t, HostDisabled, h.Status())
+	assert.Nil(t, h.Client())
+	assert.Nil(t, h.Snapshot())
+}
+
+// TestHostStopIdempotent 驗證對未啟動的 host 呼叫 stop 不會 panic。
+func TestHostStopIdempotent(t *testing.T) {
+	h := NewHost(config.HostEntry{
+		Name:    "test-host",
+		Address: "remote.example.com",
+		Enabled: true,
+	})
+
+	assert.NotPanics(t, func() {
+		h.stop()
+	})
+	assert.Equal(t, HostDisabled, h.Status())
 }

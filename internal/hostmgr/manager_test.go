@@ -1,7 +1,9 @@
 package hostmgr
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -189,4 +191,115 @@ func TestHostStatusString(t *testing.T) {
 			assert.Equal(t, tt.want, tt.status.String())
 		})
 	}
+}
+
+// --- Task 6: Manager 生命週期方法測試 ---
+
+// TestManagerStartAll 驗證只啟動 Enabled 的主機。
+func TestManagerStartAll(t *testing.T) {
+	mgr := New()
+	mgr.AddHost(config.HostEntry{Name: "enabled-host", Address: "10.0.0.1", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "disabled-host", Address: "10.0.0.2", Enabled: false})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mgr.StartAll(ctx)
+
+	// 給 goroutine 啟動時間
+	time.Sleep(50 * time.Millisecond)
+
+	snaps := mgr.Snapshot()
+	require.Len(t, snaps, 2)
+
+	// enabled 的應為 Connecting（連不上遠端，但 run 會設定 Connecting）
+	assert.Equal(t, HostConnecting, snaps[0].Status, "enabled 的主機應已啟動")
+	// disabled 的應仍為 Disabled
+	assert.Equal(t, HostDisabled, snaps[1].Status, "disabled 的主機不應啟動")
+
+	// 清理
+	mgr.Close()
+}
+
+// TestManagerEnable 驗證 Enable 啟用並啟動主機。
+func TestManagerEnable(t *testing.T) {
+	mgr := New()
+	mgr.AddHost(config.HostEntry{Name: "host-a", Address: "10.0.0.1", Enabled: false})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := mgr.Enable(ctx, "host-a")
+	require.NoError(t, err)
+
+	time.Sleep(50 * time.Millisecond)
+
+	h := mgr.Host("host-a")
+	require.NotNil(t, h)
+	assert.True(t, h.Config().Enabled, "Enable 後 cfg.Enabled 應為 true")
+	assert.Equal(t, HostConnecting, h.Status(), "Enable 後應進入 Connecting")
+
+	mgr.Close()
+}
+
+// TestManagerEnableUnknownHost 驗證啟用不存在的主機回傳錯誤。
+func TestManagerEnableUnknownHost(t *testing.T) {
+	mgr := New()
+
+	err := mgr.Enable(context.Background(), "nonexistent")
+	assert.Error(t, err)
+}
+
+// TestManagerDisable 驗證 Disable 停止並停用主機。
+func TestManagerDisable(t *testing.T) {
+	mgr := New()
+	mgr.AddHost(config.HostEntry{Name: "host-a", Address: "10.0.0.1", Enabled: true})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mgr.StartAll(ctx)
+	time.Sleep(50 * time.Millisecond)
+
+	err := mgr.Disable("host-a")
+	require.NoError(t, err)
+
+	h := mgr.Host("host-a")
+	require.NotNil(t, h)
+	assert.False(t, h.Config().Enabled, "Disable 後 cfg.Enabled 應為 false")
+	assert.Equal(t, HostDisabled, h.Status(), "Disable 後應為 Disabled")
+
+	mgr.Close()
+}
+
+// TestManagerDisableUnknownHost 驗證停用不存在的主機回傳錯誤。
+func TestManagerDisableUnknownHost(t *testing.T) {
+	mgr := New()
+
+	err := mgr.Disable("nonexistent")
+	assert.Error(t, err)
+}
+
+// TestManagerClose 驗證 Close 停止所有主機並關閉通道。
+func TestManagerClose(t *testing.T) {
+	mgr := New()
+	mgr.AddHost(config.HostEntry{Name: "host-a", Address: "10.0.0.1", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "host-b", Address: "10.0.0.2", Enabled: true})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mgr.StartAll(ctx)
+	time.Sleep(50 * time.Millisecond)
+
+	mgr.Close()
+
+	// 所有主機應為 Disabled
+	for _, h := range mgr.Hosts() {
+		assert.Equal(t, HostDisabled, h.Status(), "%s 應為 Disabled", h.ID())
+	}
+
+	// snapshotCh 應已關閉
+	_, open := <-mgr.SnapshotCh()
+	assert.False(t, open, "snapshotCh 應已關閉")
 }
