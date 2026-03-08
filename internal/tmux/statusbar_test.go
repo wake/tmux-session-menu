@@ -65,7 +65,7 @@ func TestStatusBarArgs_BadgeInStatusLeft(t *testing.T) {
 		if len(cmd) >= 4 && cmd[2] == "status-left" {
 			assert.Contains(t, cmd[3], "#73daca")
 			assert.Contains(t, cmd[3], "#1a1b26")
-			assert.Contains(t, cmd[3], "tsm status-name")
+			assert.Contains(t, cmd[3], "@tsm_name")
 		}
 	}
 }

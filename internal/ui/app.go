@@ -909,6 +909,14 @@ func (m Model) updateDualInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		// 同步 tmux user option 供 status bar 原生格式顯示
+		if m.deps.TmuxMgr != nil {
+			if customName != "" {
+				_ = m.deps.TmuxMgr.SetSessionOption(storeName, "@tsm_name", customName)
+			} else {
+				_ = m.deps.TmuxMgr.UnsetSessionOption(storeName, "@tsm_name")
+			}
+		}
 		return m, loadSessionsCmd(m.deps)
 	default:
 		var cmd tea.Cmd

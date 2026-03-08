@@ -105,6 +105,12 @@ func (s *Service) RenameSession(_ context.Context, req *tsmv1.RenameSessionReque
 	if err := s.store.SetCustomName(sessionName, req.CustomName); err != nil {
 		return nil, err
 	}
+	// 同步 tmux user option 供 status bar 原生格式顯示
+	if req.CustomName != "" {
+		_ = s.tmuxMgr.SetSessionOption(sessionName, "@tsm_name", req.CustomName)
+	} else {
+		_ = s.tmuxMgr.UnsetSessionOption(sessionName, "@tsm_name")
+	}
 	s.state.Scan()
 	return &emptypb.Empty{}, nil
 }

@@ -84,6 +84,18 @@ func (m *Manager) RenameSession(oldName, newName string) error {
 	return err
 }
 
+// SetSessionOption 設定指定 session 的 tmux 選項。
+func (m *Manager) SetSessionOption(sessionName, option, value string) error {
+	_, err := m.exec.Execute("set-option", "-t", sessionName, option, value)
+	return err
+}
+
+// UnsetSessionOption 取消指定 session 的 tmux 選項。
+func (m *Manager) UnsetSessionOption(sessionName, option string) error {
+	_, err := m.exec.Execute("set-option", "-t", sessionName, "-u", option)
+	return err
+}
+
 // NewSession 建立新的 detached session。
 func (m *Manager) NewSession(name, path string) error {
 	_, err := m.exec.Execute("new-session", "-d", "-s", name, "-c", path)
