@@ -1460,6 +1460,40 @@ func (m Model) View() string {
 					}
 					b.WriteString(line + "\n")
 				}
+
+			case ItemHostTitle:
+				// 主機標題 badge 風格
+				titleStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color(item.HostColor)).
+					Foreground(lipgloss.Color("#ffffff")).
+					Padding(0, 1)
+
+				if item.HostState != HostStateConnected {
+					titleStyle = titleStyle.Background(lipgloss.Color("#555555"))
+				}
+				title := titleStyle.Render(item.HostID)
+
+				// 非連線狀態：右邊加狀態文字
+				if item.HostState != HostStateConnected {
+					var stateText string
+					switch item.HostState {
+					case HostStateConnecting:
+						stateText = "連線中..."
+					case HostStateDisconnected:
+						stateText = "已斷線"
+						if item.HostError != "" {
+							stateText += "：" + item.HostError
+						}
+					case HostStateDisabled:
+						stateText = "已停用"
+					}
+					title += " " + dimStyle.Render(stateText)
+				}
+
+				if isCursor {
+					title = m.cursorLine(title)
+				}
+				b.WriteString(title + "\n")
 			}
 		}
 	}

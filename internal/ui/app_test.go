@@ -2517,3 +2517,40 @@ func TestView_InPopup_HasExtraPadding(t *testing.T) {
 			"popup 模式每行應有雙倍左側 padding: %q", line)
 	}
 }
+
+func TestModel_View_HostTitle(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemHostTitle, HostID: "local", HostColor: "#5B9BD5", HostState: ui.HostStateConnected},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev", Status: tmux.StatusRunning}},
+		{Type: ui.ItemHostTitle, HostID: "staging", HostColor: "#FFC000", HostState: ui.HostStateConnecting},
+		{Type: ui.ItemHostTitle, HostID: "prod", HostColor: "#FF6347", HostState: ui.HostStateDisconnected, HostError: "timeout"},
+		{Type: ui.ItemHostTitle, HostID: "legacy", HostColor: "#AAAAAA", HostState: ui.HostStateDisabled},
+	})
+
+	view := m.View()
+
+	// 已連線主機：badge 顯示主機名稱
+	assert.Contains(t, view, "local", "should contain connected host title 'local'")
+	// 連線中主機：badge + 狀態文字
+	assert.Contains(t, view, "staging", "should contain connecting host title 'staging'")
+	assert.Contains(t, view, "連線中", "staging should show connecting state")
+	// 已斷線主機：badge + 狀態文字 + 錯誤訊息
+	assert.Contains(t, view, "prod", "should contain disconnected host title 'prod'")
+	assert.Contains(t, view, "已斷線", "prod should show disconnected state")
+	assert.Contains(t, view, "timeout", "prod should show error message")
+	// 已停用主機
+	assert.Contains(t, view, "legacy", "should contain disabled host title 'legacy'")
+	assert.Contains(t, view, "已停用", "legacy should show disabled state")
+}
+
+func TestModel_View_HostTitle_CursorHighlight(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	m.SetItems([]ui.ListItem{
+		{Type: ui.ItemHostTitle, HostID: "remote-box", HostColor: "#5B9BD5", HostState: ui.HostStateConnected},
+		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
+	})
+	// cursor 預設在 0，即 Host Title 行
+	view := m.View()
+	assert.Contains(t, view, "remote-box", "host title should be visible when cursor is on it")
+}
