@@ -42,6 +42,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				_ = m.deps.HostMgr.Enable(context.Background(), h.ID())
 			}
+			m.persistHosts()
 		}
 	case "J", "shift+down":
 		// 下移
@@ -53,6 +54,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			ids[m.hostPickerCursor], ids[m.hostPickerCursor+1] = ids[m.hostPickerCursor+1], ids[m.hostPickerCursor]
 			m.deps.HostMgr.Reorder(ids)
 			m.hostPickerCursor++
+			m.persistHosts()
 		}
 	case "K", "shift+up":
 		// 上移
@@ -64,6 +66,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			ids[m.hostPickerCursor], ids[m.hostPickerCursor-1] = ids[m.hostPickerCursor-1], ids[m.hostPickerCursor]
 			m.deps.HostMgr.Reorder(ids)
 			m.hostPickerCursor--
+			m.persistHosts()
 		}
 	case "a":
 		// 新增主機：進入文字輸入模式
@@ -84,6 +87,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.confirmAction = func() tea.Cmd {
 					_ = m.deps.HostMgr.Disable(hostID)
 					m.deps.HostMgr.Remove(hostID)
+					m.persistHosts()
 					return nil
 				}
 			}

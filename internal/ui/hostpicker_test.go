@@ -1,6 +1,8 @@
 package ui_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -184,4 +186,81 @@ func TestHostPickerToolbarHiddenWithoutHostMgr(t *testing.T) {
 	view := m.View()
 	// [h] 主機管理 should not appear without HostMgr
 	assert.NotContains(t, view, "主機管理", "toolbar should not show host management shortcut without HostMgr")
+}
+
+func TestHostPicker_PersistHosts_AfterToggle(t *testing.T) {
+	// 建立 temp config
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	cfg := config.Default()
+	_ = config.SaveConfig(cfgPath, cfg)
+
+	// 建立 HostManager 並加入主機
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Address: "", Color: "#5f8787", Enabled: true})
+
+	deps := ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: cfgPath}
+	m := ui.NewModel(deps)
+
+	// 進入 host picker
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode())
+
+	// 按 space 切換啟停用
+	m, _ = hpApplyKey(m, " ")
+
+	// 驗證 config 已寫入
+	data, err := os.ReadFile(cfgPath)
+	assert.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	assert.NoError(t, err)
+	assert.NotEmpty(t, loaded.Hosts)
+}
+
+func TestHostPicker_PersistHosts_AfterReorder(t *testing.T) {
+	// 建立 temp config
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	cfg := config.Default()
+	_ = config.SaveConfig(cfgPath, cfg)
+
+	// 建立 HostManager 並加入多台主機
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "aaa", Color: "#111111", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "bbb", Color: "#222222", Enabled: true})
+
+	deps := ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: cfgPath}
+	m := ui.NewModel(deps)
+
+	// 進入 host picker
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode())
+
+	// 按 J 下移第一個主機
+	m, _ = hpApplyKey(m, "J")
+
+	// 驗證 config 已寫入且順序正確
+	data, err := os.ReadFile(cfgPath)
+	assert.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	assert.NoError(t, err)
+	assert.Len(t, loaded.Hosts, 2)
+	assert.Equal(t, "bbb", loaded.Hosts[0].Name)
+	assert.Equal(t, "aaa", loaded.Hosts[1].Name)
+	assert.Equal(t, 0, loaded.Hosts[0].SortOrder)
+	assert.Equal(t, 1, loaded.Hosts[1].SortOrder)
+}
+
+func TestHostPicker_PersistHosts_NoConfigPath(t *testing.T) {
+	// 沒有設定 ConfigPath 時不應寫入
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5f8787", Enabled: true})
+
+	deps := ui.Deps{HostMgr: mgr}
+	m := ui.NewModel(deps)
+
+	// 進入 host picker 並切換啟停用（不應 panic）
+	m, _ = hpApplyKey(m, "h")
+	m, _ = hpApplyKey(m, " ")
+	// 測試通過即代表沒有 panic
 }

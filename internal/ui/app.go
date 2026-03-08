@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"time"
 
@@ -26,7 +27,8 @@ import (
 // 否則使用舊的 TmuxMgr+Store 直接模式（主要用於測試）。
 type Deps struct {
 	// 多主機模式
-	HostMgr *hostmgr.HostManager
+	HostMgr    *hostmgr.HostManager
+	ConfigPath string // config.toml 路徑，供 persistHosts 使用
 
 	// 舊模式（保留向下相容）
 	Client     *client.Client // gRPC client（daemon 模式）
@@ -35,6 +37,30 @@ type Deps struct {
 	Cfg        config.Config
 	StatusDir  string
 	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
+}
+
+// persistHosts 將 HostManager 的主機清單寫回 config.toml。
+func (m Model) persistHosts() {
+	if m.deps.HostMgr == nil || m.deps.ConfigPath == "" {
+		return
+	}
+	hosts := m.deps.HostMgr.Hosts()
+	entries := make([]config.HostEntry, len(hosts))
+	for i, h := range hosts {
+		cfg := h.Config()
+		cfg.SortOrder = i
+		entries[i] = cfg
+	}
+
+	fileCfg := config.Default()
+	cfgPath := m.deps.ConfigPath
+	if data, err := os.ReadFile(cfgPath); err == nil {
+		if loaded, err := config.LoadFromString(string(data)); err == nil {
+			fileCfg = loaded
+		}
+	}
+	fileCfg.Hosts = entries
+	_ = config.SaveConfig(cfgPath, fileCfg)
 }
 
 // AnimTickMsg 表示動畫定時更新觸發。
@@ -832,6 +858,7 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				m.deps.HostMgr.AddHost(entry)
 				_ = m.deps.HostMgr.Enable(context.Background(), value)
+				m.persistHosts()
 			}
 			m.mode = ModeHostPicker // 回到主機管理面板
 			return m, nil
