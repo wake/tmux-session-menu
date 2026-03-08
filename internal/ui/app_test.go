@@ -680,10 +680,12 @@ func (e *flexMockExecutor) Execute(args ...string) (string, error) {
 // --- Mode 相關測試 ---
 
 func TestModel_ModeInput_EscCancels(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+	st := openUITestDB(t)
+	defer st.Close()
+	m := ui.NewModel(ui.Deps{Store: st})
 
-	// 按 n 進入 ModeInput
-	m, _ = applyKey(m, "n")
+	// 按 g 進入 ModeInput（新建群組）
+	m, _ = applyKey(m, "g")
 	assert.Equal(t, ui.ModeInput, m.Mode())
 
 	// 按 Esc 回到 ModeNormal
@@ -693,22 +695,26 @@ func TestModel_ModeInput_EscCancels(t *testing.T) {
 }
 
 func TestModel_ModeInput_RenderPrompt(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+	st := openUITestDB(t)
+	defer st.Close()
+	m := ui.NewModel(ui.Deps{Store: st})
 
-	// 按 n 進入 ModeInput
-	m, _ = applyKey(m, "n")
+	// 按 g 進入 ModeInput（新建群組）
+	m, _ = applyKey(m, "g")
 	assert.Equal(t, ui.ModeInput, m.Mode())
 
 	view := m.View()
-	assert.Contains(t, view, "Session 名稱")
+	assert.Contains(t, view, "群組名稱")
 	assert.Contains(t, view, "取消")
 }
 
 func TestModel_ModeInput_BackspaceWorks(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+	st := openUITestDB(t)
+	defer st.Close()
+	m := ui.NewModel(ui.Deps{Store: st})
 
-	// 進入 ModeInput
-	m, _ = applyKey(m, "n")
+	// 按 g 進入 ModeInput（新建群組）
+	m, _ = applyKey(m, "g")
 	assert.Equal(t, ui.ModeInput, m.Mode())
 
 	// 輸入 "abc"
@@ -760,10 +766,12 @@ func TestModel_ModeConfirm_EscCancels(t *testing.T) {
 }
 
 func TestModel_ModeInput_EnterReturnsToNormal(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+	st := openUITestDB(t)
+	defer st.Close()
+	m := ui.NewModel(ui.Deps{Store: st})
 
-	// 進入 ModeInput
-	m, _ = applyKey(m, "n")
+	// 按 g 進入 ModeInput（新建群組）
+	m, _ = applyKey(m, "g")
 	assert.Equal(t, ui.ModeInput, m.Mode())
 
 	// 輸入一些文字再按 Enter
@@ -789,10 +797,12 @@ func TestModel_ModeConfirm_RenderPrompt(t *testing.T) {
 }
 
 func TestModel_ModeInput_EscDoesNotQuit(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+	st := openUITestDB(t)
+	defer st.Close()
+	m := ui.NewModel(ui.Deps{Store: st})
 
-	// 按 n 進入 ModeInput
-	m, _ = applyKey(m, "n")
+	// 按 g 進入 ModeInput（新建群組）
+	m, _ = applyKey(m, "g")
 	assert.Equal(t, ui.ModeInput, m.Mode())
 
 	// 按 Esc 不應退出程式，只應回到 ModeNormal
@@ -825,15 +835,15 @@ func TestModel_NewSession_CreatesAndReloads(t *testing.T) {
 	mgr := tmux.NewManager(flex)
 	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
 
-	// 按 'n' 進入 ModeInput
+	// 按 'n' 進入 ModeNewSession
 	m, _ = applyKey(m, "n")
-	assert.Equal(t, ui.ModeInput, m.Mode())
+	assert.Equal(t, ui.ModeNewSession, m.Mode())
 
 	// 輸入 "my-new"
 	for _, ch := range "my-new" {
 		m, _ = applyKey(m, string(ch))
 	}
-	assert.Equal(t, "my-new", m.InputValue())
+	assert.Equal(t, "my-new", m.NewSessionNameValue())
 
 	// 按 Enter 送出
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -841,8 +851,6 @@ func TestModel_NewSession_CreatesAndReloads(t *testing.T) {
 
 	// 驗證：mode 回到 Normal
 	assert.Equal(t, ui.ModeNormal, model.Mode())
-	// 驗證：inputValue 被清空
-	assert.Equal(t, "", model.InputValue())
 	// 驗證：NewSession 被呼叫
 	assert.Len(t, newSessionCalls, 1, "NewSession 應被呼叫一次")
 	// 驗證：cmd 不為 nil（觸發 reload）
@@ -864,16 +872,16 @@ func TestModel_NewSession_EmptyInput_NoOp(t *testing.T) {
 	mgr := tmux.NewManager(flex)
 	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
 
-	// 按 'n' 進入 ModeInput
+	// 按 'n' 進入 ModeNewSession
 	m, _ = applyKey(m, "n")
-	assert.Equal(t, ui.ModeInput, m.Mode())
+	assert.Equal(t, ui.ModeNewSession, m.Mode())
 
 	// 直接按 Enter（空輸入）
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(ui.Model)
 
-	// 驗證：mode 回到 Normal
-	assert.Equal(t, ui.ModeNormal, model.Mode())
+	// 驗證：mode 仍在 ModeNewSession（空名稱不送出）
+	assert.Equal(t, ui.ModeNewSession, model.Mode())
 	// 驗證：NewSession 未被呼叫
 	assert.Len(t, newSessionCalls, 0, "空輸入不應呼叫 NewSession")
 	// 驗證：cmd 為 nil（不觸發 reload）
@@ -892,8 +900,9 @@ func TestModel_NewSession_Error_SetsErr(t *testing.T) {
 	mgr := tmux.NewManager(flex)
 	m := ui.NewModel(ui.Deps{TmuxMgr: mgr})
 
-	// 按 'n' 進入 ModeInput
+	// 按 'n' 進入 ModeNewSession
 	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeNewSession, m.Mode())
 
 	// 輸入名稱
 	for _, ch := range "dup" {
@@ -1812,10 +1821,12 @@ func TestModel_Sort_DuplicateSortOrder_SessionMoveDown(t *testing.T) {
 }
 
 func TestModel_ModeInput_SpaceWorks(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+	st := openUITestDB(t)
+	defer st.Close()
+	m := ui.NewModel(ui.Deps{Store: st})
 
-	// 進入 ModeInput
-	m, _ = applyKey(m, "n")
+	// 按 g 進入 ModeInput（新建群組）
+	m, _ = applyKey(m, "g")
 	assert.Equal(t, ui.ModeInput, m.Mode())
 
 	// 輸入 "hello world"（含空格）
@@ -1832,10 +1843,13 @@ func TestModel_ModeInput_SpaceWorks(t *testing.T) {
 }
 
 func TestModel_ModeInput_ArrowKeysMoveCursor(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+	st := openUITestDB(t)
+	defer st.Close()
+	m := ui.NewModel(ui.Deps{Store: st})
 
-	// 進入 ModeInput
-	m, _ = applyKey(m, "n")
+	// 按 g 進入 ModeInput（新建群組）
+	m, _ = applyKey(m, "g")
+	assert.Equal(t, ui.ModeInput, m.Mode())
 
 	// 輸入 "abcd"
 	for _, ch := range "abcd" {
@@ -2130,13 +2144,15 @@ func TestModel_ExitTmux_QDoesNotSet(t *testing.T) {
 }
 
 func TestModel_ExitTmux_NotInModeInput(t *testing.T) {
-	m := ui.NewModel(ui.Deps{})
+	st := openUITestDB(t)
+	defer st.Close()
+	m := ui.NewModel(ui.Deps{Store: st})
 	m.SetItems([]ui.ListItem{
 		{Type: ui.ItemSession, Session: tmux.Session{Name: "dev"}},
 	})
 
 	// 進入 ModeInput 後按 ctrl+e 不應退出（textinput 吃掉）
-	m, _ = applyKey(m, "n") // 進入 ModeInput
+	m, _ = applyKey(m, "g") // 按 g 進入 ModeInput（新建群組）
 	assert.Equal(t, ui.ModeInput, m.Mode())
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
@@ -2310,6 +2326,14 @@ func TestModel_View_ToolbarNewLayout(t *testing.T) {
 
 	// 不應再有舊的 [e] 退出tmux
 	assert.NotContains(t, view, "[e]", "工具列不應包含 [e]")
+}
+
+func TestModel_ConfigKey_SetsOpenConfig(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	fm := updated.(ui.Model)
+	assert.True(t, fm.OpenConfig())
+	assert.True(t, fm.Quitting())
 }
 
 // ─── Wrap-around navigation ─────────────────────────────────

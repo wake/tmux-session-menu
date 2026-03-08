@@ -365,6 +365,7 @@ type CreateSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Command       string                 `protobuf:"bytes,3,opt,name=command,proto3" json:"command,omitempty"` // agent 啟動指令（空字串=純 shell）
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -409,6 +410,13 @@ func (x *CreateSessionRequest) GetName() string {
 func (x *CreateSessionRequest) GetPath() string {
 	if x != nil {
 		return x.Path
+	}
+	return ""
+}
+
+func (x *CreateSessionRequest) GetCommand() string {
+	if x != nil {
+		return x.Command
 	}
 	return ""
 }
@@ -1200,10 +1208,11 @@ const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"\rStateSnapshot\x12+\n" +
 	"\bsessions\x18\x01 \x03(\v2\x0f.tsm.v1.SessionR\bsessions\x12%\n" +
 	"\x06groups\x18\x02 \x03(\v2\r.tsm.v1.GroupR\x06groups\"\x0e\n" +
-	"\fWatchRequest\">\n" +
+	"\fWatchRequest\"X\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\"(\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x18\n" +
+	"\acommand\x18\x03 \x01(\tR\acommand\"(\n" +
 	"\x12KillSessionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"\x84\x01\n" +
 	"\x14RenameSessionRequest\x12!\n" +

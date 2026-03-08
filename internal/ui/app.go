@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"time"
 
@@ -26,7 +27,8 @@ import (
 // 否則使用舊的 TmuxMgr+Store 直接模式（主要用於測試）。
 type Deps struct {
 	// 多主機模式
-	HostMgr *hostmgr.HostManager
+	HostMgr    *hostmgr.HostManager
+	ConfigPath string // config.toml 路徑，供 persistHosts 使用
 
 	// 舊模式（保留向下相容）
 	Client     *client.Client // gRPC client（daemon 模式）
@@ -35,6 +37,30 @@ type Deps struct {
 	Cfg        config.Config
 	StatusDir  string
 	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
+}
+
+// persistHosts 將 HostManager 的主機清單寫回 config.toml。
+func (m Model) persistHosts() {
+	if m.deps.HostMgr == nil || m.deps.ConfigPath == "" {
+		return
+	}
+	hosts := m.deps.HostMgr.Hosts()
+	entries := make([]config.HostEntry, len(hosts))
+	for i, h := range hosts {
+		cfg := h.Config()
+		cfg.SortOrder = i
+		entries[i] = cfg
+	}
+
+	fileCfg := config.Default()
+	cfgPath := m.deps.ConfigPath
+	if data, err := os.ReadFile(cfgPath); err == nil {
+		if loaded, err := config.LoadFromString(string(data)); err == nil {
+			fileCfg = loaded
+		}
+	}
+	fileCfg.Hosts = entries
+	_ = config.SaveConfig(cfgPath, fileCfg)
 }
 
 // AnimTickMsg 表示動畫定時更新觸發。
@@ -53,6 +79,7 @@ type Model struct {
 	selectedHostID string // Enter 選取的 session 所屬主機 ID（多主機模式）
 	readOnly_      bool   // R 鍵：唯讀進入 session
 	exitTmux_   bool   // ctrl+e：退出 tmux
+	openConfig_ bool   // c 鍵：開啟 config TUI
 	watchFailed bool   // remote 模式 Watch stream 失敗
 	err         error
 
@@ -83,6 +110,9 @@ type Model struct {
 
 	// HostPicker mode（主機管理面板）
 	hostPickerCursor int
+
+	// NewSession 表單
+	newSession newSessionForm
 }
 
 // NewModel 建立初始 Model。
@@ -133,6 +163,16 @@ func (m Model) ReadOnly() bool {
 	return m.readOnly_
 }
 
+// OpenConfig 回傳使用者是否按了 c 要求開啟 config TUI。
+func (m Model) OpenConfig() bool {
+	return m.openConfig_
+}
+
+// Quitting 回傳 TUI 是否正在結束。
+func (m Model) Quitting() bool {
+	return m.quitting
+}
+
 // AnimFrame 回傳目前的動畫 frame（主要用於測試）。
 func (m Model) AnimFrame() int {
 	return m.animFrame
@@ -174,6 +214,11 @@ func (m Model) DualInputValue(row int) string {
 // Err 回傳目前的錯誤（主要用於測試）。
 func (m Model) Err() error {
 	return m.err
+}
+
+// NewSessionNameValue 回傳 ModeNewSession 表單的名稱欄位值（主要用於測試）。
+func (m Model) NewSessionNameValue() string {
+	return m.newSession.nameInput.Value()
 }
 
 // SearchQuery 回傳目前的搜尋字串（主要用於測試）。
@@ -537,6 +582,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateSearch(msg)
 		case ModeHostPicker:
 			return m.updateHostPicker(msg)
+		case ModeNewSession:
+			return m.updateNewSession(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -594,12 +641,17 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.toggleCollapse(m.items[m.cursor])
 		}
 		return m, nil
+	case "c":
+		m.openConfig_ = true
+		m.quitting = true
+		return m, tea.Quit
 	case "n":
-		m.mode = ModeInput
-		m.inputTarget = InputNewSession
-		m.inputPrompt = "Session 名稱"
-		m.textInput.SetValue("")
-		m.textInput.Focus()
+		var recentPaths []string
+		if m.deps.Store != nil {
+			recentPaths, _ = m.deps.Store.RecentPaths(3)
+		}
+		m.newSession.initForm(m.deps.Cfg.Agents, recentPaths)
+		m.mode = ModeNewSession
 		return m, nil
 	case "r":
 		// 重命名：session 雙行輸入（名稱+ID），群組單行重命名
@@ -745,7 +797,7 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case InputNewSession:
 			m.mode = ModeNormal
 			if c := m.clientForCursor(); c != nil {
-				if err := c.CreateSession(context.Background(), value, ""); err != nil {
+				if err := c.CreateSession(context.Background(), value, "", ""); err != nil {
 					m.err = err
 					return m, nil
 				}
@@ -817,6 +869,7 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				m.deps.HostMgr.AddHost(entry)
 				_ = m.deps.HostMgr.Enable(context.Background(), value)
+				m.persistHosts()
 			}
 			m.mode = ModeHostPicker // 回到主機管理面板
 			return m, nil
@@ -1621,6 +1674,8 @@ func (m Model) View() string {
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
 	case ModeHostPicker:
 		b.WriteString(m.renderHostPicker())
+	case ModeNewSession:
+		b.WriteString(m.renderNewSession())
 	default:
 		b.WriteString("\n")
 		b.WriteString(m.renderToolbar())
@@ -1645,7 +1700,7 @@ func (m Model) renderToolbar() string {
 		return keyStyle.Render(key) + versionStyle.Render(" "+desc)
 	}
 	line2Parts := []string{
-		render("[m]", "搬移"), render("[⇧+↑/⇧+k]", "上移"), render("[⇧+↓/⇧+j]", "下移"), render("[ctrl+e]", "退出"),
+		render("[m]", "搬移"), render("[⇧+↑/⇧+k]", "上移"), render("[⇧+↓/⇧+j]", "下移"), render("[c]", "設定"), render("[ctrl+e]", "退出"),
 	}
 	if m.deps.HostMgr != nil {
 		line2Parts = append(line2Parts, render("[h]", "主機管理"))

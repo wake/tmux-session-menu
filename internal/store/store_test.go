@@ -3,6 +3,7 @@ package store_test
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -217,4 +218,35 @@ func TestSetCustomName_Update(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, metas, 1)
 	assert.Equal(t, "第二版名稱", metas[0].CustomName)
+}
+
+func TestPathHistory_AddAndList(t *testing.T) {
+	s := newTestStore(t)
+
+	assert.NoError(t, s.AddPathHistory("/home/user/project-a"))
+	assert.NoError(t, s.AddPathHistory("/home/user/project-b"))
+	assert.NoError(t, s.AddPathHistory("/home/user/project-c"))
+	assert.NoError(t, s.AddPathHistory("/home/user/project-d"))
+
+	paths, err := s.RecentPaths(3)
+	assert.NoError(t, err)
+	assert.Len(t, paths, 3)
+	assert.Equal(t, "/home/user/project-d", paths[0])
+	assert.Equal(t, "/home/user/project-c", paths[1])
+	assert.Equal(t, "/home/user/project-b", paths[2])
+}
+
+func TestPathHistory_DuplicateUpdatesTimestamp(t *testing.T) {
+	s := newTestStore(t)
+
+	assert.NoError(t, s.AddPathHistory("/a"))
+	time.Sleep(10 * time.Millisecond) // 確保時間戳不同
+	assert.NoError(t, s.AddPathHistory("/b"))
+	time.Sleep(10 * time.Millisecond)
+	assert.NoError(t, s.AddPathHistory("/a")) // 重複
+
+	paths, err := s.RecentPaths(3)
+	assert.NoError(t, err)
+	assert.Equal(t, "/a", paths[0]) // /a 最近使用
+	assert.Equal(t, "/b", paths[1])
 }

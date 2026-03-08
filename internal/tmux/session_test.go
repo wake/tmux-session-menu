@@ -154,6 +154,16 @@ func TestSession_DisplayName(t *testing.T) {
 	assert.Equal(t, "我的專案", s.DisplayName())
 }
 
+func TestManager_SendKeys(t *testing.T) {
+	mock := &mockExecutor{outputs: map[string]string{
+		"send-keys -t my-session claude Enter": "",
+	}}
+
+	mgr := tmux.NewManager(mock)
+	err := mgr.SendKeys("my-session", "claude")
+	assert.NoError(t, err)
+}
+
 func TestManager_ListPaneTitles(t *testing.T) {
 	mock := &mockExecutor{
 		outputs: map[string]string{

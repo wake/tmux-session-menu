@@ -102,6 +102,12 @@ func (m *Manager) NewSession(name, path string) error {
 	return err
 }
 
+// SendKeys 在指定 session 中送出按鍵（用於啟動 agent 指令）。
+func (m *Manager) SendKeys(sessionName, keys string) error {
+	_, err := m.exec.Execute("send-keys", "-t", sessionName, keys, "Enter")
+	return err
+}
+
 // CapturePane 擷取指定 session 的 pane 內容。
 func (m *Manager) CapturePane(name string, lines int) (string, error) {
 	return m.exec.Execute("capture-pane", "-t", name, "-p", "-S", fmt.Sprintf("-%d", lines))

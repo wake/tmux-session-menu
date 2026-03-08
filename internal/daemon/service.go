@@ -70,6 +70,9 @@ func (s *Service) CreateSession(_ context.Context, req *tsmv1.CreateSessionReque
 	if err := s.tmuxMgr.NewSession(req.Name, req.Path); err != nil {
 		return nil, err
 	}
+	if req.Command != "" {
+		_ = s.tmuxMgr.SendKeys(req.Name, req.Command)
+	}
 	s.state.Scan()
 	return &emptypb.Empty{}, nil
 }

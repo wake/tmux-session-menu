@@ -250,7 +250,7 @@ func runMultiHost(remoteFlags []string) {
 	exec := tmux.NewRealExecutor()
 
 	for {
-		deps := ui.Deps{HostMgr: mgr, Cfg: cfg}
+		deps := ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: config.ExpandPath("~/.config/tsm/config.toml")}
 		m := ui.NewModel(deps)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 
@@ -678,6 +678,10 @@ func handlePostTUI(m ui.Model) {
 
 	if selected := m.Selected(); selected != "" {
 		switchToSession(selected, m.ReadOnly())
+		return
+	}
+	if m.OpenConfig() {
+		runConfig()
 		return
 	}
 	if m.ExitTmux() && os.Getenv("TMUX") != "" {

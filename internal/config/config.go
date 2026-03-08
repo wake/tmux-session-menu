@@ -29,6 +29,15 @@ func (h HostEntry) IsLocal() bool {
 	return h.Address == ""
 }
 
+// AgentEntry 代表一個 agent 預設。
+type AgentEntry struct {
+	Name      string `toml:"name"`
+	Command   string `toml:"command"`
+	Group     string `toml:"group"`      // 群組標題（選填）
+	Enabled   bool   `toml:"enabled"`
+	SortOrder int    `toml:"sort_order"`
+}
+
 // Config 是 TSM 的全域設定。
 type Config struct {
 	DataDir         string `toml:"data_dir"`
@@ -40,7 +49,8 @@ type Config struct {
 	Local  ColorConfig `toml:"local"`  // 本地模式顏色
 	Remote ColorConfig `toml:"remote"` // 遠端模式顏色
 
-	Hosts []HostEntry `toml:"hosts"` // 主機清單
+	Hosts  []HostEntry  `toml:"hosts"`  // 主機清單
+	Agents []AgentEntry `toml:"agents"` // Agent 預設清單
 }
 
 // Default 回傳預設設定。

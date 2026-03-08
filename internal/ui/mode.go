@@ -10,6 +10,7 @@ const (
 	ModePicker                 // 選擇器（例如選擇群組）
 	ModeSearch                 // 搜尋模式
 	ModeHostPicker             // 主機管理面板
+	ModeNewSession             // 新建 session 多欄位表單
 )
 
 // InputTarget 標識文字輸入的目的。

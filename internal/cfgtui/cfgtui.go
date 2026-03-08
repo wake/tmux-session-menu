@@ -381,8 +381,6 @@ func (m Model) View() string {
 			b.WriteString(inactiveTabStyle.Render(tab))
 		}
 	}
-	b.WriteString("  ")
-	b.WriteString(dimStyle.Render("← →"))
 	b.WriteString("\n\n")
 
 	// 欄位列表
