@@ -16,3 +16,6 @@ coverage.out
 
 # Build
 dist/
+
+# Worktrees
+.worktrees/
