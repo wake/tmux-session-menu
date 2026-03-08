@@ -79,6 +79,9 @@ type Model struct {
 
 	// Search mode（搜尋）
 	searchQuery string
+
+	// HostPicker mode（主機管理面板）
+	hostPickerCursor int
 }
 
 // NewModel 建立初始 Model。
@@ -152,6 +155,11 @@ func (m Model) InputValue() string {
 // InputRow 回傳目前雙行輸入的焦點行（主要用於測試）。
 func (m Model) InputRow() int {
 	return m.inputRow
+}
+
+// HostPickerCursor 回傳主機管理面板的游標位置（主要用於測試）。
+func (m Model) HostPickerCursor() int {
+	return m.hostPickerCursor
 }
 
 // DualInputValue 回傳雙行輸入指定行的值（主要用於測試）。
@@ -520,6 +528,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updatePicker(msg)
 		case ModeSearch:
 			return m.updateSearch(msg)
+		case ModeHostPicker:
+			return m.updateHostPicker(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -635,6 +645,14 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pickerCursor = 0
 				m.pickerTarget = item.Session.Name
 			}
+		}
+		return m, nil
+	case "h":
+		// 主機管理面板：僅多主機模式有效
+		if m.deps.HostMgr != nil {
+			m.mode = ModeHostPicker
+			m.hostPickerCursor = 0
+			return m, nil
 		}
 		return m, nil
 	case "/":
@@ -766,6 +784,33 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, loadSessionsCmd(m.deps)
+		case InputNewHost:
+			// 新增主機
+			if m.deps.HostMgr != nil {
+				hosts := m.deps.HostMgr.Hosts()
+				usedColors := make(map[string]bool, len(hosts))
+				for _, h := range hosts {
+					usedColors[h.Config().Color] = true
+				}
+				color := config.DefaultColors[len(hosts)%len(config.DefaultColors)]
+				for _, c := range config.DefaultColors {
+					if !usedColors[c] {
+						color = c
+						break
+					}
+				}
+				entry := config.HostEntry{
+					Name:      value,
+					Address:   value,
+					Color:     color,
+					Enabled:   true,
+					SortOrder: len(hosts),
+				}
+				m.deps.HostMgr.AddHost(entry)
+				_ = m.deps.HostMgr.Enable(context.Background(), value)
+			}
+			m.mode = ModeHostPicker // 回到主機管理面板
+			return m, nil
 		default:
 			m.mode = ModeNormal
 		}
@@ -1551,6 +1596,8 @@ func (m Model) View() string {
 			selectedStyle.Render("/"),
 			m.searchQuery))
 		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("[Enter] 選擇  [Esc] 取消")))
+	case ModeHostPicker:
+		b.WriteString(m.renderHostPicker())
 	default:
 		b.WriteString("\n")
 		b.WriteString(m.renderToolbar())
@@ -1574,11 +1621,16 @@ func (m Model) renderToolbar() string {
 	render := func(key, desc string) string {
 		return keyStyle.Render(key) + versionStyle.Render(" "+desc)
 	}
+	line2Parts := []string{
+		render("[m]", "搬移"), render("[⇧+↑/⇧+k]", "上移"), render("[⇧+↓/⇧+j]", "下移"), render("[ctrl+e]", "退出"),
+	}
+	if m.deps.HostMgr != nil {
+		line2Parts = append(line2Parts, render("[h]", "主機管理"))
+	}
 	lines := []string{
 		fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
 			render("[/]", "搜尋"), render("[n]", "新建"), render("[r]", "更名"), render("[d]", "刪除"), render("[R]", "唯讀進入"), render("[q]", "關閉選單")),
-		fmt.Sprintf("  %s  %s  %s  %s",
-			render("[m]", "搬移"), render("[⇧+↑/⇧+k]", "上移"), render("[⇧+↓/⇧+j]", "下移"), render("[ctrl+e]", "退出")),
+		"  " + strings.Join(line2Parts, "  "),
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
