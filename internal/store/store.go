@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -53,6 +54,10 @@ func (s *Store) migrate() error {
 		group_id INTEGER NOT NULL DEFAULT 0,
 		sort_order INTEGER NOT NULL DEFAULT 0,
 		custom_name TEXT NOT NULL DEFAULT ''
+	);
+	CREATE TABLE IF NOT EXISTS path_history (
+		path TEXT PRIMARY KEY,
+		used_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
 	_, err := s.db.Exec(schema)
 	return err
@@ -185,4 +190,32 @@ func (s *Store) SetCustomName(sessionName, customName string) error {
 		ON CONFLICT(session_name) DO UPDATE SET custom_name = ?`,
 		sessionName, customName, customName)
 	return err
+}
+
+// AddPathHistory 記錄路徑使用歷史（重複路徑更新時間戳）。
+func (s *Store) AddPathHistory(path string) error {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05.000000")
+	_, err := s.db.Exec(`
+		INSERT INTO path_history (path, used_at) VALUES (?, ?)
+		ON CONFLICT(path) DO UPDATE SET used_at = ?`, path, now, now)
+	return err
+}
+
+// RecentPaths 回傳最近使用的路徑（最新在前，最多 limit 筆）。
+func (s *Store) RecentPaths(limit int) ([]string, error) {
+	rows, err := s.db.Query(
+		`SELECT path FROM path_history ORDER BY used_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		paths = append(paths, p)
+	}
+	return paths, rows.Err()
 }
