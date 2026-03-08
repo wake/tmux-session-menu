@@ -910,11 +910,16 @@ func (m Model) updateDualInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// 同步 tmux user option 供 status bar 原生格式顯示
+		// 使用 session ID（$N）避免純數字 session name 被 tmux 誤解為 window index
 		if m.deps.TmuxMgr != nil {
+			target := m.items[m.cursor].Session.ID
+			if target == "" {
+				target = storeName
+			}
 			if customName != "" {
-				_ = m.deps.TmuxMgr.SetSessionOption(storeName, "@tsm_name", customName)
+				_ = m.deps.TmuxMgr.SetSessionOption(target, "@tsm_name", customName)
 			} else {
-				_ = m.deps.TmuxMgr.UnsetSessionOption(storeName, "@tsm_name")
+				_ = m.deps.TmuxMgr.UnsetSessionOption(target, "@tsm_name")
 			}
 		}
 		return m, loadSessionsCmd(m.deps)
