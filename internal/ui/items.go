@@ -94,6 +94,11 @@ func FlattenMultiHost(snaps []HostSnapshotInput) []ListItem {
 	var items []ListItem
 
 	for _, snap := range snaps {
+		// 已停用的主機不顯示
+		if snap.Status == HostStateDisabled {
+			continue
+		}
+
 		// 主機標題列
 		items = append(items, ListItem{
 			Type:      ItemHostTitle,

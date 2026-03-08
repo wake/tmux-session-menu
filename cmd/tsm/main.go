@@ -251,7 +251,11 @@ func runMultiHost(remoteFlags []string) {
 
 		fm, ok := finalModel.(ui.Model)
 		if !ok || fm.Selected() == "" {
-			return // 使用者按 q/esc 退出
+			// 使用者按 q/esc/ctrl+e 退出
+			if ok && fm.ExitTmux() && os.Getenv("TMUX") != "" {
+				_ = osexec.Command("tmux", "detach-client").Run()
+			}
+			return
 		}
 
 		// 取得選取的 item，判斷要 attach 到哪台主機
@@ -265,6 +269,10 @@ func runMultiHost(remoteFlags []string) {
 		if host.IsLocal() {
 			// 本機：使用現有的 switch-client 邏輯
 			switchToSession(fm.Selected(), fm.ReadOnly())
+			// Popup 模式下，切換後直接關閉（避免選單再次出現）
+			if cfg.InPopup {
+				return
+			}
 			continue
 		}
 
