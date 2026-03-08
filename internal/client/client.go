@@ -180,6 +180,17 @@ func (c *Client) DaemonStatus(ctx context.Context) (*tsmv1.DaemonStatusResponse,
 	return c.rpc.DaemonStatus(ctx, &emptypb.Empty{})
 }
 
+// GetConfig 取得遠端設定。
+func (c *Client) GetConfig(ctx context.Context) (*tsmv1.GetConfigResponse, error) {
+	return c.rpc.GetConfig(ctx, &tsmv1.GetConfigRequest{})
+}
+
+// SetConfig 設定遠端設定值。
+func (c *Client) SetConfig(ctx context.Context, values []*tsmv1.ConfigValue) error {
+	_, err := c.rpc.SetConfig(ctx, &tsmv1.SetConfigRequest{Values: values})
+	return err
+}
+
 // tryConnect 嘗試連線到 unix socket。
 func tryConnect(sockPath string) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
