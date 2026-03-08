@@ -51,6 +51,7 @@ message WatchRequest {}
 message CreateSessionRequest {
   string name = 1;
   string path = 2;
+  string command = 3; // agent 啟動指令（空字串=純 shell）
 }
 
 // KillSessionRequest 刪除指定的 tmux session。
