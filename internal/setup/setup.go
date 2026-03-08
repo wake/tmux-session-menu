@@ -272,7 +272,7 @@ func (m Model) runInstall() (tea.Model, tea.Cmd) {
 					msg, err := comp.UninstallFn()
 					results = append(results, result{label: comp.Label, message: msg, err: err})
 				}
-			// ActionSkip, ActionKeep: 不執行
+				// ActionSkip, ActionKeep: 不執行
 			}
 		}
 		return resultMsg{results: results}

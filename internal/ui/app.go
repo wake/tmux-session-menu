@@ -42,7 +42,7 @@ type Model struct {
 	items    []ListItem
 	quitting bool
 
-	deps      Deps
+	deps        Deps
 	selected    string // Enter 選取的 session name
 	readOnly_   bool   // R 鍵：唯讀進入 session
 	exitTmux_   bool   // ctrl+e：退出 tmux
@@ -62,9 +62,9 @@ type Model struct {
 	textInputs [2]textinput.Model // [0]=名稱(CustomName), [1]=ID(session name)
 	inputRow   int                // 目前焦點行 0 or 1
 
-	confirmPrompt     string
-	confirmAction     func() tea.Cmd
-	confirmExitTmux   bool // 確認後是否退出 tmux
+	confirmPrompt   string
+	confirmAction   func() tea.Cmd
+	confirmExitTmux bool // 確認後是否退出 tmux
 
 	// Picker mode（選擇群組）
 	pickerGroups []store.Group

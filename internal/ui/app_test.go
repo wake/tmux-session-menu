@@ -2079,7 +2079,6 @@ func TestModel_Rename_OnGroup_Submit_Updates(t *testing.T) {
 	assert.Equal(t, "new-name", groups[0].Name)
 }
 
-
 // --- 小箭頭展開/收合測試 ---
 
 func TestModel_View_SmallArrows(t *testing.T) {

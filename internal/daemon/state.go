@@ -29,7 +29,7 @@ type StateManager struct {
 	last *tsmv1.StateSnapshot
 
 	scanCh  chan struct{} // debounce channel for Scan() requests
-	running int32        // atomic: 1 when Run() is active
+	running int32         // atomic: 1 when Run() is active
 }
 
 // NewStateManager 建立新的 StateManager。

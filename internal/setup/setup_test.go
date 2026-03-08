@@ -125,9 +125,9 @@ func TestNavigationUpDown(t *testing.T) {
 func TestDisabledCannotToggle(t *testing.T) {
 	comps := []Component{
 		{
-			Label:    "Disabled Item",
-			Checked:  false,
-			Disabled: true,
+			Label:     "Disabled Item",
+			Checked:   false,
+			Disabled:  true,
 			InstallFn: func() (string, error) { return "", nil },
 		},
 	}
@@ -154,9 +154,9 @@ func TestInitialCheckedState(t *testing.T) {
 func TestDisabledView(t *testing.T) {
 	comps := []Component{
 		{
-			Label:    "Conflict Item",
-			Disabled: true,
-			Note:     "路徑衝突",
+			Label:     "Conflict Item",
+			Disabled:  true,
+			Note:      "路徑衝突",
 			InstallFn: func() (string, error) { return "", nil },
 		},
 	}
@@ -171,8 +171,8 @@ func TestRunInstallSkipsDisabled(t *testing.T) {
 	called := false
 	comps := []Component{
 		{
-			Label:   "Disabled",
-			Checked: true,
+			Label:    "Disabled",
+			Checked:  true,
 			Disabled: true,
 			InstallFn: func() (string, error) {
 				called = true
@@ -180,8 +180,8 @@ func TestRunInstallSkipsDisabled(t *testing.T) {
 			},
 		},
 		{
-			Label:   "Enabled",
-			Checked: true,
+			Label:     "Enabled",
+			Checked:   true,
 			InstallFn: func() (string, error) { return "installed", nil },
 		},
 	}
@@ -210,9 +210,9 @@ func TestRunInstallSkipsDisabled(t *testing.T) {
 func TestNoteRendered(t *testing.T) {
 	comps := []Component{
 		{
-			Label:   "With Note",
-			Checked: true,
-			Note:    "這是附加說明",
+			Label:     "With Note",
+			Checked:   true,
+			Note:      "這是附加說明",
 			InstallFn: func() (string, error) { return "", nil },
 		},
 	}
@@ -435,7 +435,7 @@ func TestSymbol_InstalledFullOnlyInClient_ShowsDash(t *testing.T) {
 		{Label: "Binary", InstallFn: func() (string, error) { return "", nil }, Checked: true},
 		{Label: "Hooks", InstallFn: func() (string, error) { return "", nil },
 			UninstallFn: func() (string, error) { return "removed", nil },
-			Checked: false, FullOnly: true, Installed: true},
+			Checked:     false, FullOnly: true, Installed: true},
 	}
 	m := NewModel(comps)
 	m.SetInstallMode(ModeClient)
@@ -484,7 +484,7 @@ func TestRunInstall_ClientMode_UninstallsInstalledFullOnly(t *testing.T) {
 		{Label: "Hooks",
 			InstallFn:   func() (string, error) { return "", nil },
 			UninstallFn: func() (string, error) { uninstalled = true; return "removed hooks", nil },
-			Checked: false, FullOnly: true, Installed: true},
+			Checked:     false, FullOnly: true, Installed: true},
 	}
 	m := NewModel(comps)
 	m.SetInstallMode(ModeClient)
@@ -515,7 +515,7 @@ func TestRunInstall_ClientMode_FullOnlyNotInstalled_Checked_Runs(t *testing.T) {
 		{Label: "Binary", InstallFn: func() (string, error) { return "ok", nil }, Checked: true},
 		{Label: "Hooks",
 			InstallFn: func() (string, error) { installed = true; return "installed hooks", nil },
-			Checked: false, FullOnly: true, Installed: false},
+			Checked:   false, FullOnly: true, Installed: false},
 	}
 	m := NewModel(comps)
 	m.SetInstallMode(ModeClient)

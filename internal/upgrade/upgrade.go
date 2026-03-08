@@ -74,8 +74,8 @@ const releaseURL = "https://api.github.com/repos/wake/tmux-session-menu/releases
 
 // Upgrader 封裝升級操作的依賴（HTTP 下載 + 執行程式）。
 type Upgrader struct {
-	HTTPGet  func(url string) ([]byte, error)            // 下載檔案內容
-	ExecFunc func(binary string, args ...string) error    // 執行外部程式
+	HTTPGet  func(url string) ([]byte, error)          // 下載檔案內容
+	ExecFunc func(binary string, args ...string) error // 執行外部程式
 }
 
 // DefaultUpgrader 使用標準 HTTP 和 os/exec。
