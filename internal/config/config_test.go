@@ -306,6 +306,53 @@ func TestHostEntry_TOML_RoundTrip(t *testing.T) {
 	assert.Equal(t, cfg.Hosts[1].SortOrder, loaded.Hosts[1].SortOrder)
 }
 
+// --- AgentEntry 測試 ---
+
+func TestLoadFromString_WithAgents(t *testing.T) {
+	data := `
+[[agents]]
+name = "Claude Code"
+command = "claude"
+group = "Coding"
+enabled = true
+sort_order = 0
+
+[[agents]]
+name = "Gemini"
+command = "gemini"
+group = "Other"
+enabled = false
+sort_order = 1
+`
+	cfg, err := config.LoadFromString(data)
+	assert.NoError(t, err)
+	assert.Len(t, cfg.Agents, 2)
+	assert.Equal(t, "Claude Code", cfg.Agents[0].Name)
+	assert.Equal(t, "claude", cfg.Agents[0].Command)
+	assert.Equal(t, "Coding", cfg.Agents[0].Group)
+	assert.True(t, cfg.Agents[0].Enabled)
+	assert.False(t, cfg.Agents[1].Enabled)
+}
+
+func TestSaveConfig_WithAgents(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cfg := config.Default()
+	cfg.Agents = []config.AgentEntry{
+		{Name: "Claude", Command: "claude", Group: "Coding", Enabled: true, SortOrder: 0},
+	}
+
+	err := config.SaveConfig(path, cfg)
+	assert.NoError(t, err)
+
+	data, _ := os.ReadFile(path)
+	loaded, err := config.LoadFromString(string(data))
+	assert.NoError(t, err)
+	assert.Len(t, loaded.Agents, 1)
+	assert.Equal(t, "Claude", loaded.Agents[0].Name)
+}
+
 func TestExpandPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
