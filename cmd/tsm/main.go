@@ -102,6 +102,11 @@ func main() {
 		return
 	}
 
+	if args[0] == "status-name" {
+		runStatusName()
+		return
+	}
+
 	if args[0] == "daemon" {
 		runDaemon(args[1:])
 		return
@@ -363,6 +368,36 @@ func doReconnect(host, session string, tun *remote.Tunnel) *client.Client {
 	}
 
 	return newC
+}
+
+// runStatusName 輸出當前 session 的自訂名稱，供 tmux status bar 使用。
+// 錯誤一律靜默處理，因為 tmux 呼叫時不應顯示錯誤。
+func runStatusName() {
+	out, err := osexec.Command("tmux", "display-message", "-p", "#{session_name}").Output()
+	if err != nil {
+		return
+	}
+	sessionName := strings.TrimSpace(string(out))
+	if sessionName == "" {
+		return
+	}
+
+	cfg := loadConfig()
+	dataDir := config.ExpandPath(cfg.DataDir)
+	dbPath := filepath.Join(dataDir, "state.db")
+
+	st, err := store.Open(dbPath)
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	name, err := st.GetCustomName(sessionName)
+	if err != nil || name == "" {
+		return
+	}
+
+	fmt.Print(name)
 }
 
 func loadConfig() config.Config {
@@ -633,6 +668,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  daemon status      顯示 daemon 狀態")
 	fmt.Fprintln(os.Stderr, "  hooks install      安裝 tsm hooks 到 Claude Code settings")
 	fmt.Fprintln(os.Stderr, "  hooks uninstall    移除 tsm hooks")
+	fmt.Fprintln(os.Stderr, "  status-name        輸出當前 session 自訂名稱（供 tmux status bar 使用）")
 	fmt.Fprintln(os.Stderr, "  upgrade [--force]  檢查並升級到最新版本")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
