@@ -28,19 +28,21 @@ type StateManager struct {
 	mu   sync.RWMutex
 	last *tsmv1.StateSnapshot
 
-	scanCh  chan struct{} // debounce channel for Scan() requests
-	running int32         // atomic: 1 when Run() is active
+	scanCh      chan struct{}       // debounce channel for Scan() requests
+	running     int32              // atomic: 1 when Run() is active
+	syncedNames map[string]string  // 追蹤已同步的 @tsm_name 值
 }
 
 // NewStateManager 建立新的 StateManager。
 func NewStateManager(mgr *tmux.Manager, st *store.Store, cfg config.Config, statusDir string, hub *WatcherHub) *StateManager {
 	return &StateManager{
-		tmuxMgr:   mgr,
-		store:     st,
-		cfg:       cfg,
-		statusDir: statusDir,
-		hub:       hub,
-		scanCh:    make(chan struct{}, 1),
+		tmuxMgr:     mgr,
+		store:       st,
+		cfg:         cfg,
+		statusDir:   statusDir,
+		hub:         hub,
+		scanCh:      make(chan struct{}, 1),
+		syncedNames: make(map[string]string),
 	}
 }
 
@@ -102,6 +104,7 @@ func (sm *StateManager) doScan() {
 	if snap == nil {
 		return
 	}
+	sm.syncUserOptions(snap)
 	sm.mu.Lock()
 	changed := sm.last == nil || !proto.Equal(sm.last, snap)
 	if changed {
@@ -111,6 +114,40 @@ func (sm *StateManager) doScan() {
 	if changed {
 		sm.hub.Broadcast(snap)
 	}
+}
+
+// syncUserOptions 同步 tmux @tsm_name user option，確保 status bar 顯示正確的自訂名稱。
+// 僅在值與上次同步不同時才執行 tmux set-option，避免每次掃描都呼叫。
+func (sm *StateManager) syncUserOptions(snap *tsmv1.StateSnapshot) {
+	if sm.tmuxMgr == nil || snap == nil {
+		return
+	}
+
+	current := make(map[string]string, len(snap.Sessions))
+	for _, s := range snap.Sessions {
+		current[s.Name] = s.CustomName
+	}
+
+	// 同步有變更的 session
+	for name, customName := range current {
+		if sm.syncedNames[name] == customName {
+			continue
+		}
+		if customName != "" {
+			_ = sm.tmuxMgr.SetSessionOption(name, "@tsm_name", customName)
+		} else {
+			_ = sm.tmuxMgr.UnsetSessionOption(name, "@tsm_name")
+		}
+	}
+
+	// 清理已移除的 session
+	for name := range sm.syncedNames {
+		if _, ok := current[name]; !ok {
+			delete(sm.syncedNames, name)
+		}
+	}
+
+	sm.syncedNames = current
 }
 
 // Snapshot 回傳最近一次的快照（可能為 nil）。

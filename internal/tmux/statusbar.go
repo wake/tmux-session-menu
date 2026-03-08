@@ -23,7 +23,7 @@ func StatusBarArgs(colors config.ColorConfig) [][]string {
 	// 徽章樣式：背景色 + 前景色 + 粗體，內含動態名稱
 	badgeStyle := fmt.Sprintf("#[bg=%s,fg=%s,bold]", colors.BadgeBG, colors.BadgeFG)
 	resetStyle := "#[default]"
-	statusLeft := fmt.Sprintf("%s #(tsm status-name) %s ", badgeStyle, resetStyle)
+	statusLeft := fmt.Sprintf("%s #{?#{@tsm_name},#{@tsm_name},#S} %s ", badgeStyle, resetStyle)
 
 	cmds = append(cmds, []string{
 		"set-option", "-g", "status-left", statusLeft,
