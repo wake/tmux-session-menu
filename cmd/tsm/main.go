@@ -16,6 +16,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/daemon"
 	"github.com/wake/tmux-session-menu/internal/hooks"
+	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/launcher"
 	"github.com/wake/tmux-session-menu/internal/remote"
 	"github.com/wake/tmux-session-menu/internal/selfinstall"
@@ -85,8 +86,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Usage: tsm --remote <host> [--remote <host2> ...]")
 			os.Exit(1)
 		}
-		// TODO(multi-host): 目前僅連線第一台主機，多主機整合由 Task 11 處理
-		runRemote(hosts[0])
+		runMultiHost(hosts)
 		return
 	}
 
@@ -203,6 +203,95 @@ func runClientLauncher(dataDir string) {
 		_ = config.SaveInstallMode(dataDir, config.ModeFull)
 		runSetup(nil)
 		runTUI()
+	}
+}
+
+// runMultiHost 以多主機模式啟動 TUI。
+// 使用 HostManager 管理所有主機的連線與快照聚合，
+// 使用者選取 session 後依據所屬主機決定 attach 方式。
+func runMultiHost(remoteFlags []string) {
+	cfg := loadConfig()
+	cfg.InTmux = os.Getenv("TMUX") != ""
+	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+
+	// 整合主機清單（config.Hosts + --remote 旗標）
+	merged := config.MergeHosts(cfg.Hosts, remoteFlags)
+	cfg.Hosts = merged
+
+	// 建立 HostManager
+	mgr := hostmgr.New()
+	for _, h := range merged {
+		mgr.AddHost(h)
+	}
+
+	// 為 local host 設定全域 config（讓 hostmgr 的 connect 可以使用 client.Dial）
+	for _, h := range mgr.Hosts() {
+		if h.IsLocal() {
+			h.SetGlobalConfig(cfg)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.StartAll(ctx)
+	defer mgr.Close()
+
+	exec := tmux.NewRealExecutor()
+
+	for {
+		deps := ui.Deps{HostMgr: mgr, Cfg: cfg}
+		m := ui.NewModel(deps)
+		p := tea.NewProgram(m, tea.WithAltScreen())
+
+		finalModel, err := p.Run()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		fm, ok := finalModel.(ui.Model)
+		if !ok || fm.Selected() == "" {
+			return // 使用者按 q/esc 退出
+		}
+
+		// 取得選取的 item，判斷要 attach 到哪台主機
+		item := fm.SelectedItem()
+		host := mgr.Host(item.HostID)
+		if host == nil {
+			fmt.Fprintf(os.Stderr, "Error: 找不到主機 %s\n", item.HostID)
+			continue
+		}
+
+		if host.IsLocal() {
+			// 本機：使用現有的 switch-client 邏輯
+			switchToSession(fm.Selected(), fm.ReadOnly())
+			continue
+		}
+
+		// 遠端：套用該主機的 status bar 顏色，然後 SSH attach
+		hostCfg := host.Config()
+		if hostCfg.Color != "" {
+			barCfg := config.ColorConfig{
+				BarBG:   hostCfg.Color,
+				BadgeBG: hostCfg.Color,
+				BadgeFG: cfg.Remote.BadgeFG,
+			}
+			_ = tmux.ApplyStatusBar(exec, barCfg)
+		} else {
+			_ = tmux.ApplyStatusBar(exec, cfg.Remote)
+		}
+
+		result := remote.Attach(hostCfg.Address, fm.Selected())
+
+		// 恢復本機 status bar
+		_ = tmux.ApplyStatusBar(exec, cfg.Local)
+
+		if result == remote.AttachDetached {
+			continue // 正常 detach → 回到多主機選單
+		}
+
+		// 連線中斷 — 多主機模式下，HostManager 的 watchLoop 會自動重連，直接回到選單
+		continue
 	}
 }
 
