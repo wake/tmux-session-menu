@@ -280,7 +280,7 @@ func runRemote(host string) {
 		c = newC
 
 		// 重連成功：若有目標 session 則重新 attach，否則回到選單
-		if selected != "" {
+		for selected != "" {
 			// 套用 remote status bar 樣式
 			_ = tmux.ApplyStatusBar(exec, cfg.Remote)
 
@@ -290,9 +290,16 @@ func runRemote(host string) {
 			_ = tmux.ApplyStatusBar(exec, cfg.Local)
 
 			if result == remote.AttachDetached {
-				continue
+				break // 正常 detach → 回到選單
 			}
-			// 又斷線 → 繼續迴圈重連
+
+			// 又斷線 → 再次重連
+			newC2 := doReconnect(host, selected, tun)
+			if newC2 == nil {
+				return // 使用者選擇退出
+			}
+			c.Close()
+			c = newC2
 		}
 	}
 }
@@ -353,8 +360,11 @@ func doReconnect(host, session string, tun *remote.Tunnel) *client.Client {
 				continue
 			}
 
-			reconnProg.Send(remote.ReconnStateMsg{State: remote.StateConnected})
+			// 先寫入 resultCh，再通知 TUI 結束，避免 race condition：
+			// 若先 Send 再寫 channel，TUI 可能在 goroutine 寫入前就退出，
+			// 導致 non-blocking select 讀不到結果。
 			resultCh <- reconnResult{client: newC}
+			reconnProg.Send(remote.ReconnStateMsg{State: remote.StateConnected})
 			return
 		}
 	}()
@@ -371,14 +381,14 @@ func doReconnect(host, session string, tun *remote.Tunnel) *client.Client {
 		return nil
 	}
 
-	// 不論結果，嘗試取得新 client
+	// 嘗試取得新 client（短暫等待以防 goroutine 尚未寫入）
 	var newC *client.Client
 	select {
 	case res, ok := <-resultCh:
 		if ok && res.client != nil {
 			newC = res.client
 		}
-	default:
+	case <-time.After(2 * time.Second):
 	}
 
 	if rfm.Quit() {

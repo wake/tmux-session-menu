@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.21.2] - 2026-03-08
+
+### Fixed
+- 遠端模式斷線重連 race condition：goroutine 先 Send 再寫 channel，TUI 可能在寫入前退出導致 client 遺失
+- 重連後 re-attach 失敗時直接回選單，改為再次進入重連流程
+
 ## [0.21.1] - 2026-03-08
 
 ### Fixed
