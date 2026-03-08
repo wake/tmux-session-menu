@@ -2312,6 +2312,14 @@ func TestModel_View_ToolbarNewLayout(t *testing.T) {
 	assert.NotContains(t, view, "[e]", "工具列不應包含 [e]")
 }
 
+func TestModel_ConfigKey_SetsOpenConfig(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	fm := updated.(ui.Model)
+	assert.True(t, fm.OpenConfig())
+	assert.True(t, fm.Quitting())
+}
+
 // ─── Wrap-around navigation ─────────────────────────────────
 
 func TestModel_Navigation_WrapDown(t *testing.T) {

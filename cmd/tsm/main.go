@@ -680,6 +680,10 @@ func handlePostTUI(m ui.Model) {
 		switchToSession(selected, m.ReadOnly())
 		return
 	}
+	if m.OpenConfig() {
+		runConfig()
+		return
+	}
 	if m.ExitTmux() && os.Getenv("TMUX") != "" {
 		_ = osexec.Command("tmux", "detach-client").Run()
 	}

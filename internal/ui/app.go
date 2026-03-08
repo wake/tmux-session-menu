@@ -53,6 +53,7 @@ type Model struct {
 	selectedHostID string // Enter 選取的 session 所屬主機 ID（多主機模式）
 	readOnly_      bool   // R 鍵：唯讀進入 session
 	exitTmux_   bool   // ctrl+e：退出 tmux
+	openConfig_ bool   // c 鍵：開啟 config TUI
 	watchFailed bool   // remote 模式 Watch stream 失敗
 	err         error
 
@@ -131,6 +132,16 @@ func (m Model) ExitTmux() bool {
 // ReadOnly 回傳使用者是否按了 R 要求唯讀進入 session。
 func (m Model) ReadOnly() bool {
 	return m.readOnly_
+}
+
+// OpenConfig 回傳使用者是否按了 c 要求開啟 config TUI。
+func (m Model) OpenConfig() bool {
+	return m.openConfig_
+}
+
+// Quitting 回傳 TUI 是否正在結束。
+func (m Model) Quitting() bool {
+	return m.quitting
 }
 
 // AnimFrame 回傳目前的動畫 frame（主要用於測試）。
@@ -594,6 +605,10 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.toggleCollapse(m.items[m.cursor])
 		}
 		return m, nil
+	case "c":
+		m.openConfig_ = true
+		m.quitting = true
+		return m, tea.Quit
 	case "n":
 		m.mode = ModeInput
 		m.inputTarget = InputNewSession
@@ -1645,7 +1660,7 @@ func (m Model) renderToolbar() string {
 		return keyStyle.Render(key) + versionStyle.Render(" "+desc)
 	}
 	line2Parts := []string{
-		render("[m]", "搬移"), render("[⇧+↑/⇧+k]", "上移"), render("[⇧+↓/⇧+j]", "下移"), render("[ctrl+e]", "退出"),
+		render("[m]", "搬移"), render("[⇧+↑/⇧+k]", "上移"), render("[⇧+↓/⇧+j]", "下移"), render("[c]", "設定"), render("[ctrl+e]", "退出"),
 	}
 	if m.deps.HostMgr != nil {
 		line2Parts = append(line2Parts, render("[h]", "主機管理"))
