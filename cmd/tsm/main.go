@@ -49,14 +49,15 @@ func parseRunMode(args []string) runMode {
 	return modeAuto
 }
 
-// parseRemoteHost 從命令列參數中提取 --remote <host> 的主機名稱。
-func parseRemoteHost(args []string) string {
+// parseRemoteHosts 從命令列參數中收集所有 --remote <host> 的主機名稱。
+func parseRemoteHosts(args []string) []string {
+	var hosts []string
 	for i, a := range args {
 		if a == "--remote" && i+1 < len(args) {
-			return args[i+1]
+			hosts = append(hosts, args[i+1])
 		}
 	}
-	return ""
+	return hosts
 }
 
 func main() {
@@ -78,13 +79,14 @@ func main() {
 	}
 
 	if args[0] == "--remote" {
-		if remoteHost := parseRemoteHost(args); remoteHost != "" {
-			runRemote(remoteHost)
-		} else {
+		hosts := parseRemoteHosts(args)
+		if len(hosts) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: --remote 需要指定主機名稱")
-			fmt.Fprintln(os.Stderr, "Usage: tsm --remote <host>")
+			fmt.Fprintln(os.Stderr, "Usage: tsm --remote <host> [--remote <host2> ...]")
 			os.Exit(1)
 		}
+		// TODO(multi-host): 目前僅連線第一台主機，多主機整合由 Task 11 處理
+		runRemote(hosts[0])
 		return
 	}
 
@@ -221,8 +223,8 @@ func runRemote(host string) {
 	}
 	defer c.Close()
 
-	cfg := loadConfig()                // 設定不變，移到迴圈外
-	exec := tmux.NewRealExecutor()     // status bar 切換用
+	cfg := loadConfig()            // 設定不變，移到迴圈外
+	exec := tmux.NewRealExecutor() // status bar 切換用
 
 	// reconnResult 封裝重連結果。
 	type reconnResult struct {
