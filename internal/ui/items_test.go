@@ -202,6 +202,36 @@ func TestFlattenMultiHostMixed(t *testing.T) {
 	}
 }
 
+func TestFlattenMultiHostDisabled(t *testing.T) {
+	// 已停用的主機不應出現在列表中
+	snaps := []ui.HostSnapshotInput{
+		{
+			HostID: "local",
+			Name:   "Local",
+			Color:  "#aaa",
+			Status: 0, // disabled
+		},
+		{
+			HostID:   "mlab",
+			Name:     "mlab",
+			Color:    "#00ff00",
+			Status:   2, // connected
+			Sessions: []tmux.Session{{Name: "dev", SortOrder: 0}},
+		},
+	}
+
+	items := ui.FlattenMultiHost(snaps)
+
+	// disabled 的 local 不應出現，僅有 mlab 的 HostTitle + Session
+	if assert.Len(t, items, 2) {
+		assert.Equal(t, ui.ItemHostTitle, items[0].Type)
+		assert.Equal(t, "mlab", items[0].HostID)
+
+		assert.Equal(t, ui.ItemSession, items[1].Type)
+		assert.Equal(t, "dev", items[1].Session.Name)
+	}
+}
+
 func TestFlattenItemsUnchanged(t *testing.T) {
 	// 驗證原有 FlattenItems 仍正常運作（不帶 HostID）
 	groups := []store.Group{
