@@ -180,6 +180,27 @@ func TestRenameSessionKey(t *testing.T) {
 	assert.Equal(t, groups[0].ID, metas[0].GroupID)
 }
 
+func TestGetCustomName_NotFound(t *testing.T) {
+	s := newTestStore(t)
+
+	// 查詢不存在的 session，應回傳空字串且無錯誤
+	name, err := s.GetCustomName("non-existent")
+	assert.NoError(t, err)
+	assert.Equal(t, "", name)
+}
+
+func TestGetCustomName_Found(t *testing.T) {
+	s := newTestStore(t)
+
+	// 先設定自訂名稱
+	require.NoError(t, s.SetCustomName("my-session", "我的開發環境"))
+
+	// 查詢應回傳正確的自訂名稱
+	name, err := s.GetCustomName("my-session")
+	require.NoError(t, err)
+	assert.Equal(t, "我的開發環境", name)
+}
+
 func TestSetCustomName_Update(t *testing.T) {
 	s := newTestStore(t)
 

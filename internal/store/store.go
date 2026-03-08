@@ -165,6 +165,18 @@ func (s *Store) RenameSessionKey(oldName, newName string) error {
 	return err
 }
 
+// GetCustomName 查詢單一 session 的自訂顯示名稱。不存在時回傳空字串。
+func (s *Store) GetCustomName(sessionName string) (string, error) {
+	var name string
+	err := s.db.QueryRow(
+		"SELECT custom_name FROM session_meta WHERE session_name = ?",
+		sessionName).Scan(&name)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return name, err
+}
+
 // SetCustomName 設定 session 的自訂顯示名稱（UPSERT）。
 func (s *Store) SetCustomName(sessionName, customName string) error {
 	_, err := s.db.Exec(`
