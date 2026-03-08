@@ -8,6 +8,13 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// ColorConfig 是本地或遠端模式的顏色設定。
+type ColorConfig struct {
+	BarBG   string `toml:"bar_bg"`   // 狀態列背景色（空字串=保持 tmux 預設）
+	BadgeBG string `toml:"badge_bg"` // 徽章背景色
+	BadgeFG string `toml:"badge_fg"` // 徽章前景色
+}
+
 // Config 是 TSM 的全域設定。
 type Config struct {
 	DataDir         string `toml:"data_dir"`
@@ -15,6 +22,9 @@ type Config struct {
 	PollIntervalSec int    `toml:"poll_interval_sec"`
 	InTmux          bool   `toml:"-"` // 執行時偵測，不寫入設定檔
 	InPopup         bool   `toml:"-"` // popup 模式，不寫入設定檔
+
+	Local  ColorConfig `toml:"local"`  // 本地模式顏色
+	Remote ColorConfig `toml:"remote"` // 遠端模式顏色
 }
 
 // Default 回傳預設設定。
@@ -23,6 +33,16 @@ func Default() Config {
 		DataDir:         "~/.config/tsm",
 		PreviewLines:    150,
 		PollIntervalSec: 2,
+		Local: ColorConfig{
+			BarBG:   "", // 空值=保持 tmux 預設
+			BadgeBG: "#5f8787",
+			BadgeFG: "#c0caf5",
+		},
+		Remote: ColorConfig{
+			BarBG:   "#1a2b2b",
+			BadgeBG: "#73daca",
+			BadgeFG: "#1a1b26",
+		},
 	}
 }
 

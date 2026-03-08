@@ -98,6 +98,72 @@ func TestLoadLastRemoteHost_NoFile_ReturnsEmpty(t *testing.T) {
 	assert.Equal(t, "", host)
 }
 
+// --- ColorConfig 測試 ---
+
+func TestDefaultConfig_HasColorSections(t *testing.T) {
+	cfg := config.Default()
+
+	// Local 預設色值
+	assert.Equal(t, "", cfg.Local.BarBG, "local bar_bg 預設為空（保持 tmux 預設）")
+	assert.Equal(t, "#5f8787", cfg.Local.BadgeBG, "local badge_bg 預設值")
+	assert.Equal(t, "#c0caf5", cfg.Local.BadgeFG, "local badge_fg 預設值")
+
+	// Remote 預設色值
+	assert.Equal(t, "#1a2b2b", cfg.Remote.BarBG, "remote bar_bg 預設值")
+	assert.Equal(t, "#73daca", cfg.Remote.BadgeBG, "remote badge_bg 預設值")
+	assert.Equal(t, "#1a1b26", cfg.Remote.BadgeFG, "remote badge_fg 預設值")
+}
+
+func TestLoadFromTOML_WithColorSections(t *testing.T) {
+	tomlData := `
+data_dir = "/tmp/tsm-test"
+
+[local]
+bar_bg = "#111111"
+badge_bg = "#222222"
+badge_fg = "#333333"
+
+[remote]
+bar_bg = "#444444"
+badge_bg = "#555555"
+badge_fg = "#666666"
+`
+	cfg, err := config.LoadFromString(tomlData)
+	require.NoError(t, err)
+
+	assert.Equal(t, "/tmp/tsm-test", cfg.DataDir)
+
+	assert.Equal(t, "#111111", cfg.Local.BarBG)
+	assert.Equal(t, "#222222", cfg.Local.BadgeBG)
+	assert.Equal(t, "#333333", cfg.Local.BadgeFG)
+
+	assert.Equal(t, "#444444", cfg.Remote.BarBG)
+	assert.Equal(t, "#555555", cfg.Remote.BadgeBG)
+	assert.Equal(t, "#666666", cfg.Remote.BadgeFG)
+}
+
+func TestLoadFromTOML_PartialColors_KeepsDefaults(t *testing.T) {
+	tomlData := `
+[local]
+badge_bg = "#aabbcc"
+
+[remote]
+bar_bg = "#ddeeff"
+`
+	cfg, err := config.LoadFromString(tomlData)
+	require.NoError(t, err)
+
+	// Local: 只覆蓋 badge_bg，其餘保持預設
+	assert.Equal(t, "", cfg.Local.BarBG, "未設定的 local bar_bg 保持預設空值")
+	assert.Equal(t, "#aabbcc", cfg.Local.BadgeBG, "已設定的 local badge_bg 為覆蓋值")
+	assert.Equal(t, "#c0caf5", cfg.Local.BadgeFG, "未設定的 local badge_fg 保持預設")
+
+	// Remote: 只覆蓋 bar_bg，其餘保持預設
+	assert.Equal(t, "#ddeeff", cfg.Remote.BarBG, "已設定的 remote bar_bg 為覆蓋值")
+	assert.Equal(t, "#73daca", cfg.Remote.BadgeBG, "未設定的 remote badge_bg 保持預設")
+	assert.Equal(t, "#1a1b26", cfg.Remote.BadgeFG, "未設定的 remote badge_fg 保持預設")
+}
+
 func TestExpandPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
