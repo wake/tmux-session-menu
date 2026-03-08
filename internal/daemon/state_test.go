@@ -194,6 +194,75 @@ func TestToProtoSnapshot(t *testing.T) {
 	assert.Equal(t, "work", g.Name)
 }
 
+func TestSyncUserOptions_UsesSessionID(t *testing.T) {
+	now := time.Now().Unix()
+	// session name 為純數字 "0"，session ID 為 "$5"
+	exec := &fakeExecutor{
+		listOutput: "0:$5:1:/home:0:" + itoa(now),
+	}
+	mgr := tmux.NewManager(exec)
+	hub := NewWatcherHub()
+	defer hub.Close()
+
+	// 建立含 custom name 的 store
+	st, err := store.Open(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+	require.NoError(t, st.SetCustomName("0", "我的專案"))
+
+	sm := NewStateManager(mgr, st, config.Default(), "", hub)
+
+	// 執行掃描，觸發 syncUserOptions
+	sm.Scan()
+
+	// 檢查 fakeExecutor 記錄的 set-option 呼叫
+	var setOptionCalls [][]string
+	for _, call := range exec.calls {
+		if len(call) > 0 && call[0] == "set-option" {
+			setOptionCalls = append(setOptionCalls, call)
+		}
+	}
+
+	require.Len(t, setOptionCalls, 1, "應有一次 set-option 呼叫")
+	// 關鍵：target 必須是 session ID "$5"，而非 session name "0"
+	assert.Equal(t, []string{"set-option", "-t", "$5", "@tsm_name", "我的專案"}, setOptionCalls[0])
+}
+
+func TestSyncUserOptions_UnsetsRemovedCustomName(t *testing.T) {
+	now := time.Now().Unix()
+	exec := &fakeExecutor{
+		listOutput: "myapp:$3:1:/home:0:" + itoa(now),
+	}
+	mgr := tmux.NewManager(exec)
+	hub := NewWatcherHub()
+	defer hub.Close()
+
+	st, err := store.Open(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+
+	sm := NewStateManager(mgr, st, config.Default(), "", hub)
+
+	// 先設定 custom name 再掃描
+	require.NoError(t, st.SetCustomName("myapp", "App"))
+	sm.Scan()
+
+	// 清除 custom name 再掃描
+	require.NoError(t, st.SetCustomName("myapp", ""))
+	exec.calls = nil // 重設記錄
+	sm.Scan()
+
+	var unsetCalls [][]string
+	for _, call := range exec.calls {
+		if len(call) >= 2 && call[0] == "set-option" && len(call) >= 4 && call[3] == "-u" {
+			unsetCalls = append(unsetCalls, call)
+		}
+	}
+
+	require.Len(t, unsetCalls, 1, "應有一次 unset 呼叫")
+	assert.Equal(t, []string{"set-option", "-t", "$3", "-u", "@tsm_name"}, unsetCalls[0])
+}
+
 func itoa(n int64) string {
 	return fmt.Sprintf("%d", n)
 }
