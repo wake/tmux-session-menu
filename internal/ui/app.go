@@ -326,9 +326,13 @@ type MultiHostSnapshotMsg struct {
 }
 
 // recvMultiHostCmd 等待 HostManager 快照通知，回傳 MultiHostSnapshotMsg。
+// 當 SnapshotCh 被關閉（HostManager.Close）時回傳 nil 避免無窮迴圈。
 func recvMultiHostCmd(mgr *hostmgr.HostManager) tea.Cmd {
 	return func() tea.Msg {
-		<-mgr.SnapshotCh()
+		_, ok := <-mgr.SnapshotCh()
+		if !ok {
+			return nil
+		}
 		return buildMultiHostMsg(mgr)
 	}
 }
@@ -992,15 +996,19 @@ func (m Model) toggleCollapse(item ListItem) (tea.Model, tea.Cmd) {
 }
 
 // collectGroups 從目前的 items 中收集所有群組。
+// 多主機模式下只收集游標所在主機的群組。
 func (m Model) collectGroups() []store.Group {
 	if m.deps.Store != nil {
 		groups, _ := m.deps.Store.ListGroups()
 		return groups
 	}
-	// 從已有的 items 中提取
+	hostID := m.hostForCursor()
 	var groups []store.Group
 	for _, item := range m.items {
 		if item.Type == ItemGroup {
+			if hostID != "" && item.HostID != hostID {
+				continue
+			}
 			groups = append(groups, item.Group)
 		}
 	}
