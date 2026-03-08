@@ -135,6 +135,7 @@ func TestBuildComponentOutdated(t *testing.T) {
 	assert.Contains(t, comp.Label, "更新 tsm 到")
 	assert.True(t, comp.Checked)
 	assert.False(t, comp.Disabled)
+	assert.False(t, comp.Installed, "StatusOutdated 不應標記為 Installed，否則預設 ActionKeep 會跳過更新")
 	assert.Contains(t, comp.Note, "old-ver")
 }
 

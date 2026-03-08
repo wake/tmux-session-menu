@@ -2,6 +2,11 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.21.1] - 2026-03-08
+
+### Fixed
+- `tsm upgrade` 下載新版後 setup 未實際更新 binary（StatusOutdated 誤設 `Installed: true` 導致預設 ActionKeep 跳過安裝）
+
 ## [0.21.0] - 2026-03-08
 
 ### Added
