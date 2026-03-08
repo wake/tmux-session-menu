@@ -2,6 +2,21 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.21.0] - 2026-03-08
+
+### Added
+- `tsm config` TUI 設定指令，雙分頁（客戶端/伺服器）編輯顏色與參數
+- `tsm status-name` 子指令，供 tmux status bar 動態顯示 session 自訂名稱
+- Config TOML 新增 `[local]`/`[remote]` 顏色設定區段（bar_bg、badge_bg、badge_fg）
+- tmux status bar 主題化：local/remote 模式不同背景色與 badge 色
+- gRPC `GetConfig`/`SetConfig` RPCs 支援遠端設定編輯
+- `config.SaveConfig()` 將設定寫入 TOML 檔案
+- `store.GetCustomName()` 查詢單一 session 自訂名稱
+
+### Changed
+- `switchToSession` 切換時自動套用 local status bar 樣式
+- `remote.Attach` 前後切換 remote/local status bar 樣式
+
 ## [0.20.1] - 2026-03-08
 
 ### Fixed
