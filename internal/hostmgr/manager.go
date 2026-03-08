@@ -138,16 +138,21 @@ func (m *HostManager) Reorder(hostIDs []string) {
 	m.hosts = result
 }
 
-// Remove 依 ID 移除主機。ID 不存在時為 no-op。
+// Remove 依 ID 移除主機並停止其 goroutine。ID 不存在時為 no-op。
 func (m *HostManager) Remove(hostID string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	var removed *Host
 	for i, h := range m.hosts {
 		if h.ID() == hostID {
+			removed = h
 			m.hosts = append(m.hosts[:i], m.hosts[i+1:]...)
-			return
+			break
 		}
+	}
+	m.mu.Unlock()
+
+	if removed != nil {
+		removed.stop()
 	}
 }
 

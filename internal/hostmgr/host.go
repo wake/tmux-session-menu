@@ -55,6 +55,7 @@ type Host struct {
 	snapshot  *tsmv1.StateSnapshot
 	lastErr   string
 	cancel    context.CancelFunc
+	gen       uint64 // 世代計數器，每次 start() 遞增，run() 用來辨識自己是否為最新
 }
 
 // NewHost 建立新的 Host 實例，初始狀態為 HostDisabled。
@@ -121,26 +122,30 @@ func (h *Host) SetGlobalConfig(cfg config.Config) {
 	h.globalCfg = cfg
 }
 
-// start 啟動連線 goroutine。設定狀態為 Connecting，建立子 context，啟動 run()。
+// start 啟動連線 goroutine。取消舊的 goroutine 並遞增世代計數器，
+// 舊 goroutine 在下次檢查世代時會自行退出，避免兩個 run() 同時修改狀態。
 func (h *Host) start(ctx context.Context, notifyCh chan<- struct{}) {
 	h.mu.Lock()
-	// 如果已有舊的 cancel，先取消
 	if h.cancel != nil {
 		h.cancel()
 	}
 	childCtx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 	h.status = HostConnecting
+	h.gen++
+	myGen := h.gen
 	h.mu.Unlock()
 
-	go h.run(childCtx, notifyCh)
+	go h.run(childCtx, notifyCh, myGen)
 }
 
 // stop 停止連線 goroutine，關閉 tunnel 和 client，狀態設為 Disabled。
+// 遞增世代計數器使舊 goroutine 不再修改狀態。
 func (h *Host) stop() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	h.gen++ // 使舊 goroutine 的世代失效
 	if h.cancel != nil {
 		h.cancel()
 		h.cancel = nil
@@ -158,7 +163,8 @@ func (h *Host) stop() {
 }
 
 // run 是主連線迴圈：嘗試連線 → watchLoop → 斷線後指數退避重連。
-func (h *Host) run(ctx context.Context, notifyCh chan<- struct{}) {
+// myGen 是啟動時的世代編號，若 h.gen 已遞增表示有更新的 goroutine 取代自己，應靜默退出。
+func (h *Host) run(ctx context.Context, notifyCh chan<- struct{}, myGen uint64) {
 	backoff := initialBackoff
 
 	for {
@@ -168,11 +174,21 @@ func (h *Host) run(ctx context.Context, notifyCh chan<- struct{}) {
 		default:
 		}
 
+		// 檢查世代：若已被 stop/start 取代，靜默退出
+		h.mu.RLock()
+		stale := h.gen != myGen
+		h.mu.RUnlock()
+		if stale {
+			return
+		}
+
 		// 嘗試連線
 		if err := h.connect(ctx); err != nil {
 			h.mu.Lock()
-			h.status = HostDisconnected
-			h.lastErr = err.Error()
+			if h.gen == myGen { // 僅當仍為最新世代時才更新狀態
+				h.status = HostDisconnected
+				h.lastErr = err.Error()
+			}
 			h.mu.Unlock()
 			notifyNonBlock(notifyCh)
 
@@ -188,6 +204,17 @@ func (h *Host) run(ctx context.Context, notifyCh chan<- struct{}) {
 
 		// 連線成功
 		h.mu.Lock()
+		if h.gen != myGen {
+			// 已被取代，關閉剛建立的連線
+			if h.client != nil {
+				_ = h.client.Close()
+			}
+			if h.tunnel != nil {
+				h.tunnel.Close()
+			}
+			h.mu.Unlock()
+			return
+		}
 		h.status = HostConnected
 		h.lastErr = ""
 		h.mu.Unlock()

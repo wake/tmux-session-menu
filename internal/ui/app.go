@@ -48,9 +48,10 @@ type Model struct {
 	items    []ListItem
 	quitting bool
 
-	deps        Deps
-	selected    string // Enter 選取的 session name
-	readOnly_   bool   // R 鍵：唯讀進入 session
+	deps           Deps
+	selected       string // Enter 選取的 session name
+	selectedHostID string // Enter 選取的 session 所屬主機 ID（多主機模式）
+	readOnly_      bool   // R 鍵：唯讀進入 session
 	exitTmux_   bool   // ctrl+e：退出 tmux
 	watchFailed bool   // remote 模式 Watch stream 失敗
 	err         error
@@ -384,11 +385,17 @@ func (m Model) hostForCursor() string {
 }
 
 // SelectedItem 回傳被選取的 ListItem（供 main.go 判斷 attach 目標主機）。
+// 多主機模式下會同時比對 HostID，避免跨主機同名 session 誤判。
 func (m Model) SelectedItem() ListItem {
 	for _, item := range m.items {
-		if item.Type == ItemSession && item.Session.Name == m.selected {
-			return item
+		if item.Type != ItemSession || item.Session.Name != m.selected {
+			continue
 		}
+		// 多主機模式：必須 HostID 也匹配
+		if m.selectedHostID != "" && item.HostID != m.selectedHostID {
+			continue
+		}
+		return item
 	}
 	return ListItem{}
 }
@@ -568,6 +575,7 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil // 主機標題列不可操作
 			case ItemSession:
 				m.selected = item.Session.Name
+				m.selectedHostID = item.HostID
 				m.quitting = true
 				return m, tea.Quit
 			case ItemGroup:
@@ -666,6 +674,7 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor >= 0 && m.cursor < len(m.items) && m.items[m.cursor].Type == ItemSession {
 			m.readOnly_ = true
 			m.selected = m.items[m.cursor].Session.Name
+			m.selectedHostID = m.items[m.cursor].HostID
 			m.quitting = true
 			return m, tea.Quit
 		}
@@ -989,6 +998,7 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			item := visible[m.cursor]
 			if item.Type == ItemSession {
 				m.selected = item.Session.Name
+				m.selectedHostID = item.HostID
 				m.quitting = true
 				return m, tea.Quit
 			}
