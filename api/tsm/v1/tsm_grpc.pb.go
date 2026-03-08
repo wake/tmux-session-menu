@@ -30,6 +30,8 @@ const (
 	SessionManager_Reorder_FullMethodName        = "/tsm.v1.SessionManager/Reorder"
 	SessionManager_ToggleCollapse_FullMethodName = "/tsm.v1.SessionManager/ToggleCollapse"
 	SessionManager_DaemonStatus_FullMethodName   = "/tsm.v1.SessionManager/DaemonStatus"
+	SessionManager_GetConfig_FullMethodName      = "/tsm.v1.SessionManager/GetConfig"
+	SessionManager_SetConfig_FullMethodName      = "/tsm.v1.SessionManager/SetConfig"
 )
 
 // SessionManagerClient is the client API for SessionManager service.
@@ -52,6 +54,10 @@ type SessionManagerClient interface {
 	ToggleCollapse(ctx context.Context, in *ToggleCollapseRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// DaemonStatus 回傳 daemon 的狀態資訊。
 	DaemonStatus(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*DaemonStatusResponse, error)
+	// GetConfig 取得 daemon 所在主機的設定。
+	GetConfig(ctx context.Context, in *GetConfigRequest, opts ...grpc.CallOption) (*GetConfigResponse, error)
+	// SetConfig 更新 daemon 所在主機的設定。
+	SetConfig(ctx context.Context, in *SetConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type sessionManagerClient struct {
@@ -171,6 +177,26 @@ func (c *sessionManagerClient) DaemonStatus(ctx context.Context, in *emptypb.Emp
 	return out, nil
 }
 
+func (c *sessionManagerClient) GetConfig(ctx context.Context, in *GetConfigRequest, opts ...grpc.CallOption) (*GetConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetConfigResponse)
+	err := c.cc.Invoke(ctx, SessionManager_GetConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionManagerClient) SetConfig(ctx context.Context, in *SetConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, SessionManager_SetConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionManagerServer is the server API for SessionManager service.
 // All implementations must embed UnimplementedSessionManagerServer
 // for forward compatibility.
@@ -191,6 +217,10 @@ type SessionManagerServer interface {
 	ToggleCollapse(context.Context, *ToggleCollapseRequest) (*emptypb.Empty, error)
 	// DaemonStatus 回傳 daemon 的狀態資訊。
 	DaemonStatus(context.Context, *emptypb.Empty) (*DaemonStatusResponse, error)
+	// GetConfig 取得 daemon 所在主機的設定。
+	GetConfig(context.Context, *GetConfigRequest) (*GetConfigResponse, error)
+	// SetConfig 更新 daemon 所在主機的設定。
+	SetConfig(context.Context, *SetConfigRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedSessionManagerServer()
 }
 
@@ -230,6 +260,12 @@ func (UnimplementedSessionManagerServer) ToggleCollapse(context.Context, *Toggle
 }
 func (UnimplementedSessionManagerServer) DaemonStatus(context.Context, *emptypb.Empty) (*DaemonStatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DaemonStatus not implemented")
+}
+func (UnimplementedSessionManagerServer) GetConfig(context.Context, *GetConfigRequest) (*GetConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetConfig not implemented")
+}
+func (UnimplementedSessionManagerServer) SetConfig(context.Context, *SetConfigRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetConfig not implemented")
 }
 func (UnimplementedSessionManagerServer) mustEmbedUnimplementedSessionManagerServer() {}
 func (UnimplementedSessionManagerServer) testEmbeddedByValue()                        {}
@@ -425,6 +461,42 @@ func _SessionManager_DaemonStatus_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SessionManager_GetConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).GetConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_GetConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).GetConfig(ctx, req.(*GetConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SessionManager_SetConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).SetConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_SetConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).SetConfig(ctx, req.(*SetConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SessionManager_ServiceDesc is the grpc.ServiceDesc for SessionManager service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -467,6 +539,14 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DaemonStatus",
 			Handler:    _SessionManager_DaemonStatus_Handler,
+		},
+		{
+			MethodName: "GetConfig",
+			Handler:    _SessionManager_GetConfig_Handler,
+		},
+		{
+			MethodName: "SetConfig",
+			Handler:    _SessionManager_SetConfig_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -116,6 +116,25 @@ message DaemonStatusResponse {
   int32 watcher_count = 3;
 }
 
+// ConfigValue 代表一個設定鍵值對。
+message ConfigValue {
+  string key = 1;
+  string value = 2;
+}
+
+// GetConfigRequest 取得設定。
+message GetConfigRequest {}
+
+// GetConfigResponse 回傳設定值。
+message GetConfigResponse {
+  repeated ConfigValue values = 1;
+}
+
+// SetConfigRequest 設定值（可一次設定多個）。
+message SetConfigRequest {
+  repeated ConfigValue values = 1;
+}
+
 // SessionManager 是 tsm daemon 的核心 gRPC service。
 service SessionManager {
   // Watch 建立 server streaming，持續推送 StateSnapshot。
@@ -134,4 +153,9 @@ service SessionManager {
 
   // DaemonStatus 回傳 daemon 的狀態資訊。
   rpc DaemonStatus(google.protobuf.Empty) returns (DaemonStatusResponse);
+
+  // GetConfig 取得 daemon 所在主機的設定。
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  // SetConfig 更新 daemon 所在主機的設定。
+  rpc SetConfig(SetConfigRequest) returns (google.protobuf.Empty);
 }
