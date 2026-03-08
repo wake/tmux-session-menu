@@ -118,25 +118,33 @@ func (sm *StateManager) doScan() {
 
 // syncUserOptions 同步 tmux @tsm_name user option，確保 status bar 顯示正確的自訂名稱。
 // 僅在值與上次同步不同時才執行 tmux set-option，避免每次掃描都呼叫。
+// 使用 session ID（$N）而非 session name 作為 -t target，
+// 避免純數字 session name 被 tmux 誤解為 window index。
 func (sm *StateManager) syncUserOptions(snap *tsmv1.StateSnapshot) {
 	if sm.tmuxMgr == nil || snap == nil {
 		return
 	}
 
 	current := make(map[string]string, len(snap.Sessions))
+	idMap := make(map[string]string, len(snap.Sessions)) // name → session ID (e.g. "$0")
 	for _, s := range snap.Sessions {
 		current[s.Name] = s.CustomName
+		idMap[s.Name] = s.Id
 	}
 
-	// 同步有變更的 session
+	// 同步有變更的 session（使用 session ID 作為 target）
 	for name, customName := range current {
 		if sm.syncedNames[name] == customName {
 			continue
 		}
+		target := idMap[name]
+		if target == "" {
+			target = name // fallback: 無 ID 時仍用 name
+		}
 		if customName != "" {
-			_ = sm.tmuxMgr.SetSessionOption(name, "@tsm_name", customName)
+			_ = sm.tmuxMgr.SetSessionOption(target, "@tsm_name", customName)
 		} else {
-			_ = sm.tmuxMgr.UnsetSessionOption(name, "@tsm_name")
+			_ = sm.tmuxMgr.UnsetSessionOption(target, "@tsm_name")
 		}
 	}
 
