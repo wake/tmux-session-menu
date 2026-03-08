@@ -13,13 +13,37 @@ type ItemType int
 const (
 	ItemSession ItemType = iota
 	ItemGroup
+	ItemHostTitle // 主機標題列
 )
 
-// ListItem 代表列表中的一個項目（session 或群組標頭）。
+// ListItem 代表列表中的一個項目（session、群組標頭或主機標題）。
 type ListItem struct {
-	Type    ItemType
-	Session tmux.Session
-	Group   store.Group
+	Type      ItemType
+	Session   tmux.Session
+	Group     store.Group
+	HostID    string // 所屬主機 ID
+	HostColor string // 主機 accent color
+	HostState int    // host title 用：主機連線狀態（0=disabled, 1=connecting, 2=connected, 3=disconnected）
+	HostError string // host title 用：錯誤訊息
+}
+
+// HostState 常數，對應 hostmgr.HostStatus 的值，避免 ui 直接依賴 hostmgr。
+const (
+	HostStateDisabled     = 0 // 已停用
+	HostStateConnecting   = 1 // 連線中
+	HostStateConnected    = 2 // 已連線
+	HostStateDisconnected = 3 // 已斷線
+)
+
+// HostSnapshotInput 是 FlattenMultiHost 的輸入，避免 ui 直接依賴 hostmgr。
+type HostSnapshotInput struct {
+	HostID   string
+	Name     string
+	Color    string
+	Status   int // 0=disabled, 1=connecting, 2=connected, 3=disconnected
+	Error    string
+	Sessions []tmux.Session
+	Groups   []store.Group
 }
 
 // FlattenItems 將群組與 session 扁平化為一維列表。
@@ -59,6 +83,35 @@ func FlattenItems(groups []store.Group, sessions []tmux.Session) []ListItem {
 	})
 	for _, s := range ungrouped {
 		items = append(items, ListItem{Type: ItemSession, Session: s})
+	}
+
+	return items
+}
+
+// FlattenMultiHost 將多台主機的快照扁平化為一維列表。
+// 每台主機先放一個 ItemHostTitle，若已連線（Status==2）再展開其 sessions/groups。
+func FlattenMultiHost(snaps []HostSnapshotInput) []ListItem {
+	var items []ListItem
+
+	for _, snap := range snaps {
+		// 主機標題列
+		items = append(items, ListItem{
+			Type:      ItemHostTitle,
+			HostID:    snap.HostID,
+			HostColor: snap.Color,
+			HostState: snap.Status,
+			HostError: snap.Error,
+		})
+
+		// 僅已連線的主機才展開 sessions
+		if snap.Status == HostStateConnected && len(snap.Sessions) > 0 {
+			sub := FlattenItems(snap.Groups, snap.Sessions)
+			for i := range sub {
+				sub[i].HostID = snap.HostID
+				sub[i].HostColor = snap.Color
+			}
+			items = append(items, sub...)
+		}
 	}
 
 	return items

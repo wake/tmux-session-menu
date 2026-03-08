@@ -70,3 +70,163 @@ func TestFlattenItems_UngroupedSortOrder(t *testing.T) {
 	assert.Equal(t, "bravo", items[1].Session.Name)
 	assert.Equal(t, "charlie", items[2].Session.Name)
 }
+
+func TestFlattenMultiHost(t *testing.T) {
+	// 2 台主機：local（已連線、1 session）+ remote（已連線、2 sessions 含 1 群組）
+	snaps := []ui.HostSnapshotInput{
+		{
+			HostID:   "local",
+			Name:     "Local",
+			Color:    "#00ff00",
+			Status:   2, // connected
+			Sessions: []tmux.Session{{Name: "dev", SortOrder: 0}},
+			Groups:   nil,
+		},
+		{
+			HostID: "remote",
+			Name:   "Remote",
+			Color:  "#ff0000",
+			Status: 2, // connected
+			Sessions: []tmux.Session{
+				{Name: "web", GroupName: "work", SortOrder: 0},
+				{Name: "api", GroupName: "", SortOrder: 1},
+			},
+			Groups: []store.Group{
+				{ID: 1, Name: "work", SortOrder: 0, Collapsed: false},
+			},
+		},
+	}
+
+	items := ui.FlattenMultiHost(snaps)
+
+	// 預期順序：HostTitle(local), Session(dev), HostTitle(remote), Group(work), Session(web), Session(api)
+	if assert.Len(t, items, 6) {
+		assert.Equal(t, ui.ItemHostTitle, items[0].Type)
+		assert.Equal(t, "local", items[0].HostID)
+
+		assert.Equal(t, ui.ItemSession, items[1].Type)
+		assert.Equal(t, "local", items[1].HostID)
+		assert.Equal(t, "dev", items[1].Session.Name)
+
+		assert.Equal(t, ui.ItemHostTitle, items[2].Type)
+		assert.Equal(t, "remote", items[2].HostID)
+
+		assert.Equal(t, ui.ItemGroup, items[3].Type)
+		assert.Equal(t, "remote", items[3].HostID)
+		assert.Equal(t, "work", items[3].Group.Name)
+
+		assert.Equal(t, ui.ItemSession, items[4].Type)
+		assert.Equal(t, "remote", items[4].HostID)
+		assert.Equal(t, "web", items[4].Session.Name)
+
+		assert.Equal(t, ui.ItemSession, items[5].Type)
+		assert.Equal(t, "remote", items[5].HostID)
+		assert.Equal(t, "api", items[5].Session.Name)
+	}
+
+	// 驗證 HostColor 標記
+	assert.Equal(t, "#00ff00", items[0].HostColor)
+	assert.Equal(t, "#00ff00", items[1].HostColor)
+	assert.Equal(t, "#ff0000", items[3].HostColor)
+}
+
+func TestFlattenMultiHostDisconnected(t *testing.T) {
+	// 1 台主機：連線中，無 session
+	snaps := []ui.HostSnapshotInput{
+		{
+			HostID: "remote-a",
+			Name:   "Remote A",
+			Color:  "#0000ff",
+			Status: 1, // connecting
+		},
+	}
+
+	items := ui.FlattenMultiHost(snaps)
+
+	if assert.Len(t, items, 1) {
+		assert.Equal(t, ui.ItemHostTitle, items[0].Type)
+		assert.Equal(t, "remote-a", items[0].HostID)
+		assert.Equal(t, 1, items[0].HostState)
+	}
+}
+
+func TestFlattenMultiHostMixed(t *testing.T) {
+	// 3 台主機：connected、disconnected、connected
+	snaps := []ui.HostSnapshotInput{
+		{
+			HostID:   "h1",
+			Name:     "Host1",
+			Color:    "#aaa",
+			Status:   2, // connected
+			Sessions: []tmux.Session{{Name: "s1", SortOrder: 0}},
+		},
+		{
+			HostID: "h2",
+			Name:   "Host2",
+			Color:  "#bbb",
+			Status: 3, // disconnected
+			Error:  "timeout",
+		},
+		{
+			HostID:   "h3",
+			Name:     "Host3",
+			Color:    "#ccc",
+			Status:   2, // connected
+			Sessions: []tmux.Session{{Name: "s2", SortOrder: 0}, {Name: "s3", SortOrder: 1}},
+		},
+	}
+
+	items := ui.FlattenMultiHost(snaps)
+
+	// 預期：HostTitle(h1), Session(s1), HostTitle(h2), HostTitle(h3), Session(s2), Session(s3)
+	if assert.Len(t, items, 6) {
+		assert.Equal(t, ui.ItemHostTitle, items[0].Type)
+		assert.Equal(t, "h1", items[0].HostID)
+
+		assert.Equal(t, ui.ItemSession, items[1].Type)
+		assert.Equal(t, "h1", items[1].HostID)
+
+		assert.Equal(t, ui.ItemHostTitle, items[2].Type)
+		assert.Equal(t, "h2", items[2].HostID)
+		assert.Equal(t, "timeout", items[2].HostError)
+		assert.Equal(t, 3, items[2].HostState)
+
+		assert.Equal(t, ui.ItemHostTitle, items[3].Type)
+		assert.Equal(t, "h3", items[3].HostID)
+
+		assert.Equal(t, ui.ItemSession, items[4].Type)
+		assert.Equal(t, "h3", items[4].HostID)
+
+		assert.Equal(t, ui.ItemSession, items[5].Type)
+		assert.Equal(t, "h3", items[5].HostID)
+	}
+}
+
+func TestFlattenItemsUnchanged(t *testing.T) {
+	// 驗證原有 FlattenItems 仍正常運作（不帶 HostID）
+	groups := []store.Group{
+		{ID: 1, Name: "grp", SortOrder: 0, Collapsed: false},
+	}
+	sessions := []tmux.Session{
+		{Name: "a", GroupName: "grp", SortOrder: 1},
+		{Name: "b", GroupName: "", SortOrder: 0},
+	}
+
+	items := ui.FlattenItems(groups, sessions)
+
+	if assert.Len(t, items, 3) {
+		assert.Equal(t, ui.ItemGroup, items[0].Type)
+		assert.Equal(t, "grp", items[0].Group.Name)
+
+		assert.Equal(t, ui.ItemSession, items[1].Type)
+		assert.Equal(t, "a", items[1].Session.Name)
+
+		assert.Equal(t, ui.ItemSession, items[2].Type)
+		assert.Equal(t, "b", items[2].Session.Name)
+	}
+
+	// 確認無 HostID（向後相容）
+	for i, item := range items {
+		assert.Empty(t, item.HostID, "items[%d].HostID should be empty", i)
+	}
+}

@@ -4,11 +4,12 @@ package ui
 type Mode int
 
 const (
-	ModeNormal  Mode = iota // 一般瀏覽
-	ModeInput               // 文字輸入
-	ModeConfirm             // 確認對話框
-	ModePicker              // 選擇器（例如選擇群組）
-	ModeSearch              // 搜尋模式
+	ModeNormal     Mode = iota // 一般瀏覽
+	ModeInput                  // 文字輸入
+	ModeConfirm                // 確認對話框
+	ModePicker                 // 選擇器（例如選擇群組）
+	ModeSearch                 // 搜尋模式
+	ModeHostPicker             // 主機管理面板
 )
 
 // InputTarget 標識文字輸入的目的。
@@ -19,4 +20,5 @@ const (
 	InputRenameSession                    // 重命名 session (custom_name)
 	InputNewGroup                         // 新建群組
 	InputRenameGroup                      // 重命名群組
+	InputNewHost                          // 新增主機位址
 )

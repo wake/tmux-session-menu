@@ -15,6 +15,20 @@ type ColorConfig struct {
 	BadgeFG string `toml:"badge_fg"` // 徽章前景色
 }
 
+// HostEntry 代表一台主機的設定。
+type HostEntry struct {
+	Name      string `toml:"name"`
+	Address   string `toml:"address"` // 空字串 = 本機
+	Color     string `toml:"color"`   // accent color
+	Enabled   bool   `toml:"enabled"`
+	SortOrder int    `toml:"sort_order"`
+}
+
+// IsLocal 回傳此主機是否為本機（Address 為空）。
+func (h HostEntry) IsLocal() bool {
+	return h.Address == ""
+}
+
 // Config 是 TSM 的全域設定。
 type Config struct {
 	DataDir         string `toml:"data_dir"`
@@ -25,6 +39,8 @@ type Config struct {
 
 	Local  ColorConfig `toml:"local"`  // 本地模式顏色
 	Remote ColorConfig `toml:"remote"` // 遠端模式顏色
+
+	Hosts []HostEntry `toml:"hosts"` // 主機清單
 }
 
 // Default 回傳預設設定。
@@ -42,6 +58,9 @@ func Default() Config {
 			BarBG:   "#1a2b2b",
 			BadgeBG: "#73daca",
 			BadgeFG: "#1a1b26",
+		},
+		Hosts: []HostEntry{
+			{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
 		},
 	}
 }

@@ -207,6 +207,105 @@ func TestSaveConfig_RuntimeFieldsNotSaved(t *testing.T) {
 	assert.NotContains(t, content, "in_popup")
 }
 
+// --- HostEntry 測試 ---
+
+func TestDefaultConfig_HasLocalHost(t *testing.T) {
+	cfg := config.Default()
+
+	require.Len(t, cfg.Hosts, 1, "預設應包含一筆 local host")
+
+	h := cfg.Hosts[0]
+	assert.Equal(t, "local", h.Name)
+	assert.Equal(t, "", h.Address, "local host address 應為空字串")
+	assert.Equal(t, "#5f8787", h.Color)
+	assert.True(t, h.Enabled)
+	assert.Equal(t, 0, h.SortOrder)
+}
+
+func TestHostEntry_IsLocal(t *testing.T) {
+	local := config.HostEntry{Name: "local", Address: ""}
+	assert.True(t, local.IsLocal(), "address 為空時 IsLocal() 應為 true")
+
+	remote := config.HostEntry{Name: "server", Address: "192.168.1.100"}
+	assert.False(t, remote.IsLocal(), "address 非空時 IsLocal() 應為 false")
+}
+
+func TestLoadFromTOML_MultipleHosts(t *testing.T) {
+	tomlData := `
+data_dir = "/tmp/tsm-test"
+
+[[hosts]]
+name = "local"
+address = ""
+color = "#5f8787"
+enabled = true
+sort_order = 0
+
+[[hosts]]
+name = "server-a"
+address = "10.0.0.1"
+color = "#73daca"
+enabled = true
+sort_order = 1
+
+[[hosts]]
+name = "server-b"
+address = "10.0.0.2"
+color = "#ff9e64"
+enabled = false
+sort_order = 2
+`
+	cfg, err := config.LoadFromString(tomlData)
+	require.NoError(t, err)
+
+	require.Len(t, cfg.Hosts, 3)
+
+	assert.Equal(t, "local", cfg.Hosts[0].Name)
+	assert.True(t, cfg.Hosts[0].IsLocal())
+
+	assert.Equal(t, "server-a", cfg.Hosts[1].Name)
+	assert.Equal(t, "10.0.0.1", cfg.Hosts[1].Address)
+	assert.Equal(t, "#73daca", cfg.Hosts[1].Color)
+	assert.True(t, cfg.Hosts[1].Enabled)
+	assert.Equal(t, 1, cfg.Hosts[1].SortOrder)
+	assert.False(t, cfg.Hosts[1].IsLocal())
+
+	assert.Equal(t, "server-b", cfg.Hosts[2].Name)
+	assert.False(t, cfg.Hosts[2].Enabled)
+}
+
+func TestHostEntry_TOML_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cfg := config.Default()
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "remote-1", Address: "10.0.0.1", Color: "#73daca", Enabled: true, SortOrder: 1},
+	}
+
+	err := config.SaveConfig(path, cfg)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	require.NoError(t, err)
+
+	require.Len(t, loaded.Hosts, 2)
+	assert.Equal(t, cfg.Hosts[0].Name, loaded.Hosts[0].Name)
+	assert.Equal(t, cfg.Hosts[0].Address, loaded.Hosts[0].Address)
+	assert.Equal(t, cfg.Hosts[0].Color, loaded.Hosts[0].Color)
+	assert.Equal(t, cfg.Hosts[0].Enabled, loaded.Hosts[0].Enabled)
+	assert.Equal(t, cfg.Hosts[0].SortOrder, loaded.Hosts[0].SortOrder)
+
+	assert.Equal(t, cfg.Hosts[1].Name, loaded.Hosts[1].Name)
+	assert.Equal(t, cfg.Hosts[1].Address, loaded.Hosts[1].Address)
+	assert.Equal(t, cfg.Hosts[1].Color, loaded.Hosts[1].Color)
+	assert.Equal(t, cfg.Hosts[1].Enabled, loaded.Hosts[1].Enabled)
+	assert.Equal(t, cfg.Hosts[1].SortOrder, loaded.Hosts[1].SortOrder)
+}
+
 func TestExpandPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
