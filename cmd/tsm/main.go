@@ -215,7 +215,8 @@ func runRemote(host string) {
 	}
 	defer c.Close()
 
-	cfg := loadConfig() // 設定不變，移到迴圈外
+	cfg := loadConfig()                // 設定不變，移到迴圈外
+	exec := tmux.NewRealExecutor()     // status bar 切換用
 
 	// reconnResult 封裝重連結果。
 	type reconnResult struct {
@@ -250,8 +251,15 @@ func runRemote(host string) {
 				return // 使用者按 q/esc 退出
 			}
 
+			// 套用 remote status bar 樣式
+			_ = tmux.ApplyStatusBar(exec, cfg.Remote)
+
 			// 連線到遠端 session
 			result := remote.Attach(host, selected)
+
+			// 恢復 local status bar 樣式
+			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+
 			if result == remote.AttachDetached {
 				continue // 正常 detach → 回到選單
 			}
@@ -267,7 +275,14 @@ func runRemote(host string) {
 
 		// 重連成功：若有目標 session 則重新 attach，否則回到選單
 		if selected != "" {
+			// 套用 remote status bar 樣式
+			_ = tmux.ApplyStatusBar(exec, cfg.Remote)
+
 			result := remote.Attach(host, selected)
+
+			// 恢復 local status bar 樣式
+			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+
 			if result == remote.AttachDetached {
 				continue
 			}
@@ -537,6 +552,11 @@ func switchToSession(name string, readOnly bool) {
 
 			// 清除可能殘留的舊版 key-table 設定（升級相容）
 			_ = osexec.Command("tmux", "set-option", "-t", name, "-u", "key-table").Run()
+
+			// 套用 local status bar 樣式
+			cfg := loadConfig()
+			exec := tmux.NewRealExecutor()
+			_ = tmux.ApplyStatusBar(exec, cfg.Local)
 		}
 	} else {
 		args := []string{"attach-session", "-t", name}
