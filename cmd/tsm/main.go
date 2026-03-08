@@ -196,6 +196,11 @@ func runClientLauncher(dataDir string) {
 		cfg := loadConfig()
 		cfg.InTmux = os.Getenv("TMUX") != ""
 		cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+		// 確保 status-left 格式為最新（使用 per-session #{@tsm_name}）
+		if cfg.InTmux {
+			exec := tmux.NewRealExecutor()
+			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+		}
 		runTUILegacy(cfg)
 
 	case launcher.ChoiceFullSetup:
