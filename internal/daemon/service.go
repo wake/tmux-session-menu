@@ -2,13 +2,16 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
+	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 )
@@ -180,4 +183,66 @@ func (s *Service) DaemonStatus(_ context.Context, _ *emptypb.Empty) (*tsmv1.Daem
 		StartedAt:    timestamppb.New(s.startedAt),
 		WatcherCount: int32(s.hub.Count()),
 	}, nil
+}
+
+// loadServerConfig 讀取伺服器端的 config.toml，讀取失敗時回傳預設值。
+func loadServerConfig() config.Config {
+	cfg := config.Default()
+	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
+	if data, err := os.ReadFile(cfgPath); err == nil {
+		if loaded, err := config.LoadFromString(string(data)); err == nil {
+			cfg = loaded
+		}
+	}
+	return cfg
+}
+
+// GetConfig 取得 daemon 所在主機的設定。
+func (s *Service) GetConfig(_ context.Context, _ *tsmv1.GetConfigRequest) (*tsmv1.GetConfigResponse, error) {
+	cfg := loadServerConfig()
+	values := []*tsmv1.ConfigValue{
+		{Key: "preview_lines", Value: fmt.Sprintf("%d", cfg.PreviewLines)},
+		{Key: "poll_interval_sec", Value: fmt.Sprintf("%d", cfg.PollIntervalSec)},
+		{Key: "local.bar_bg", Value: cfg.Local.BarBG},
+		{Key: "local.badge_bg", Value: cfg.Local.BadgeBG},
+		{Key: "local.badge_fg", Value: cfg.Local.BadgeFG},
+		{Key: "remote.bar_bg", Value: cfg.Remote.BarBG},
+		{Key: "remote.badge_bg", Value: cfg.Remote.BadgeBG},
+		{Key: "remote.badge_fg", Value: cfg.Remote.BadgeFG},
+	}
+	return &tsmv1.GetConfigResponse{Values: values}, nil
+}
+
+// SetConfig 更新 daemon 所在主機的設定。
+func (s *Service) SetConfig(_ context.Context, req *tsmv1.SetConfigRequest) (*emptypb.Empty, error) {
+	cfg := loadServerConfig()
+	for _, kv := range req.Values {
+		switch kv.Key {
+		case "preview_lines":
+			if v, err := strconv.Atoi(kv.Value); err == nil {
+				cfg.PreviewLines = v
+			}
+		case "poll_interval_sec":
+			if v, err := strconv.Atoi(kv.Value); err == nil {
+				cfg.PollIntervalSec = v
+			}
+		case "local.bar_bg":
+			cfg.Local.BarBG = kv.Value
+		case "local.badge_bg":
+			cfg.Local.BadgeBG = kv.Value
+		case "local.badge_fg":
+			cfg.Local.BadgeFG = kv.Value
+		case "remote.bar_bg":
+			cfg.Remote.BarBG = kv.Value
+		case "remote.badge_bg":
+			cfg.Remote.BadgeBG = kv.Value
+		case "remote.badge_fg":
+			cfg.Remote.BadgeFG = kv.Value
+		}
+	}
+	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
+	if err := config.SaveConfig(cfgPath, cfg); err != nil {
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
 }
