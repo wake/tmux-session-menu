@@ -21,6 +21,22 @@ const (
 	HostDisconnected                   // 已斷線，重連中
 )
 
+// String 回傳 HostStatus 的字串表示。
+func (s HostStatus) String() string {
+	switch s {
+	case HostDisabled:
+		return "disabled"
+	case HostConnecting:
+		return "connecting"
+	case HostConnected:
+		return "connected"
+	case HostDisconnected:
+		return "disconnected"
+	default:
+		return "unknown"
+	}
+}
+
 // Host 封裝單一主機的狀態與連線資源。
 type Host struct {
 	mu       sync.RWMutex
