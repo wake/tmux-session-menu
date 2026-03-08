@@ -214,6 +214,12 @@ func runMultiHost(remoteFlags []string) {
 	cfg.InTmux = os.Getenv("TMUX") != ""
 	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
 
+	// 確保 status-left 格式為最新（使用 per-session #{@tsm_name}）
+	if cfg.InTmux {
+		exec := tmux.NewRealExecutor()
+		_ = tmux.ApplyStatusBar(exec, cfg.Local)
+	}
+
 	// 整合主機清單（config.Hosts + --remote 旗標）
 	merged := config.MergeHosts(cfg.Hosts, remoteFlags)
 	cfg.Hosts = merged
@@ -572,6 +578,12 @@ func runTUI() {
 	cfg := loadConfig()
 	cfg.InTmux = os.Getenv("TMUX") != ""
 	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+
+	// 確保 status-left 格式為最新（使用 per-session #{@tsm_name} 而非全域快取的 #(tsm status-name)）
+	if cfg.InTmux {
+		exec := tmux.NewRealExecutor()
+		_ = tmux.ApplyStatusBar(exec, cfg.Local)
+	}
 
 	// 嘗試連線 daemon（會自動啟動）
 	c, err := client.Dial(cfg)
