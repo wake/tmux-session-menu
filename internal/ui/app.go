@@ -560,8 +560,12 @@ func (m Model) pollInterval() time.Duration {
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
 	if m.deps.HostMgr != nil {
-		// 多主機模式：等待 HostManager 快照通知
-		return recvMultiHostCmd(m.deps.HostMgr)
+		// 多主機模式：立即送出目前快照（含連線中的主機），再等待後續通知
+		mgr := m.deps.HostMgr
+		return tea.Batch(
+			func() tea.Msg { return buildMultiHostMsg(mgr) },
+			recvMultiHostCmd(mgr),
+		)
 	}
 	if m.deps.Client != nil {
 		// gRPC daemon 模式：啟動 Watch stream

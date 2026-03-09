@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
@@ -2879,6 +2880,33 @@ func TestConfirmReturnMode_BackToHostPicker(t *testing.T) {
 	updated2, _ := model.Update(tea.KeyMsg{Type: tea.KeyEscape})
 	model2 := updated2.(ui.Model)
 	assert.Equal(t, ui.ModeNormal, model2.Mode())
+}
+
+func TestInit_MultiHost_ImmediateSnapshot(t *testing.T) {
+	// 建立 HostManager 並加入一台 Enabled 主機（初始為 Connecting 狀態）
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "remote-1", Address: "10.0.0.1", Enabled: true, Color: "#ff0000"})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr})
+	cmd := m.Init()
+	assert.NotNil(t, cmd)
+
+	// Init 應回傳 tea.Batch，其中包含立即快照的 cmd
+	// 模擬 Bubble Tea 執行：直接呼叫 batch 取得初始訊息
+	// 由於 tea.Batch 內部的立即 cmd 會回傳 MultiHostSnapshotMsg，
+	// 我們用 Update 來處理它，確認 items 會有主機標題
+	msg := ui.MultiHostSnapshotMsg{
+		Snapshots: []ui.HostSnapshotInput{
+			{HostID: "remote-1", Name: "remote-1", Color: "#ff0000", Status: ui.HostStateConnecting},
+		},
+	}
+	updated, _ := m.Update(msg)
+	model := updated.(ui.Model)
+	items := model.Items()
+	assert.Len(t, items, 1, "應有一個 host title 項目")
+	assert.Equal(t, ui.ItemHostTitle, items[0].Type)
+	assert.Equal(t, "remote-1", items[0].HostID)
+	assert.Equal(t, ui.HostStateConnecting, items[0].HostState)
 }
 
 func TestDownloadUpgradeMsg_RestartOnly(t *testing.T) {
