@@ -7,6 +7,7 @@ import (
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -242,7 +243,7 @@ func runMultiHost(remoteFlags []string) {
 	exec := tmux.NewRealExecutor()
 
 	for {
-		deps := ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: config.ExpandPath("~/.config/tsm/config.toml")}
+		deps := ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: config.ExpandPath("~/.config/tsm/config.toml"), Upgrader: upgrade.DefaultUpgrader()}
 		m := ui.NewModel(deps)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 
@@ -254,6 +255,12 @@ func runMultiHost(remoteFlags []string) {
 
 		fm, ok := finalModel.(ui.Model)
 		if !ok || fm.Selected() == "" {
+			if ok && fm.UpgradeReady() {
+				mgr.Close()
+				cancel()
+				runPostUpgrade(fm, cfg)
+				return
+			}
 			// 使用者按 q/esc/ctrl+e 退出
 			if ok && fm.ExitTmux() && os.Getenv("TMUX") != "" {
 				_ = osexec.Command("tmux", "detach-client").Run()
@@ -672,8 +679,9 @@ func runTUI() {
 // runTUIWithClient 使用 gRPC daemon 模式啟動 TUI。
 func runTUIWithClient(c *client.Client, cfg config.Config) {
 	deps := ui.Deps{
-		Client: c,
-		Cfg:    cfg,
+		Client:   c,
+		Cfg:      cfg,
+		Upgrader: upgrade.DefaultUpgrader(),
 	}
 
 	m := ui.NewModel(deps)
@@ -686,6 +694,11 @@ func runTUIWithClient(c *client.Client, cfg config.Config) {
 	}
 
 	if m, ok := finalModel.(ui.Model); ok {
+		if m.UpgradeReady() {
+			c.Close() // 先關閉 gRPC 連線
+			runPostUpgrade(m, cfg)
+			return
+		}
 		handlePostTUI(m)
 	}
 }
@@ -716,6 +729,7 @@ func runTUILegacy(cfg config.Config) {
 		Store:     st,
 		Cfg:       cfg,
 		StatusDir: statusDir,
+		Upgrader:  upgrade.DefaultUpgrader(),
 	}
 
 	m := ui.NewModel(deps)
@@ -728,6 +742,10 @@ func runTUILegacy(cfg config.Config) {
 	}
 
 	if m, ok := finalModel.(ui.Model); ok {
+		if m.UpgradeReady() {
+			runPostUpgrade(m, cfg)
+			return
+		}
 		handlePostTUI(m)
 	}
 }
@@ -1192,6 +1210,61 @@ func runUpgrade(force bool) {
 		os.Exit(1)
 	}
 	os.Remove(tmpPath)
+}
+
+// runPostUpgrade 執行 TUI 退出後的升級流程。
+func runPostUpgrade(m ui.Model, cfg config.Config) {
+	tmpPath, ver := m.UpgradeInfo()
+
+	ops := upgrade.PostUpgradeOps{
+		InstallBinary: func(tmp string) (string, error) {
+			det := selfinstall.Detect()
+			targetDir := filepath.Dir(det.Path)
+			if targetDir == "" || targetDir == "." {
+				home, _ := os.UserHomeDir()
+				targetDir = filepath.Join(home, ".local", "bin")
+			}
+			target := filepath.Join(targetDir, "tsm")
+			if err := os.MkdirAll(targetDir, 0o755); err != nil {
+				return "", fmt.Errorf("無法建立目錄: %w", err)
+			}
+			// Atomic: 複製 tmp → target.tmp，再 rename → target
+			tmpTarget := target + ".tmp"
+			data, err := os.ReadFile(tmp)
+			if err != nil {
+				return "", err
+			}
+			if err := os.WriteFile(tmpTarget, data, 0o755); err != nil {
+				return "", err
+			}
+			if err := os.Rename(tmpTarget, target); err != nil {
+				os.Remove(tmpTarget)
+				return "", err
+			}
+			return target, nil
+		},
+		RemoveTmp: func(path string) {
+			os.Remove(path)
+		},
+		StopDaemon: func() error {
+			if daemon.IsRunning(cfg) {
+				return daemon.Stop(cfg)
+			}
+			return nil
+		},
+		StartDaemon: func() error {
+			return daemon.Start(cfg)
+		},
+		Exec: func(path string, args []string, env []string) error {
+			return syscall.Exec(path, args, env)
+		},
+	}
+
+	fmt.Fprintf(os.Stderr, "升級至 v%s，重新啟動...\n", ver)
+	if err := upgrade.RunPostUpgrade(ops, tmpPath, os.Args, os.Environ()); err != nil {
+		fmt.Fprintf(os.Stderr, "升級失敗: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 // isDaemonRunning 檢查 daemon 是否正在運行。
