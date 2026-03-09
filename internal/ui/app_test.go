@@ -2747,3 +2747,40 @@ func TestDownloadUpgradeMsg_Error(t *testing.T) {
 	assert.Contains(t, model.ConfirmPrompt(), "下載失敗")
 	assert.Contains(t, model.ConfirmPrompt(), "disk full")
 }
+
+func TestView_UpgradeConfirm_ShowsVersionDiff(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	old := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = old }()
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	})
+	model := updated.(ui.Model)
+	view := model.View()
+	assert.Contains(t, view, "99.0.0")
+	assert.Contains(t, view, "升級")
+}
+
+func TestToolbar_ShowsUpgradeHint_WhenUpgraderPresent(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+	view := m.View()
+	assert.Contains(t, view, "ctrl+u")
+}
+
+func TestToolbar_HidesUpgradeHint_WhenNoUpgrader(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	view := m.View()
+	assert.NotContains(t, view, "ctrl+u")
+}

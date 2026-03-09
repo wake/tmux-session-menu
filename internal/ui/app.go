@@ -1780,6 +1780,9 @@ func (m Model) renderToolbar() string {
 	if m.deps.HostMgr != nil {
 		line2Parts = append(line2Parts, render("[h]", "主機管理"))
 	}
+	if m.deps.Upgrader != nil {
+		line2Parts = append(line2Parts, render("[ctrl+u]", "升級"))
+	}
 	lines := []string{
 		fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
 			render("[/]", "搜尋"), render("[n]", "新建"), render("[r]", "更名"), render("[d]", "刪除"), render("[R]", "唯讀進入"), render("[q]", "關閉選單")),
