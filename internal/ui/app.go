@@ -16,6 +16,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
+	"github.com/wake/tmux-session-menu/internal/selfinstall"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/upgrade"
@@ -99,9 +100,10 @@ type Model struct {
 	textInputs [2]textinput.Model // [0]=名稱(CustomName), [1]=ID(session name)
 	inputRow   int                // 目前焦點行 0 or 1
 
-	confirmPrompt   string
-	confirmAction   func() tea.Cmd
-	confirmExitTmux bool // 確認後是否退出 tmux
+	confirmPrompt     string
+	confirmAction     func() tea.Cmd
+	confirmExitTmux   bool // 確認後是否退出 tmux
+	confirmReturnMode Mode // 確認/取消後回到哪個模式（預設 ModeNormal）
 
 	// Picker mode（選擇群組）
 	pickerGroups []store.Group
@@ -120,6 +122,7 @@ type Model struct {
 	// 升級狀態
 	upgradeReady    bool
 	upgradeTmpPath  string
+	upgradeBinPath  string // restart-only 時直接 exec 的路徑
 	upgradeVersion  string
 	upgradeChecking bool // 防止 ctrl+u 重複觸發
 }
@@ -151,8 +154,10 @@ type SessionsMsg struct {
 
 // CheckUpgradeMsg 版本檢查結果。
 type CheckUpgradeMsg struct {
-	Release *upgrade.Release
-	Err     error
+	Release       *upgrade.Release
+	Err           error
+	InstalledVer  string // 磁碟上已安裝的版本（semver 部分）
+	InstalledPath string // 已安裝的路徑
 }
 
 // DownloadUpgradeMsg 下載結果。
@@ -161,14 +166,23 @@ type DownloadUpgradeMsg struct {
 	Err     error
 }
 
-// checkUpgradeCmd 回傳一個 Bubble Tea Cmd，非同步呼叫 Upgrader.CheckLatest。
+// checkUpgradeCmd 回傳一個 Bubble Tea Cmd，非同步呼叫 Upgrader.CheckLatest 並偵測已安裝版本。
 func checkUpgradeCmd(u *upgrade.Upgrader) tea.Cmd {
 	return func() tea.Msg {
 		rel, err := u.CheckLatest()
-		if err != nil {
-			return CheckUpgradeMsg{Err: err}
+
+		// 同時偵測磁碟上已安裝的版本
+		det := selfinstall.Detect()
+		var installedVer, installedPath string
+		if det.Version != "" {
+			installedVer = upgrade.ExtractSemver(det.Version)
+			installedPath = det.Path
 		}
-		return CheckUpgradeMsg{Release: &rel}
+
+		if err != nil {
+			return CheckUpgradeMsg{Err: err, InstalledVer: installedVer, InstalledPath: installedPath}
+		}
+		return CheckUpgradeMsg{Release: &rel, InstalledVer: installedVer, InstalledPath: installedPath}
 	}
 }
 
@@ -181,6 +195,20 @@ func downloadUpgradeCmd(u *upgrade.Upgrader, url string) tea.Cmd {
 		}
 		return DownloadUpgradeMsg{TmpPath: path}
 	}
+}
+
+// offerRestart 在磁碟上已安裝較新版本時，提供無需下載的重啟確認。
+func (m Model) offerRestart(installedVer, installedPath string) Model {
+	m.upgradeVersion = installedVer
+	m.upgradeBinPath = installedPath
+	m.mode = ModeConfirm
+	m.confirmPrompt = fmt.Sprintf("已安裝 v%s（目前 TUI 為 v%s），重新啟動？", installedVer, version.Version)
+	m.confirmAction = func() tea.Cmd {
+		return func() tea.Msg {
+			return DownloadUpgradeMsg{} // 空 TmpPath 表示 restart-only
+		}
+	}
+	return m
 }
 
 // Items 回傳目前的列表項目。
@@ -274,6 +302,9 @@ func (m Model) UpgradeReady() bool { return m.upgradeReady }
 
 // UpgradeInfo 回傳升級暫存檔路徑與目標版本。
 func (m Model) UpgradeInfo() (tmpPath, version string) { return m.upgradeTmpPath, m.upgradeVersion }
+
+// UpgradeBinPath 回傳 restart-only 時已安裝 binary 的路徑（無需下載）。
+func (m Model) UpgradeBinPath() string { return m.upgradeBinPath }
 
 // ConfirmPrompt 回傳目前確認對話框的提示文字。
 func (m Model) ConfirmPrompt() string { return m.confirmPrompt }
@@ -625,11 +656,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CheckUpgradeMsg:
 		m.upgradeChecking = false
 		if msg.Err != nil {
+			// GitHub 檢查失敗，但仍可偵測本機已安裝的較新版本
+			if msg.InstalledVer != "" && upgrade.NeedsUpgrade(version.Version, msg.InstalledVer) {
+				return m.offerRestart(msg.InstalledVer, msg.InstalledPath), nil
+			}
 			m.mode = ModeConfirm
 			m.confirmPrompt = fmt.Sprintf("檢查失敗：%v", msg.Err)
 			return m, nil
 		}
 		if !upgrade.NeedsUpgrade(version.Version, msg.Release.Version) {
+			// GitHub 已是最新，但磁碟上的 binary 可能已由其他 tab 更新
+			if msg.InstalledVer != "" && upgrade.NeedsUpgrade(version.Version, msg.InstalledVer) {
+				return m.offerRestart(msg.InstalledVer, msg.InstalledPath), nil
+			}
 			m.mode = ModeConfirm
 			m.confirmPrompt = fmt.Sprintf("已是最新版本 (%s)", version.Version)
 			return m, nil
@@ -1064,6 +1103,8 @@ func (m Model) updateDualInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // updateConfirm 處理確認對話框模式的按鍵。
 func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	returnMode := m.confirmReturnMode // 預設 ModeNormal (零值)
+
 	switch msg.String() {
 	case "y", "Y", "enter":
 		// 執行確認動作
@@ -1077,15 +1118,17 @@ func (m Model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			m.confirmExitTmux = false
 		}
-		m.mode = ModeNormal
+		m.mode = returnMode
 		m.confirmPrompt = ""
+		m.confirmReturnMode = ModeNormal
 		return m, cmd
-	case "n", "N", "esc":
+	case "n", "N", "esc", "q":
 		// 取消確認
-		m.mode = ModeNormal
+		m.mode = returnMode
 		m.confirmPrompt = ""
 		m.confirmAction = nil
 		m.confirmExitTmux = false
+		m.confirmReturnMode = ModeNormal
 		return m, nil
 	}
 	return m, nil

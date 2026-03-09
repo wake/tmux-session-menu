@@ -98,6 +98,12 @@ func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.mode = ModeNormal
 		return m, nil
+	case "q":
+		// 非文字輸入焦點時才關閉（避免攔截打字）
+		if f.field != fieldName && f.field != fieldPath {
+			m.mode = ModeNormal
+			return m, nil
+		}
 
 	case "enter":
 		name := f.nameInput.Value()

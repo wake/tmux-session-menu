@@ -245,3 +245,37 @@ func TestHostStopIdempotent(t *testing.T) {
 	})
 	assert.Equal(t, HostDisabled, h.Status())
 }
+
+// TestWatchLoopGenCheck 驗證 watchLoop 在世代不符時不會覆蓋 HostDisabled 狀態。
+// 模擬情境：host 正在 watchLoop，stop() 設為 HostDisabled，
+// watchLoop 收到錯誤時應因為世代不符而不更新狀態。
+func TestWatchLoopGenCheck(t *testing.T) {
+	h := NewHost(config.HostEntry{
+		Name:    "test-host",
+		Address: "remote.example.com",
+		Enabled: true,
+	})
+
+	// 手動設定為 Connected 狀態並記錄世代
+	h.mu.Lock()
+	h.status = HostConnected
+	h.gen = 1
+	oldGen := h.gen
+	h.mu.Unlock()
+
+	ch := make(chan struct{}, 1)
+
+	// 模擬 stop() 增加世代並設為 Disabled
+	h.mu.Lock()
+	h.gen = 2 // stop 會增加世代
+	h.status = HostDisabled
+	h.mu.Unlock()
+
+	// 使用舊世代呼叫 watchLoop — 應立即因世代不符退出
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h.watchLoop(ctx, ch, oldGen)
+
+	// 狀態應仍為 HostDisabled（watchLoop 不應覆蓋）
+	assert.Equal(t, HostDisabled, h.Status())
+}

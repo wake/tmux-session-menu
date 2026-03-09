@@ -261,9 +261,12 @@ func runMultiHost(remoteFlags []string) {
 				runPostUpgrade(fm, cfg)
 				return
 			}
-			// 使用者按 q/esc/ctrl+e 退出
-			if ok && fm.ExitTmux() && os.Getenv("TMUX") != "" {
-				_ = osexec.Command("tmux", "detach-client").Run()
+			if ok && fm.OpenConfig() {
+				runConfig()
+				cfg = loadConfig()
+				cfg.InTmux = os.Getenv("TMUX") != ""
+				cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+				continue
 			}
 			return
 		}
@@ -677,33 +680,47 @@ func runTUI() {
 }
 
 // runTUIWithClient 使用 gRPC daemon 模式啟動 TUI。
+// 使用迴圈確保 config 等子畫面結束後能回到主選單。
 func runTUIWithClient(c *client.Client, cfg config.Config) {
-	deps := ui.Deps{
-		Client:   c,
-		Cfg:      cfg,
-		Upgrader: upgrade.DefaultUpgrader(),
-	}
+	for {
+		deps := ui.Deps{
+			Client:   c,
+			Cfg:      cfg,
+			Upgrader: upgrade.DefaultUpgrader(),
+		}
 
-	m := ui.NewModel(deps)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+		m := ui.NewModel(deps)
+		p := tea.NewProgram(m, tea.WithAltScreen())
 
-	finalModel, err := p.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+		finalModel, err := p.Run()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 
-	if m, ok := finalModel.(ui.Model); ok {
-		if m.UpgradeReady() {
-			c.Close() // 先關閉 gRPC 連線
-			runPostUpgrade(m, cfg)
+		fm, ok := finalModel.(ui.Model)
+		if !ok {
 			return
 		}
-		handlePostTUI(m)
+		if fm.UpgradeReady() {
+			c.Close()
+			runPostUpgrade(fm, cfg)
+			return
+		}
+		if fm.OpenConfig() {
+			runConfig()
+			cfg = loadConfig()
+			cfg.InTmux = os.Getenv("TMUX") != ""
+			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+			continue
+		}
+		handlePostTUI(fm)
+		return
 	}
 }
 
 // runTUILegacy 使用舊的直接模式啟動 TUI（不透過 daemon）。
+// 使用迴圈確保 config 等子畫面結束後能回到主選單。
 func runTUILegacy(cfg config.Config) {
 	dataDir := config.ExpandPath(cfg.DataDir)
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
@@ -724,29 +741,41 @@ func runTUILegacy(cfg config.Config) {
 
 	statusDir := filepath.Join(dataDir, "status")
 
-	deps := ui.Deps{
-		TmuxMgr:   mgr,
-		Store:     st,
-		Cfg:       cfg,
-		StatusDir: statusDir,
-		Upgrader:  upgrade.DefaultUpgrader(),
-	}
+	for {
+		deps := ui.Deps{
+			TmuxMgr:   mgr,
+			Store:     st,
+			Cfg:       cfg,
+			StatusDir: statusDir,
+			Upgrader:  upgrade.DefaultUpgrader(),
+		}
 
-	m := ui.NewModel(deps)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+		m := ui.NewModel(deps)
+		p := tea.NewProgram(m, tea.WithAltScreen())
 
-	finalModel, err := p.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+		finalModel, err := p.Run()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 
-	if m, ok := finalModel.(ui.Model); ok {
-		if m.UpgradeReady() {
-			runPostUpgrade(m, cfg)
+		fm, ok := finalModel.(ui.Model)
+		if !ok {
 			return
 		}
-		handlePostTUI(m)
+		if fm.UpgradeReady() {
+			runPostUpgrade(fm, cfg)
+			return
+		}
+		if fm.OpenConfig() {
+			runConfig()
+			cfg = loadConfig()
+			cfg.InTmux = os.Getenv("TMUX") != ""
+			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+			continue
+		}
+		handlePostTUI(fm)
+		return
 	}
 }
 
@@ -768,9 +797,8 @@ func handlePostTUI(m ui.Model) {
 		runConfig()
 		return
 	}
-	if m.ExitTmux() && os.Getenv("TMUX") != "" {
-		_ = osexec.Command("tmux", "detach-client").Run()
-	}
+	// ctrl+e：僅退出 TUI，不 detach tmux client
+	// 使用者回到呼叫 tsm 的那一層 shell
 }
 
 func switchToSession(name string, readOnly bool) {
@@ -1213,8 +1241,19 @@ func runUpgrade(force bool) {
 }
 
 // runPostUpgrade 執行 TUI 退出後的升級流程。
+// 支援兩種模式：
+//   - 一般升級（tmpPath != ""）：安裝下載的 binary → 重啟 daemon → exec
+//   - 僅重啟（binPath != ""）：磁碟上已是新版，跳過安裝 → 重啟 daemon → exec
 func runPostUpgrade(m ui.Model, cfg config.Config) {
 	tmpPath, ver := m.UpgradeInfo()
+	binPath := m.UpgradeBinPath()
+
+	// restart-only 模式：binary 已由其他 tab 更新
+	if tmpPath == "" && binPath != "" {
+		fmt.Fprintf(os.Stderr, "重新啟動至 v%s...\n", ver)
+		runRestartOnly(binPath, cfg)
+		return
+	}
 
 	ops := upgrade.PostUpgradeOps{
 		InstallBinary: func(tmp string) (string, error) {
@@ -1266,6 +1305,26 @@ func runPostUpgrade(m ui.Model, cfg config.Config) {
 	fmt.Fprintf(os.Stderr, "升級至 v%s，重新啟動...\n", ver)
 	if err := upgrade.RunPostUpgrade(ops, tmpPath, os.Args, os.Environ()); err != nil {
 		fmt.Fprintf(os.Stderr, "升級失敗: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runRestartOnly 僅重啟 daemon 並 exec 到已安裝的新版 binary（無需下載安裝）。
+func runRestartOnly(binPath string, cfg config.Config) {
+	_ = func() error {
+		if daemon.IsRunning(cfg) {
+			return daemon.Stop(cfg)
+		}
+		return nil
+	}()
+
+	if err := daemon.Start(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "啟動 daemon 失敗: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := syscall.Exec(binPath, os.Args, os.Environ()); err != nil {
+		fmt.Fprintf(os.Stderr, "exec 失敗（binary: %s）: %v\n", binPath, err)
 		os.Exit(1)
 	}
 }

@@ -222,7 +222,7 @@ func (h *Host) run(ctx context.Context, notifyCh chan<- struct{}, myGen uint64) 
 		notifyNonBlock(notifyCh)
 
 		// 進入 watch 迴圈
-		h.watchLoop(ctx, notifyCh)
+		h.watchLoop(ctx, notifyCh, myGen)
 
 		// watchLoop 返回表示斷線，回到 connect 重試
 	}
@@ -279,7 +279,8 @@ func (h *Host) connect(ctx context.Context) error {
 }
 
 // watchLoop 持續接收快照。收到錯誤時設為 Disconnected 並回傳，讓外層 run 重連。
-func (h *Host) watchLoop(ctx context.Context, notifyCh chan<- struct{}) {
+// myGen 用於判斷是否已被 stop/start 取代，避免覆蓋 HostDisabled 狀態。
+func (h *Host) watchLoop(ctx context.Context, notifyCh chan<- struct{}, myGen uint64) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -298,6 +299,11 @@ func (h *Host) watchLoop(ctx context.Context, notifyCh chan<- struct{}) {
 		snap, err := c.RecvSnapshot()
 		if err != nil {
 			h.mu.Lock()
+			if h.gen != myGen {
+				// 已被 stop/start 取代，不更新狀態（stop 已設為 HostDisabled）
+				h.mu.Unlock()
+				return
+			}
 			h.status = HostDisconnected
 			h.lastErr = err.Error()
 			// 清理斷線的 client 和 tunnel

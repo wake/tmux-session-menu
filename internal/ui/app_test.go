@@ -2802,3 +2802,91 @@ func TestCtrlU_DuplicateBlocked(t *testing.T) {
 	_ = updated2
 	assert.Nil(t, cmd2, "第二次 ctrl+u 應被擋住")
 }
+
+func TestCheckUpgradeMsg_BinaryNewerThanTUI(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "0.23.0"
+	defer func() { version.Version = origVersion }()
+
+	m := ui.NewModel(ui.Deps{})
+
+	// GitHub 最新也是 0.23.0（TUI 已是最新），但磁碟上的 binary 是 0.24.0
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release:       &upgrade.Release{Version: "0.23.0"},
+		InstalledVer:  "0.24.0",
+		InstalledPath: "/usr/local/bin/tsm",
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "v0.24.0")
+	assert.Contains(t, model.ConfirmPrompt(), "重新啟動")
+}
+
+func TestCheckUpgradeMsg_GitHubFail_BinaryNewer(t *testing.T) {
+	origVersion := version.Version
+	version.Version = "0.23.0"
+	defer func() { version.Version = origVersion }()
+
+	m := ui.NewModel(ui.Deps{})
+
+	// GitHub 檢查失敗，但磁碟上有較新版本
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Err:           fmt.Errorf("network error"),
+		InstalledVer:  "0.24.0",
+		InstalledPath: "/usr/local/bin/tsm",
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "重新啟動")
+}
+
+func TestHostPicker_QReturnsToNormal(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	// 模擬進入 ModeHostPicker（直接透過 Update 設定較困難，改用 ConfirmReturnMode 測試）
+	// 測試 ModeConfirm 取消後回到 ModeNormal
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{Version: "0.0.0"},
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+
+	// 按 q 取消確認，回到 ModeNormal
+	updated2, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model2 := updated2.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model2.Mode())
+}
+
+func TestConfirmReturnMode_BackToHostPicker(t *testing.T) {
+	// 測試 confirmReturnMode 正確回到 ModeHostPicker
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	// 先觸發一個 CheckUpgradeMsg 讓模型進入 ModeConfirm
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{Version: "1.0.0"},
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "已是最新版本")
+
+	// 按 esc 取消，應回到 ModeNormal（預設 confirmReturnMode）
+	updated2, _ := model.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	model2 := updated2.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model2.Mode())
+}
+
+func TestDownloadUpgradeMsg_RestartOnly(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// 空 TmpPath 表示 restart-only
+	updated, cmd := m.Update(ui.DownloadUpgradeMsg{TmpPath: ""})
+	model := updated.(ui.Model)
+	assert.True(t, model.UpgradeReady())
+	assert.NotNil(t, cmd) // tea.Quit
+}

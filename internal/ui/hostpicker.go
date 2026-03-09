@@ -22,7 +22,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "esc", "h":
+	case "esc", "h", "q":
 		m.mode = ModeNormal
 		return m, nil
 	case "j", "down":
@@ -83,6 +83,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !h.IsLocal() {
 				hostID := h.ID()
 				m.mode = ModeConfirm
+				m.confirmReturnMode = ModeHostPicker
 				m.confirmPrompt = fmt.Sprintf("確定要刪除主機 %q？", hostID)
 				m.confirmAction = func() tea.Cmd {
 					_ = m.deps.HostMgr.Disable(hostID)

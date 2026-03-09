@@ -124,3 +124,18 @@ func TestUpgrader_Download_NetworkError(t *testing.T) {
 	_, err := u.Download("https://example.com/bad")
 	assert.Error(t, err)
 }
+
+func TestExtractSemver(t *testing.T) {
+	tests := []struct {
+		input, expected string
+	}{
+		{"0.24.0(abc1234)", "0.24.0"},
+		{"0.24.0", "0.24.0"},
+		{"1.0.0(deadbeef)", "1.0.0"},
+		{"dev", "dev"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, ExtractSemver(tt.input), "input: %q", tt.input)
+	}
+}
