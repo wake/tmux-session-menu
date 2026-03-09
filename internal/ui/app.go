@@ -18,6 +18,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
+	"github.com/wake/tmux-session-menu/internal/upgrade"
 	"github.com/wake/tmux-session-menu/internal/version"
 )
 
@@ -37,6 +38,8 @@ type Deps struct {
 	Cfg        config.Config
 	StatusDir  string
 	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
+
+	Upgrader *upgrade.Upgrader // nil 時 ctrl+u 無效
 }
 
 // persistHosts 將 HostManager 的主機清單寫回 config.toml。
@@ -113,6 +116,12 @@ type Model struct {
 
 	// NewSession 表單
 	newSession newSessionForm
+
+	// 升級狀態
+	upgradeReady    bool
+	upgradeTmpPath  string
+	upgradeVersion  string
+	upgradeAssetURL string
 }
 
 // NewModel 建立初始 Model。
@@ -138,6 +147,18 @@ type SessionsMsg struct {
 	Sessions []tmux.Session
 	Groups   []store.Group
 	Err      error
+}
+
+// CheckUpgradeMsg 版本檢查結果。
+type CheckUpgradeMsg struct {
+	Release *upgrade.Release
+	Err     error
+}
+
+// DownloadUpgradeMsg 下載結果。
+type DownloadUpgradeMsg struct {
+	TmpPath string
+	Err     error
 }
 
 // Items 回傳目前的列表項目。
@@ -225,6 +246,15 @@ func (m Model) NewSessionNameValue() string {
 func (m Model) SearchQuery() string {
 	return m.searchQuery
 }
+
+// UpgradeReady 回傳是否有已下載完成可安裝的升級。
+func (m Model) UpgradeReady() bool { return m.upgradeReady }
+
+// UpgradeInfo 回傳升級暫存檔路徑與目標版本。
+func (m Model) UpgradeInfo() (tmpPath, version string) { return m.upgradeTmpPath, m.upgradeVersion }
+
+// ConfirmPrompt 回傳目前確認對話框的提示文字。
+func (m Model) ConfirmPrompt() string { return m.confirmPrompt }
 
 // visibleItems 回傳目前可見的項目（搜尋時過濾）。
 func (m Model) visibleItems() []ListItem {
@@ -735,6 +765,11 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.moveItem(1) // 下移
 	case "K", "shift+up":
 		return m.moveItem(-1) // 上移
+	case "ctrl+u":
+		if m.deps.Upgrader == nil {
+			return m, nil
+		}
+		return m, nil
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
 		if m.cursor >= 0 && m.cursor < len(m.items) {

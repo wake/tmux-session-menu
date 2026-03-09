@@ -2577,3 +2577,11 @@ func TestModel_View_HostTitle_CursorHighlight(t *testing.T) {
 	view := m.View()
 	assert.Contains(t, view, "remote-box", "host title should be visible when cursor is on it")
 }
+
+func TestCtrlU_WithoutUpgrader_Noop(t *testing.T) {
+	m := ui.NewModel(ui.Deps{}) // 無 Upgrader
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.Nil(t, cmd)
+}
