@@ -2,6 +2,44 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.23.1] - 2026-03-09
+
+### Fixed
+- 多主機模式 attach 斷線改為重連 popup + 自動 re-attach（取代直接回選單）
+- 斷線狀態顯示改為友善訊息「連線中斷，重連中...」（取代原始 gRPC 錯誤）
+- ReconnectModel 在 StateAskContinue 時忽略 StateConnecting 訊息，防止 60 秒超時提示被覆蓋
+
+## [0.23.0] - 2026-03-09
+
+### Added
+- `ModeNewSession` 多欄位表單（名稱、啟動路徑、最近路徑、agent 選擇）
+- `CreateSession` 支援 command 參數，可直接啟動 agent 指令
+- `path_history` 表記錄路徑使用歷史
+- `AgentEntry` 結構支援 config.toml 中定義 agent 預設清單
+- 主選單按 `c` 鍵開啟 config TUI
+- host 管理操作（啟用/停用/排序/新增/刪除）持久化到 config.toml
+
+### Fixed
+- status bar 自訂名稱改用 per-session tmux user option，修正跨 session 名稱污染
+- TUI 啟動時主動套用 status-left 格式
+- 多主機模式 disabled 主機不顯示、ctrl+e 退出修正、popup 選單迴圈
+- 移除 cfgtui 分頁箭頭提示符號
+
+## [0.22.0] - 2026-03-08
+
+### Added
+- 多主機混合模式（`--remote` 支援多個主機同時連線）
+- `HostManager` 快照聚合與多主機連線管理
+- Host 連線生命週期與 Watch goroutine（指數退避自動重連）
+- `h` 鍵開啟主機管理面板（啟用/停用/排序/新增/刪除）
+- `ListItem` 擴展 `ItemHostTitle` 與 `FlattenMultiHost` 多主機列表渲染
+- `MergeHosts` 整合 config.toml 與 `--remote` 參數
+- `HostEntry` 結構與 `Config.Hosts` 主機清單
+
+### Fixed
+- 同名 session 識別、Remove 清理、goroutine 世代保護
+- collectGroups 多主機過濾同一主機群組 + 通道關閉保護
+
 ## [0.21.2] - 2026-03-08
 
 ### Fixed

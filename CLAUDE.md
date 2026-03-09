@@ -86,7 +86,7 @@ cmd/tsm/main.go (CLI 入口、子命令路由)
 - **Watch stream**：gRPC server streaming，daemon 偵測 tmux 狀態變化後透過 WatcherHub 廣播 `StateSnapshot` 到所有客戶端
 - **Setup TUI**：`internal/setup/` 是獨立的 Bubble Tea model，不依賴 `internal/ui/`
 - **Config**：`~/.config/tsm/config.toml`（TOML），`config.Default()` 提供預設值
-- **Store**：SQLite WAL 模式，管理 groups 和 session_meta 表
+- **Store**：SQLite WAL 模式，管理 groups、session_meta、path_history 表
 
 ### Protocol Buffers
 
@@ -95,7 +95,7 @@ cmd/tsm/main.go (CLI 入口、子命令路由)
 
 ## 程式風格
 
-- Go 1.24.x，提交前執行 `go fmt ./...`
+- Go 1.24+，提交前執行 `go fmt ./...`
 - Commit 訊息採 Conventional Commits：`feat: ...`、`fix: ...`、`docs: ...`
 - 中文註解（zh-tw）
 
@@ -104,19 +104,23 @@ cmd/tsm/main.go (CLI 入口、子命令路由)
 ```
 cmd/tsm/main.go          CLI 入口、子命令路由
 internal/
-  version/               版本資訊（ldflags 注入）
-  setup/                 互動式安裝 TUI（獨立 Bubble Tea model）
-  ui/                    主 TUI 畫面與樣式
-  tmux/                  tmux 偵測、解析與執行
-  config/                設定讀取與驗證
-  store/                 資料儲存層（SQLite）
+  ai/                    AI 狀態偵測
   bind/                  tmux 快捷鍵安裝
-  hooks/                 Claude Code hooks 整合
-  daemon/                gRPC daemon 服務
+  cfgtui/                設定 TUI（tsm config）
   client/                gRPC 客戶端
+  config/                設定讀取與驗證
+  daemon/                gRPC daemon 服務
+  hooks/                 Claude Code hooks 整合
+  hostmgr/               多主機連線管理
+  launcher/              Client mode 啟動選擇器
   remote/                SSH tunnel、attach、重連
   selfinstall/           自動安裝到 PATH
-  ai/                    AI 狀態偵測
+  setup/                 互動式安裝 TUI（獨立 Bubble Tea model）
+  store/                 資料儲存層（SQLite）
+  tmux/                  tmux 偵測、解析與執行
+  ui/                    主 TUI 畫面與樣式
+  upgrade/               自動升級（GitHub release）
+  version/               版本資訊（ldflags 注入）
 api/                     Protocol Buffers 定義與生成碼
-docs/                    設計文件與計畫
+scripts/                 輔助測試腳本
 ```
