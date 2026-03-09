@@ -11,6 +11,9 @@
 # OS
 .DS_Store
 
+# Logs
+*.log
+
 # Test
 coverage.out
 
