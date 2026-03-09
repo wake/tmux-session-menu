@@ -256,10 +256,9 @@ func runMultiHost(remoteFlags []string) {
 		fm, ok := finalModel.(ui.Model)
 		if !ok || fm.Selected() == "" {
 			if ok && fm.UpgradeReady() {
-				mgr.Close()
 				cancel()
 				runPostUpgrade(fm, cfg)
-				return
+				return // defer mgr.Close() 會自動執行
 			}
 			// 使用者按 q/esc/ctrl+e 退出
 			if ok && fm.ExitTmux() && os.Getenv("TMUX") != "" {

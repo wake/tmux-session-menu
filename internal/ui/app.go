@@ -121,7 +121,7 @@ type Model struct {
 	upgradeReady    bool
 	upgradeTmpPath  string
 	upgradeVersion  string
-	upgradeAssetURL string
+	upgradeChecking bool // 防止 ctrl+u 重複觸發
 }
 
 // NewModel 建立初始 Model。
@@ -623,6 +623,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TickMsg:
 		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
 	case CheckUpgradeMsg:
+		m.upgradeChecking = false
 		if msg.Err != nil {
 			m.mode = ModeConfirm
 			m.confirmPrompt = fmt.Sprintf("檢查失敗：%v", msg.Err)
@@ -641,7 +642,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.upgradeVersion = msg.Release.Version
-		m.upgradeAssetURL = url
 		m.mode = ModeConfirm
 		m.confirmPrompt = fmt.Sprintf("v%s → v%s 升級？", version.Version, msg.Release.Version)
 		u := m.deps.Upgrader
@@ -825,9 +825,10 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "K", "shift+up":
 		return m.moveItem(-1) // 上移
 	case "ctrl+u":
-		if m.deps.Upgrader == nil {
+		if m.deps.Upgrader == nil || m.upgradeChecking {
 			return m, nil
 		}
+		m.upgradeChecking = true
 		return m, checkUpgradeCmd(m.deps.Upgrader)
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
