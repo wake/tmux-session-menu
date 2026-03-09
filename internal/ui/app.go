@@ -1601,10 +1601,7 @@ func (m Model) View() string {
 					case HostStateConnecting:
 						stateText = "連線中..."
 					case HostStateDisconnected:
-						stateText = "已斷線"
-						if item.HostError != "" {
-							stateText += "：" + item.HostError
-						}
+						stateText = "連線中斷，重連中..."
 					case HostStateDisabled:
 						stateText = "已停用"
 					}

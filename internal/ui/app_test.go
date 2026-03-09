@@ -2559,10 +2559,9 @@ func TestModel_View_HostTitle(t *testing.T) {
 	// 連線中主機：badge + 狀態文字
 	assert.Contains(t, view, "staging", "should contain connecting host title 'staging'")
 	assert.Contains(t, view, "連線中", "staging should show connecting state")
-	// 已斷線主機：badge + 狀態文字 + 錯誤訊息
+	// 已斷線主機：badge + 友善狀態文字
 	assert.Contains(t, view, "prod", "should contain disconnected host title 'prod'")
-	assert.Contains(t, view, "已斷線", "prod should show disconnected state")
-	assert.Contains(t, view, "timeout", "prod should show error message")
+	assert.Contains(t, view, "連線中斷，重連中...", "prod should show friendly disconnected state")
 	// 已停用主機
 	assert.Contains(t, view, "legacy", "should contain disabled host title 'legacy'")
 	assert.Contains(t, view, "已停用", "legacy should show disabled state")
