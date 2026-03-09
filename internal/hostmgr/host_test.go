@@ -246,9 +246,14 @@ func TestHostStopIdempotent(t *testing.T) {
 	assert.Equal(t, HostDisabled, h.Status())
 }
 
+// mockClient 模擬一個會回傳錯誤的 gRPC client。
+type mockClient struct{}
+
+func (c *mockClient) Close() error { return nil }
+
 // TestWatchLoopGenCheck 驗證 watchLoop 在世代不符時不會覆蓋 HostDisabled 狀態。
 // 模擬情境：host 正在 watchLoop，stop() 設為 HostDisabled，
-// watchLoop 收到錯誤時應因為世代不符而不更新狀態。
+// watchLoop 收到 RecvSnapshot 錯誤時應因為世代不符而不更新狀態。
 func TestWatchLoopGenCheck(t *testing.T) {
 	h := NewHost(config.HostEntry{
 		Name:    "test-host",
@@ -256,26 +261,46 @@ func TestWatchLoopGenCheck(t *testing.T) {
 		Enabled: true,
 	})
 
-	// 手動設定為 Connected 狀態並記錄世代
-	h.mu.Lock()
-	h.status = HostConnected
-	h.gen = 1
-	oldGen := h.gen
-	h.mu.Unlock()
-
 	ch := make(chan struct{}, 1)
 
-	// 模擬 stop() 增加世代並設為 Disabled
+	// 模擬 stop() 後的狀態：世代已遞增、狀態已設為 Disabled、但 client 仍殘留
+	// （實際 stop() 會清除 client，這裡刻意保留以讓 watchLoop 走到 RecvSnapshot 路徑）
 	h.mu.Lock()
-	h.gen = 2 // stop 會增加世代
+	h.gen = 2
 	h.status = HostDisabled
+	h.client = nil // client 為 nil → watchLoop 會在 nil check 退出
 	h.mu.Unlock()
 
-	// 使用舊世代呼叫 watchLoop — 應立即因世代不符退出
+	oldGen := uint64(1) // 舊世代
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	h.watchLoop(ctx, ch, oldGen)
 
 	// 狀態應仍為 HostDisabled（watchLoop 不應覆蓋）
 	assert.Equal(t, HostDisabled, h.Status())
+}
+
+// TestWatchLoopGenCheck_CurrentGen 驗證 watchLoop 在世代相符且 client 為 nil 時正常退出。
+func TestWatchLoopGenCheck_CurrentGen(t *testing.T) {
+	h := NewHost(config.HostEntry{
+		Name:    "test-host",
+		Address: "remote.example.com",
+		Enabled: true,
+	})
+
+	ch := make(chan struct{}, 1)
+
+	h.mu.Lock()
+	h.gen = 1
+	h.status = HostConnected
+	h.client = nil // client nil → 正常退出
+	h.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h.watchLoop(ctx, ch, 1)
+
+	// client 為 nil，watchLoop 直接退出，不改狀態
+	assert.Equal(t, HostConnected, h.Status())
 }

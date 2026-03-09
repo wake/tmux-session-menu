@@ -1255,6 +1255,11 @@ func runPostUpgrade(m ui.Model, cfg config.Config) {
 		return
 	}
 
+	if tmpPath == "" {
+		fmt.Fprintln(os.Stderr, "升級失敗: 無下載檔案且無已安裝路徑")
+		os.Exit(1)
+	}
+
 	ops := upgrade.PostUpgradeOps{
 		InstallBinary: func(tmp string) (string, error) {
 			det := selfinstall.Detect()
@@ -1311,12 +1316,10 @@ func runPostUpgrade(m ui.Model, cfg config.Config) {
 
 // runRestartOnly 僅重啟 daemon 並 exec 到已安裝的新版 binary（無需下載安裝）。
 func runRestartOnly(binPath string, cfg config.Config) {
-	_ = func() error {
-		if daemon.IsRunning(cfg) {
-			return daemon.Stop(cfg)
-		}
-		return nil
-	}()
+	// daemon stop 失敗不阻斷流程（可能本來就沒跑）
+	if daemon.IsRunning(cfg) {
+		_ = daemon.Stop(cfg)
+	}
 
 	if err := daemon.Start(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "啟動 daemon 失敗: %v\n", err)
