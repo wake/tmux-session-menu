@@ -15,6 +15,8 @@ import (
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
+	"github.com/wake/tmux-session-menu/internal/upgrade"
+	"github.com/wake/tmux-session-menu/internal/version"
 )
 
 func TestModel_Init_WithDeps(t *testing.T) {
@@ -2576,4 +2578,227 @@ func TestModel_View_HostTitle_CursorHighlight(t *testing.T) {
 	// cursor 預設在 0，即 Host Title 行
 	view := m.View()
 	assert.Contains(t, view, "remote-box", "host title should be visible when cursor is on it")
+}
+
+func TestCtrlU_WithoutUpgrader_Noop(t *testing.T) {
+	m := ui.NewModel(ui.Deps{}) // 無 Upgrader
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.Nil(t, cmd)
+}
+
+func TestCtrlU_WithUpgrader_TriggersCheck(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return []byte(`{"tag_name": "v99.0.0", "assets": []}`), nil
+		},
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	assert.NotNil(t, cmd, "ctrl+u 應觸發版本檢查命令")
+}
+
+func TestCheckUpgradeMsg_NewVersion(t *testing.T) {
+	// 暫時設定版本號，讓 NeedsUpgrade 回傳 true
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "99.0.0")
+	assert.Contains(t, model.ConfirmPrompt(), "升級")
+}
+
+func TestCheckUpgradeMsg_AlreadyLatest(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// version.Version 為 "dev" 時 NeedsUpgrade 一律回傳 false
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{Version: "0.0.0"},
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "已是最新版本")
+}
+
+func TestCheckUpgradeMsg_Error(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Err: fmt.Errorf("network timeout"),
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "檢查失敗")
+	assert.Contains(t, model.ConfirmPrompt(), "network timeout")
+}
+
+func TestCheckUpgradeMsg_NoPlatformAsset(t *testing.T) {
+	// 暫時設定版本號，讓 NeedsUpgrade 回傳 true
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{"tsm-windows-amd64": "https://example.com/dl"},
+		},
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "找不到")
+}
+
+// --- 升級確認 Y/N 測試（Task 5）---
+
+func TestConfirmUpgrade_Yes_TriggersDownload(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return []byte("binary-content"), nil
+		},
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	// 暫時設定版本號，讓 NeedsUpgrade 回傳 true
+	old := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = old }()
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	})
+	m = updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, m.Mode())
+
+	// 按 Y 確認下載
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.NotNil(t, cmd, "Y 應觸發下載命令")
+}
+
+func TestConfirmUpgrade_No_Cancels(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	old := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = old }()
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	})
+	m = updated.(ui.Model)
+
+	// 按 N 取消
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.Nil(t, cmd)
+}
+
+// --- DownloadUpgradeMsg 成功/失敗測試（Task 6, 7）---
+
+func TestDownloadUpgradeMsg_Success(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	updated, cmd := m.Update(ui.DownloadUpgradeMsg{TmpPath: "/tmp/tsm-new"})
+	model := updated.(ui.Model)
+	assert.True(t, model.UpgradeReady())
+	tmpPath, _ := model.UpgradeInfo()
+	assert.Equal(t, "/tmp/tsm-new", tmpPath)
+	assert.NotNil(t, cmd, "should return tea.Quit")
+}
+
+func TestDownloadUpgradeMsg_Error(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	updated, _ := m.Update(ui.DownloadUpgradeMsg{Err: fmt.Errorf("disk full")})
+	model := updated.(ui.Model)
+	assert.False(t, model.UpgradeReady())
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "下載失敗")
+	assert.Contains(t, model.ConfirmPrompt(), "disk full")
+}
+
+func TestView_UpgradeConfirm_ShowsVersionDiff(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	old := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = old }()
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	})
+	model := updated.(ui.Model)
+	view := model.View()
+	assert.Contains(t, view, "99.0.0")
+	assert.Contains(t, view, "升級")
+}
+
+func TestToolbar_ShowsUpgradeHint_WhenUpgraderPresent(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+	view := m.View()
+	assert.Contains(t, view, "ctrl+u")
+}
+
+func TestToolbar_HidesUpgradeHint_WhenNoUpgrader(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+	view := m.View()
+	assert.NotContains(t, view, "ctrl+u")
+}
+
+func TestCtrlU_DuplicateBlocked(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return []byte(`{"tag_name": "v99.0.0", "assets": []}`), nil
+		},
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	// 第一次 ctrl+u 應觸發檢查
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	assert.NotNil(t, cmd, "第一次 ctrl+u 應觸發命令")
+
+	// 第二次 ctrl+u 應被擋住（upgradeChecking = true）
+	updated2, cmd2 := updated.(ui.Model).Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	_ = updated2
+	assert.Nil(t, cmd2, "第二次 ctrl+u 應被擋住")
 }

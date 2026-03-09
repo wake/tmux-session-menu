@@ -18,6 +18,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
+	"github.com/wake/tmux-session-menu/internal/upgrade"
 	"github.com/wake/tmux-session-menu/internal/version"
 )
 
@@ -37,6 +38,8 @@ type Deps struct {
 	Cfg        config.Config
 	StatusDir  string
 	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
+
+	Upgrader *upgrade.Upgrader // nil 時 ctrl+u 無效
 }
 
 // persistHosts 將 HostManager 的主機清單寫回 config.toml。
@@ -113,6 +116,12 @@ type Model struct {
 
 	// NewSession 表單
 	newSession newSessionForm
+
+	// 升級狀態
+	upgradeReady    bool
+	upgradeTmpPath  string
+	upgradeVersion  string
+	upgradeChecking bool // 防止 ctrl+u 重複觸發
 }
 
 // NewModel 建立初始 Model。
@@ -138,6 +147,40 @@ type SessionsMsg struct {
 	Sessions []tmux.Session
 	Groups   []store.Group
 	Err      error
+}
+
+// CheckUpgradeMsg 版本檢查結果。
+type CheckUpgradeMsg struct {
+	Release *upgrade.Release
+	Err     error
+}
+
+// DownloadUpgradeMsg 下載結果。
+type DownloadUpgradeMsg struct {
+	TmpPath string
+	Err     error
+}
+
+// checkUpgradeCmd 回傳一個 Bubble Tea Cmd，非同步呼叫 Upgrader.CheckLatest。
+func checkUpgradeCmd(u *upgrade.Upgrader) tea.Cmd {
+	return func() tea.Msg {
+		rel, err := u.CheckLatest()
+		if err != nil {
+			return CheckUpgradeMsg{Err: err}
+		}
+		return CheckUpgradeMsg{Release: &rel}
+	}
+}
+
+// downloadUpgradeCmd 回傳一個 Bubble Tea Cmd，非同步下載升級 binary。
+func downloadUpgradeCmd(u *upgrade.Upgrader, url string) tea.Cmd {
+	return func() tea.Msg {
+		path, err := u.Download(url)
+		if err != nil {
+			return DownloadUpgradeMsg{Err: err}
+		}
+		return DownloadUpgradeMsg{TmpPath: path}
+	}
 }
 
 // Items 回傳目前的列表項目。
@@ -225,6 +268,15 @@ func (m Model) NewSessionNameValue() string {
 func (m Model) SearchQuery() string {
 	return m.searchQuery
 }
+
+// UpgradeReady 回傳是否有已下載完成可安裝的升級。
+func (m Model) UpgradeReady() bool { return m.upgradeReady }
+
+// UpgradeInfo 回傳升級暫存檔路徑與目標版本。
+func (m Model) UpgradeInfo() (tmpPath, version string) { return m.upgradeTmpPath, m.upgradeVersion }
+
+// ConfirmPrompt 回傳目前確認對話框的提示文字。
+func (m Model) ConfirmPrompt() string { return m.confirmPrompt }
 
 // visibleItems 回傳目前可見的項目（搜尋時過濾）。
 func (m Model) visibleItems() []ListItem {
@@ -570,6 +622,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case TickMsg:
 		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
+	case CheckUpgradeMsg:
+		m.upgradeChecking = false
+		if msg.Err != nil {
+			m.mode = ModeConfirm
+			m.confirmPrompt = fmt.Sprintf("檢查失敗：%v", msg.Err)
+			return m, nil
+		}
+		if !upgrade.NeedsUpgrade(version.Version, msg.Release.Version) {
+			m.mode = ModeConfirm
+			m.confirmPrompt = fmt.Sprintf("已是最新版本 (%s)", version.Version)
+			return m, nil
+		}
+		asset := upgrade.AssetName()
+		url, ok := msg.Release.Assets[asset]
+		if !ok {
+			m.mode = ModeConfirm
+			m.confirmPrompt = fmt.Sprintf("找不到適用於此平台的檔案 (%s)", asset)
+			return m, nil
+		}
+		m.upgradeVersion = msg.Release.Version
+		m.mode = ModeConfirm
+		m.confirmPrompt = fmt.Sprintf("v%s → v%s 升級？", version.Version, msg.Release.Version)
+		u := m.deps.Upgrader
+		m.confirmAction = func() tea.Cmd {
+			return downloadUpgradeCmd(u, url)
+		}
+		return m, nil
+	case DownloadUpgradeMsg:
+		if msg.Err != nil {
+			m.mode = ModeConfirm
+			m.confirmPrompt = fmt.Sprintf("下載失敗：%v", msg.Err)
+			return m, nil
+		}
+		m.upgradeTmpPath = msg.TmpPath
+		m.upgradeReady = true
+		m.quitting = true
+		return m, tea.Quit
 	case tea.KeyMsg:
 		switch m.mode {
 		case ModeInput:
@@ -735,6 +824,12 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.moveItem(1) // 下移
 	case "K", "shift+up":
 		return m.moveItem(-1) // 上移
+	case "ctrl+u":
+		if m.deps.Upgrader == nil || m.upgradeChecking {
+			return m, nil
+		}
+		m.upgradeChecking = true
+		return m, checkUpgradeCmd(m.deps.Upgrader)
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
 		if m.cursor >= 0 && m.cursor < len(m.items) {
@@ -1685,6 +1780,9 @@ func (m Model) renderToolbar() string {
 	}
 	if m.deps.HostMgr != nil {
 		line2Parts = append(line2Parts, render("[h]", "主機管理"))
+	}
+	if m.deps.Upgrader != nil {
+		line2Parts = append(line2Parts, render("[ctrl+u]", "升級"))
 	}
 	lines := []string{
 		fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
