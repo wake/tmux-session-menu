@@ -196,11 +196,7 @@ func runClientLauncher(dataDir string) {
 		cfg := loadConfig()
 		cfg.InTmux = os.Getenv("TMUX") != ""
 		cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
-		// 確保 status-left 格式為最新（使用 per-session #{@tsm_name}）
-		if cfg.InTmux {
-			exec := tmux.NewRealExecutor()
-			_ = tmux.ApplyStatusBar(exec, cfg.Local)
-		}
+		ensureLocalStatusBar(cfg)
 		runTUILegacy(cfg)
 
 	case launcher.ChoiceFullSetup:
@@ -219,11 +215,7 @@ func runMultiHost(remoteFlags []string) {
 	cfg.InTmux = os.Getenv("TMUX") != ""
 	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
 
-	// 確保 status-left 格式為最新（使用 per-session #{@tsm_name}）
-	if cfg.InTmux {
-		exec := tmux.NewRealExecutor()
-		_ = tmux.ApplyStatusBar(exec, cfg.Local)
-	}
+	ensureLocalStatusBar(cfg)
 
 	// 整合主機清單（config.Hosts + --remote 旗標）
 	merged := config.MergeHosts(cfg.Hosts, remoteFlags)
@@ -289,17 +281,20 @@ func runMultiHost(remoteFlags []string) {
 
 		// 遠端：套用該主機的 status bar 顏色，然後 SSH attach
 		hostCfg := host.Config()
-		if hostCfg.Color != "" {
-			barCfg := config.ColorConfig{
-				BarBG:   hostCfg.Color,
-				BadgeBG: hostCfg.Color,
-				BadgeFG: cfg.Remote.BadgeFG,
+		applyHostBar := func() {
+			if hostCfg.Color != "" {
+				barCfg := config.ColorConfig{
+					BarBG:   hostCfg.Color,
+					BadgeBG: hostCfg.Color,
+					BadgeFG: cfg.Remote.BadgeFG,
+				}
+				_ = tmux.ApplyStatusBar(exec, barCfg)
+			} else {
+				_ = tmux.ApplyStatusBar(exec, cfg.Remote)
 			}
-			_ = tmux.ApplyStatusBar(exec, barCfg)
-		} else {
-			_ = tmux.ApplyStatusBar(exec, cfg.Remote)
 		}
 
+		applyHostBar()
 		selected := fm.Selected()
 		result := remote.Attach(hostCfg.Address, selected)
 
@@ -317,17 +312,7 @@ func runMultiHost(remoteFlags []string) {
 			}
 
 			// 重連成功，重新套用 status bar 並 attach
-			if hostCfg.Color != "" {
-				barCfg := config.ColorConfig{
-					BarBG:   hostCfg.Color,
-					BadgeBG: hostCfg.Color,
-					BadgeFG: cfg.Remote.BadgeFG,
-				}
-				_ = tmux.ApplyStatusBar(exec, barCfg)
-			} else {
-				_ = tmux.ApplyStatusBar(exec, cfg.Remote)
-			}
-
+			applyHostBar()
 			result = remote.Attach(hostCfg.Address, selected)
 			_ = tmux.ApplyStatusBar(exec, cfg.Local)
 
@@ -358,11 +343,6 @@ func runRemote(host string) {
 
 	cfg := loadConfig()            // 設定不變，移到迴圈外
 	exec := tmux.NewRealExecutor() // status bar 切換用
-
-	// reconnResult 封裝重連結果。
-	type reconnResult struct {
-		client *client.Client
-	}
 
 	for {
 		// 顯示 session 選單
@@ -650,6 +630,14 @@ func runConfig() {
 	fmt.Println("設定已儲存")
 }
 
+// ensureLocalStatusBar 確保 status-left 格式為最新（使用 per-session #{@tsm_name}）。
+func ensureLocalStatusBar(cfg config.Config) {
+	if cfg.InTmux {
+		exec := tmux.NewRealExecutor()
+		_ = tmux.ApplyStatusBar(exec, cfg.Local)
+	}
+}
+
 func loadConfig() config.Config {
 	cfg := config.Default()
 	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
@@ -666,11 +654,7 @@ func runTUI() {
 	cfg.InTmux = os.Getenv("TMUX") != ""
 	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
 
-	// 確保 status-left 格式為最新（使用 per-session #{@tsm_name} 而非全域快取的 #(tsm status-name)）
-	if cfg.InTmux {
-		exec := tmux.NewRealExecutor()
-		_ = tmux.ApplyStatusBar(exec, cfg.Local)
-	}
+	ensureLocalStatusBar(cfg)
 
 	// 嘗試連線 daemon（會自動啟動）
 	c, err := client.Dial(cfg)

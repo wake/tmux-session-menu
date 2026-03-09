@@ -58,7 +58,8 @@ func (s *Store) migrate() error {
 	CREATE TABLE IF NOT EXISTS path_history (
 		path TEXT PRIMARY KEY,
 		used_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);`
+	);
+	CREATE INDEX IF NOT EXISTS idx_path_history_used_at ON path_history(used_at);`
 	_, err := s.db.Exec(schema)
 	return err
 }
@@ -192,12 +193,19 @@ func (s *Store) SetCustomName(sessionName, customName string) error {
 	return err
 }
 
-// AddPathHistory 記錄路徑使用歷史（重複路徑更新時間戳）。
+// AddPathHistory 記錄路徑使用歷史（重複路徑更新時間戳，超過 100 筆自動清理）。
 func (s *Store) AddPathHistory(path string) error {
 	now := time.Now().UTC().Format("2006-01-02 15:04:05.000000")
 	_, err := s.db.Exec(`
 		INSERT INTO path_history (path, used_at) VALUES (?, ?)
 		ON CONFLICT(path) DO UPDATE SET used_at = ?`, path, now, now)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+		DELETE FROM path_history WHERE path NOT IN (
+			SELECT path FROM path_history ORDER BY used_at DESC LIMIT 100
+		)`)
 	return err
 }
 

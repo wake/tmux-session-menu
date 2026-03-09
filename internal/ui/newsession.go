@@ -306,11 +306,9 @@ func (m Model) renderNewSession() string {
 	// 最近路徑
 	for i, p := range f.recentPaths {
 		marker := "    "
-		if f.field == fieldRecent && i == f.recentIdx {
-			marker = "  " + selectedStyle.Render("► ")
-		}
 		pathStyle := dimStyle
 		if f.field == fieldRecent && i == f.recentIdx {
+			marker = "  " + selectedStyle.Render("► ")
 			pathStyle = lipgloss.NewStyle()
 		}
 		b.WriteString(fmt.Sprintf("%s%s\n", marker, pathStyle.Render(p)))
