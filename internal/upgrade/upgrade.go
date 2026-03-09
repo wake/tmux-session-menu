@@ -138,6 +138,15 @@ func (u *Upgrader) Download(url string) (string, error) {
 	return path, nil
 }
 
+// ExtractSemver 從含 commit hash 的版本字串中提取 semver 部分。
+// 例如 "0.24.0(abc1234)" → "0.24.0"，"0.24.0" → "0.24.0"。
+func ExtractSemver(ver string) string {
+	if idx := strings.Index(ver, "("); idx > 0 {
+		return ver[:idx]
+	}
+	return ver
+}
+
 // parseVersion 將 "x.y.z" 解析為 [3]int，失敗回傳 nil。
 func parseVersion(v string) []int {
 	parts := strings.SplitN(v, ".", 3)
