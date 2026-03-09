@@ -134,7 +134,7 @@ func (m Model) renderHostPicker() string {
 		case HostStateConnecting:
 			stateStr = dimStyle.Render(" 連線中...")
 		case HostStateDisconnected:
-			stateStr = statusErrorStyle.Render(" 已斷線")
+			stateStr = statusErrorStyle.Render(" 連線中斷，重連中...")
 		case HostStateDisabled:
 			stateStr = dimStyle.Render(" 已停用")
 		case HostStateConnected:
