@@ -15,6 +15,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
+	"github.com/wake/tmux-session-menu/internal/upgrade"
 )
 
 func TestModel_Init_WithDeps(t *testing.T) {
@@ -2584,4 +2585,15 @@ func TestCtrlU_WithoutUpgrader_Noop(t *testing.T) {
 	model := updated.(ui.Model)
 	assert.Equal(t, ui.ModeNormal, model.Mode())
 	assert.Nil(t, cmd)
+}
+
+func TestCtrlU_WithUpgrader_TriggersCheck(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return []byte(`{"tag_name": "v99.0.0", "assets": []}`), nil
+		},
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	assert.NotNil(t, cmd, "ctrl+u 應觸發版本檢查命令")
 }

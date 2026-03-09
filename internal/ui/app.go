@@ -161,6 +161,17 @@ type DownloadUpgradeMsg struct {
 	Err     error
 }
 
+// checkUpgradeCmd 回傳一個 Bubble Tea Cmd，非同步呼叫 Upgrader.CheckLatest。
+func checkUpgradeCmd(u *upgrade.Upgrader) tea.Cmd {
+	return func() tea.Msg {
+		rel, err := u.CheckLatest()
+		if err != nil {
+			return CheckUpgradeMsg{Err: err}
+		}
+		return CheckUpgradeMsg{Release: &rel}
+	}
+}
+
 // Items 回傳目前的列表項目。
 func (m Model) Items() []ListItem {
 	return m.items
@@ -769,7 +780,7 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.deps.Upgrader == nil {
 			return m, nil
 		}
-		return m, nil
+		return m, checkUpgradeCmd(m.deps.Upgrader)
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
 		if m.cursor >= 0 && m.cursor < len(m.items) {
