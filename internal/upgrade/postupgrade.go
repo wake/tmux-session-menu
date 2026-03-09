@@ -27,5 +27,8 @@ func RunPostUpgrade(ops PostUpgradeOps, tmpPath string, args []string, env []str
 		return fmt.Errorf("啟動 daemon 失敗: %w", err)
 	}
 
-	return ops.Exec(installedPath, args, env)
+	if err := ops.Exec(installedPath, args, env); err != nil {
+		return fmt.Errorf("exec 失敗（新版本已安裝於 %s）: %w", installedPath, err)
+	}
+	return nil
 }

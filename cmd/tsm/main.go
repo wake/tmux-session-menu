@@ -242,8 +242,9 @@ func runMultiHost(remoteFlags []string) {
 
 	exec := tmux.NewRealExecutor()
 
+	upgrader := upgrade.DefaultUpgrader()
 	for {
-		deps := ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: config.ExpandPath("~/.config/tsm/config.toml"), Upgrader: upgrade.DefaultUpgrader()}
+		deps := ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: config.ExpandPath("~/.config/tsm/config.toml"), Upgrader: upgrader}
 		m := ui.NewModel(deps)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 
@@ -258,7 +259,7 @@ func runMultiHost(remoteFlags []string) {
 			if ok && fm.UpgradeReady() {
 				cancel()
 				runPostUpgrade(fm, cfg)
-				return // defer mgr.Close() 會自動執行
+				return
 			}
 			// 使用者按 q/esc/ctrl+e 退出
 			if ok && fm.ExitTmux() && os.Getenv("TMUX") != "" {
@@ -1220,7 +1221,10 @@ func runPostUpgrade(m ui.Model, cfg config.Config) {
 			det := selfinstall.Detect()
 			targetDir := filepath.Dir(det.Path)
 			if targetDir == "" || targetDir == "." {
-				home, _ := os.UserHomeDir()
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return "", fmt.Errorf("無法取得 home 目錄: %w", err)
+				}
 				targetDir = filepath.Join(home, ".local", "bin")
 			}
 			target := filepath.Join(targetDir, "tsm")
@@ -1231,14 +1235,14 @@ func runPostUpgrade(m ui.Model, cfg config.Config) {
 			tmpTarget := target + ".tmp"
 			data, err := os.ReadFile(tmp)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("讀取下載檔案失敗: %w", err)
 			}
 			if err := os.WriteFile(tmpTarget, data, 0o755); err != nil {
-				return "", err
+				return "", fmt.Errorf("寫入暫存檔失敗: %w", err)
 			}
 			if err := os.Rename(tmpTarget, target); err != nil {
 				os.Remove(tmpTarget)
-				return "", err
+				return "", fmt.Errorf("替換執行檔失敗: %w", err)
 			}
 			return target, nil
 		},

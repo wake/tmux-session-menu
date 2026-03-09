@@ -2784,3 +2784,21 @@ func TestToolbar_HidesUpgradeHint_WhenNoUpgrader(t *testing.T) {
 	view := m.View()
 	assert.NotContains(t, view, "ctrl+u")
 }
+
+func TestCtrlU_DuplicateBlocked(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return []byte(`{"tag_name": "v99.0.0", "assets": []}`), nil
+		},
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	// 第一次 ctrl+u 應觸發檢查
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	assert.NotNil(t, cmd, "第一次 ctrl+u 應觸發命令")
+
+	// 第二次 ctrl+u 應被擋住（upgradeChecking = true）
+	updated2, cmd2 := updated.(ui.Model).Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	_ = updated2
+	assert.Nil(t, cmd2, "第二次 ctrl+u 應被擋住")
+}

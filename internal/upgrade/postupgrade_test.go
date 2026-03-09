@@ -105,3 +105,57 @@ func TestRunPostUpgrade_DaemonStopFail_ContinuesAnyway(t *testing.T) {
 	// stop fails but flow continues
 	assert.Equal(t, []string{"install", "remove", "stop-fail", "start", "exec"}, calls)
 }
+
+func TestRunPostUpgrade_StartDaemonFail(t *testing.T) {
+	var calls []string
+
+	ops := PostUpgradeOps{
+		InstallBinary: func(tmpPath string) (string, error) {
+			calls = append(calls, "install")
+			return "/usr/local/bin/tsm", nil
+		},
+		RemoveTmp: func(path string) {
+			calls = append(calls, "remove")
+		},
+		StopDaemon: func() error {
+			calls = append(calls, "stop")
+			return nil
+		},
+		StartDaemon: func() error {
+			return fmt.Errorf("port in use")
+		},
+		Exec: func(path string, args []string, env []string) error {
+			calls = append(calls, "exec")
+			return nil
+		},
+	}
+
+	err := RunPostUpgrade(ops, "/tmp/tsm-new", nil, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "啟動 daemon 失敗")
+	// StartDaemon fails → no exec
+	assert.Equal(t, []string{"install", "remove", "stop"}, calls)
+}
+
+func TestRunPostUpgrade_ExecFail(t *testing.T) {
+	ops := PostUpgradeOps{
+		InstallBinary: func(tmpPath string) (string, error) {
+			return "/usr/local/bin/tsm", nil
+		},
+		RemoveTmp: func(path string) {},
+		StopDaemon: func() error {
+			return nil
+		},
+		StartDaemon: func() error {
+			return nil
+		},
+		Exec: func(path string, args []string, env []string) error {
+			return fmt.Errorf("exec: bad file")
+		},
+	}
+
+	err := RunPostUpgrade(ops, "/tmp/tsm-new", nil, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "exec 失敗")
+	assert.Contains(t, err.Error(), "/usr/local/bin/tsm")
+}
