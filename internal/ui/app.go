@@ -794,22 +794,6 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch m.inputTarget {
-		case InputNewSession:
-			m.mode = ModeNormal
-			if c := m.clientForCursor(); c != nil {
-				if err := c.CreateSession(context.Background(), value, "", ""); err != nil {
-					m.err = err
-					return m, nil
-				}
-				return m, nil // 變更透過 Watch/MultiHost stream 自動推送
-			}
-			if m.deps.TmuxMgr != nil {
-				if err := m.deps.TmuxMgr.NewSession(value, ""); err != nil {
-					m.err = err
-					return m, nil
-				}
-			}
-			return m, loadSessionsCmd(m.deps)
 		case InputNewGroup:
 			m.mode = ModeNormal
 			if c := m.clientForCursor(); c != nil {
