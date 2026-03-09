@@ -511,6 +511,63 @@ func doReconnect(host, session string, tun *remote.Tunnel) *client.Client {
 	return newC
 }
 
+// doMultiHostReconnect 顯示重連 popup 並等待 HostManager 自動重連指定主機。
+// 成功回傳 true，使用者放棄回傳 false。
+func doMultiHostReconnect(mgr *hostmgr.HostManager, hostID, session string) bool {
+	rm := remote.NewReconnectModel(hostID, session)
+	reconnProg := tea.NewProgram(rm, tea.WithAltScreen())
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		attempt := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+
+			h := mgr.Host(hostID)
+			if h == nil {
+				continue
+			}
+
+			attempt++
+			if h.Status() == hostmgr.HostConnected {
+				reconnProg.Send(remote.ReconnStateMsg{
+					State:   remote.StateConnected,
+					Attempt: attempt,
+				})
+				return
+			}
+
+			reconnProg.Send(remote.ReconnStateMsg{
+				State:   remote.StateConnecting,
+				Attempt: attempt,
+			})
+		}
+	}()
+
+	reconnFinal, err := reconnProg.Run()
+	cancel()
+
+	if err != nil {
+		return false
+	}
+
+	rfm, ok := reconnFinal.(remote.ReconnectModel)
+	if !ok {
+		return false
+	}
+
+	if rfm.Quit() || rfm.BackToMenu() {
+		return false
+	}
+
+	return true
+}
+
 // runStatusName 輸出當前 session 的自訂名稱，供 tmux status bar 使用。
 // 錯誤一律靜默處理，因為 tmux 呼叫時不應顯示錯誤。
 func runStatusName() {
