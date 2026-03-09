@@ -136,11 +136,17 @@ func (m ReconnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case ReconnStateMsg:
-		m.state = msg.State
 		m.attempt = msg.Attempt
-		if m.state == StateConnected {
+		// StateConnected 優先處理：無論當前狀態都應結束
+		if msg.State == StateConnected {
+			m.state = StateConnected
 			return m, tea.Quit
 		}
+		// StateAskContinue 時忽略 StateConnecting，避免輪詢覆蓋使用者提示
+		if m.state == StateAskContinue && msg.State == StateConnecting {
+			return m, nil
+		}
+		m.state = msg.State
 		if m.state == StateConnecting {
 			return m, animTickCmd()
 		}

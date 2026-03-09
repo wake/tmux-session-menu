@@ -132,6 +132,17 @@ func TestReconnectModel_Connected_DuringAskContinue(t *testing.T) {
 	assert.NotNil(t, cmd) // tea.Quit（自動接回）
 }
 
+func TestReconnectModel_AskContinue_IgnoresConnecting(t *testing.T) {
+	m := NewReconnectModel("user@host", "my-session")
+	m.state = StateAskContinue
+	m.countdown = 0
+	// 輪詢 goroutine 送來 StateConnecting 不應覆蓋 StateAskContinue
+	updated, _ := m.Update(ReconnStateMsg{State: StateConnecting, Attempt: 5})
+	rm := updated.(ReconnectModel)
+	assert.Equal(t, StateAskContinue, rm.State(), "StateConnecting 不應覆蓋 StateAskContinue")
+	assert.Equal(t, 5, rm.Attempt())
+}
+
 func TestReconnectModel_View_ShowsCountdown(t *testing.T) {
 	m := NewReconnectModel("user@host", "my-session")
 	m.state = StateConnecting
