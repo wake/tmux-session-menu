@@ -16,6 +16,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
 	"github.com/wake/tmux-session-menu/internal/upgrade"
+	"github.com/wake/tmux-session-menu/internal/version"
 )
 
 func TestModel_Init_WithDeps(t *testing.T) {
@@ -2596,4 +2597,73 @@ func TestCtrlU_WithUpgrader_TriggersCheck(t *testing.T) {
 	m := ui.NewModel(ui.Deps{Upgrader: u})
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	assert.NotNil(t, cmd, "ctrl+u 應觸發版本檢查命令")
+}
+
+func TestCheckUpgradeMsg_NewVersion(t *testing.T) {
+	// 暫時設定版本號，讓 NeedsUpgrade 回傳 true
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "99.0.0")
+	assert.Contains(t, model.ConfirmPrompt(), "升級")
+}
+
+func TestCheckUpgradeMsg_AlreadyLatest(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	// version.Version 為 "dev" 時 NeedsUpgrade 一律回傳 false
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{Version: "0.0.0"},
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "已是最新版本")
+}
+
+func TestCheckUpgradeMsg_Error(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Err: fmt.Errorf("network timeout"),
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "檢查失敗")
+	assert.Contains(t, model.ConfirmPrompt(), "network timeout")
+}
+
+func TestCheckUpgradeMsg_NoPlatformAsset(t *testing.T) {
+	// 暫時設定版本號，讓 NeedsUpgrade 回傳 true
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{"tsm-windows-amd64": "https://example.com/dl"},
+		},
+	})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "找不到")
 }

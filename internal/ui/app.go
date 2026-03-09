@@ -172,6 +172,17 @@ func checkUpgradeCmd(u *upgrade.Upgrader) tea.Cmd {
 	}
 }
 
+// downloadUpgradeCmd 回傳一個 Bubble Tea Cmd，非同步下載升級 binary。
+func downloadUpgradeCmd(u *upgrade.Upgrader, url string) tea.Cmd {
+	return func() tea.Msg {
+		path, err := u.Download(url)
+		if err != nil {
+			return DownloadUpgradeMsg{Err: err}
+		}
+		return DownloadUpgradeMsg{TmpPath: path}
+	}
+}
+
 // Items 回傳目前的列表項目。
 func (m Model) Items() []ListItem {
 	return m.items
@@ -611,6 +622,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case TickMsg:
 		return m, tea.Batch(loadSessionsCmd(m.deps), tickCmd(m.pollInterval()))
+	case CheckUpgradeMsg:
+		if msg.Err != nil {
+			m.mode = ModeConfirm
+			m.confirmPrompt = fmt.Sprintf("檢查失敗：%v", msg.Err)
+			return m, nil
+		}
+		if !upgrade.NeedsUpgrade(version.Version, msg.Release.Version) {
+			m.mode = ModeConfirm
+			m.confirmPrompt = fmt.Sprintf("已是最新版本 (%s)", version.Version)
+			return m, nil
+		}
+		asset := upgrade.AssetName()
+		url, ok := msg.Release.Assets[asset]
+		if !ok {
+			m.mode = ModeConfirm
+			m.confirmPrompt = fmt.Sprintf("找不到適用於此平台的檔案 (%s)", asset)
+			return m, nil
+		}
+		m.upgradeVersion = msg.Release.Version
+		m.upgradeAssetURL = url
+		m.mode = ModeConfirm
+		m.confirmPrompt = fmt.Sprintf("v%s → v%s 升級？", version.Version, msg.Release.Version)
+		u := m.deps.Upgrader
+		m.confirmAction = func() tea.Cmd {
+			return downloadUpgradeCmd(u, url)
+		}
+		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
 		case ModeInput:
