@@ -300,7 +300,8 @@ func runMultiHost(remoteFlags []string) {
 			_ = tmux.ApplyStatusBar(exec, cfg.Remote)
 		}
 
-		result := remote.Attach(hostCfg.Address, fm.Selected())
+		selected := fm.Selected()
+		result := remote.Attach(hostCfg.Address, selected)
 
 		// 恢復本機 status bar
 		_ = tmux.ApplyStatusBar(exec, cfg.Local)
@@ -309,8 +310,32 @@ func runMultiHost(remoteFlags []string) {
 			continue // 正常 detach → 回到多主機選單
 		}
 
-		// 連線中斷 — 多主機模式下，HostManager 的 watchLoop 會自動重連，直接回到選單
-		continue
+		// 連線中斷 — 顯示重連 popup，等待 HostManager 自動重連後 re-attach
+		for {
+			if !doMultiHostReconnect(mgr, item.HostID, selected) {
+				break // 使用者選擇回到選單或退出
+			}
+
+			// 重連成功，重新套用 status bar 並 attach
+			if hostCfg.Color != "" {
+				barCfg := config.ColorConfig{
+					BarBG:   hostCfg.Color,
+					BadgeBG: hostCfg.Color,
+					BadgeFG: cfg.Remote.BadgeFG,
+				}
+				_ = tmux.ApplyStatusBar(exec, barCfg)
+			} else {
+				_ = tmux.ApplyStatusBar(exec, cfg.Remote)
+			}
+
+			result = remote.Attach(hostCfg.Address, selected)
+			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+
+			if result == remote.AttachDetached {
+				break // 正常 detach → 回到多主機選單
+			}
+			// 又斷線 → 迴圈繼續顯示重連 popup
+		}
 	}
 }
 
