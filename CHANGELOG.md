@@ -2,6 +2,41 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.25.1] - 2026-03-09
+
+### Fixed
+- 多主機模式啟動時 UI 空白：`Init()` 改為立即送出當前快照，TUI 第一幀即顯示連線中主機名稱與「連線中...」狀態
+
+## [0.25.0] - 2026-03-09
+
+### Added
+- `Ctrl+U` TUI 內升級：版本檢查 → 確認 → 下載 → daemon 重啟 → 無縫 exec 重啟
+- TUI 版本偵測重啟：若磁碟上 binary 已更新但 TUI 仍為舊版，提供直接重啟（免重複下載）
+- `selfinstall.Detect()` 偵測已安裝 binary 版本
+- `upgrade.ExtractSemver()` 從含 commit hash 的版本字串中提取 semver
+- Toolbar 顯示 `Ctrl+U` 升級提示
+
+### Fixed
+- 主機停用時錯誤顯示為「斷線」：watchLoop 加入世代檢查，`stop()` 設 `HostDisabled` 後不被覆蓋為 `HostDisconnected`
+- `Ctrl+E` 退出嵌套 tsm menu 時不再 detach 整個 tmux，僅退出當前 TUI 層
+- Shell（非 tmux）模式按 `c` 開啟 config 後正確返回主選單（三種入口均加入 for 迴圈）
+- 子選單（主機管理、新建 session）按 `q`/`Esc` 返回主選單，不再直接退出 tsm
+- `ModeConfirm` 新增 `confirmReturnMode`，從子選單進入確認對話框後正確返回父模式
+
+## [0.24.0] - 2026-03-09
+
+### Added
+- In-TUI 升級功能（`Ctrl+U`）
+  - `CheckUpgradeMsg`：從 GitHub releases API 檢查最新版本
+  - `ConfirmUpgradeMsg` / `DownloadUpgradeMsg`：確認後下載、替換 binary
+  - `Deps.Upgrader` 依賴注入，支援測試 mock
+  - `PostUpgradeOps`：TUI 退出後執行 daemon 重啟 + `syscall.Exec()` 無縫切換
+- Toolbar 動態顯示升級狀態（檢查中/下載中/可升級提示）
+
+### Changed
+- 移除非必要檔案、停止追蹤編譯產物
+- 移除死碼、去重、path_history 防膨脹
+
 ## [0.23.1] - 2026-03-09
 
 ### Fixed
