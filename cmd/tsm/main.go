@@ -312,6 +312,9 @@ func runMultiHost(remoteFlags []string) {
 		_ = tmux.ApplyStatusBar(exec, cfg.Local)
 
 		if result == remote.AttachDetached {
+			if remote.CheckAndClearExitRequested(hostCfg.Address) {
+				return // 使用者按 ctrl+e → 退出整個遠端模式
+			}
 			continue // 正常 detach → 回到多主機選單
 		}
 
@@ -327,6 +330,9 @@ func runMultiHost(remoteFlags []string) {
 			_ = tmux.ApplyStatusBar(exec, cfg.Local)
 
 			if result == remote.AttachDetached {
+				if remote.CheckAndClearExitRequested(hostCfg.Address) {
+					return // 使用者按 ctrl+e → 退出整個遠端模式
+				}
 				break // 正常 detach → 回到多主機選單
 			}
 			// 又斷線 → 迴圈繼續顯示重連 popup
@@ -392,6 +398,10 @@ func runRemote(host string) {
 			_ = tmux.ApplyStatusBar(exec, cfg.Local)
 
 			if result == remote.AttachDetached {
+				// 檢查遠端是否有 ctrl+e 的退出信號
+				if remote.CheckAndClearExitRequested(host) {
+					return // 使用者按 ctrl+e → 退出整個遠端模式
+				}
 				continue // 正常 detach → 回到選單
 			}
 		}
@@ -415,6 +425,9 @@ func runRemote(host string) {
 			_ = tmux.ApplyStatusBar(exec, cfg.Local)
 
 			if result == remote.AttachDetached {
+				if remote.CheckAndClearExitRequested(host) {
+					return // 使用者按 ctrl+e → 退出整個遠端模式
+				}
 				break // 正常 detach → 回到選單
 			}
 
@@ -788,6 +801,8 @@ func postTUIPath() string {
 func handlePostTUI(m ui.Model) {
 	// 先清除舊的 post-tui 檔案，避免 popup 關閉後執行過期指令
 	os.Remove(postTUIPath())
+	// 清除可能殘留的舊 exit-requested sentinel 檔案
+	remote.RemoveExitMarker()
 
 	if selected := m.Selected(); selected != "" {
 		switchToSession(selected, m.ReadOnly())
@@ -797,8 +812,13 @@ func handlePostTUI(m ui.Model) {
 		runConfig()
 		return
 	}
-	// ctrl+e：僅退出 TUI，不 detach tmux client
-	// 使用者回到呼叫 tsm 的那一層 shell
+	// ctrl+e：退出 tmux — 寫入 sentinel 檔案後 detach tmux client
+	if m.ExitTmux() && os.Getenv("TMUX") != "" {
+		// 寫入 sentinel 讓遠端模式的 runRemote() 偵測到需要退出
+		_ = remote.WriteExitMarker()
+		// detach tmux client，使用者離開 tmux 回到外層 shell
+		_ = osexec.Command("tmux", "detach-client").Run()
+	}
 }
 
 func switchToSession(name string, readOnly bool) {
