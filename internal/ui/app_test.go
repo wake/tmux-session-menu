@@ -2667,3 +2667,83 @@ func TestCheckUpgradeMsg_NoPlatformAsset(t *testing.T) {
 	assert.Equal(t, ui.ModeConfirm, model.Mode())
 	assert.Contains(t, model.ConfirmPrompt(), "找不到")
 }
+
+// --- 升級確認 Y/N 測試（Task 5）---
+
+func TestConfirmUpgrade_Yes_TriggersDownload(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) {
+			return []byte("binary-content"), nil
+		},
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	// 暫時設定版本號，讓 NeedsUpgrade 回傳 true
+	old := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = old }()
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	})
+	m = updated.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, m.Mode())
+
+	// 按 Y 確認下載
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.NotNil(t, cmd, "Y 應觸發下載命令")
+}
+
+func TestConfirmUpgrade_No_Cancels(t *testing.T) {
+	u := &upgrade.Upgrader{
+		HTTPGet: func(url string) ([]byte, error) { return nil, nil },
+	}
+	m := ui.NewModel(ui.Deps{Upgrader: u})
+
+	old := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = old }()
+
+	updated, _ := m.Update(ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	})
+	m = updated.(ui.Model)
+
+	// 按 N 取消
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	model := updated.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model.Mode())
+	assert.Nil(t, cmd)
+}
+
+// --- DownloadUpgradeMsg 成功/失敗測試（Task 6, 7）---
+
+func TestDownloadUpgradeMsg_Success(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	updated, cmd := m.Update(ui.DownloadUpgradeMsg{TmpPath: "/tmp/tsm-new"})
+	model := updated.(ui.Model)
+	assert.True(t, model.UpgradeReady())
+	tmpPath, _ := model.UpgradeInfo()
+	assert.Equal(t, "/tmp/tsm-new", tmpPath)
+	assert.NotNil(t, cmd, "should return tea.Quit")
+}
+
+func TestDownloadUpgradeMsg_Error(t *testing.T) {
+	m := ui.NewModel(ui.Deps{})
+
+	updated, _ := m.Update(ui.DownloadUpgradeMsg{Err: fmt.Errorf("disk full")})
+	model := updated.(ui.Model)
+	assert.False(t, model.UpgradeReady())
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "下載失敗")
+	assert.Contains(t, model.ConfirmPrompt(), "disk full")
+}

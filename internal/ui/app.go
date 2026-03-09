@@ -649,6 +649,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return downloadUpgradeCmd(u, url)
 		}
 		return m, nil
+	case DownloadUpgradeMsg:
+		if msg.Err != nil {
+			m.mode = ModeConfirm
+			m.confirmPrompt = fmt.Sprintf("下載失敗：%v", msg.Err)
+			return m, nil
+		}
+		m.upgradeTmpPath = msg.TmpPath
+		m.upgradeReady = true
+		m.quitting = true
+		return m, tea.Quit
 	case tea.KeyMsg:
 		switch m.mode {
 		case ModeInput:
