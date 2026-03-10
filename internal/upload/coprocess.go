@@ -18,8 +18,8 @@ type Action int
 
 const (
 	ActionPassthrough Action = iota // 輸出本地路徑
-	ActionAutoUpload               // 自動上傳 + bracketed paste
-	ActionUploadMode               // 上傳模式 + 回報 TUI
+	ActionAutoUpload                // 自動上傳 + bracketed paste
+	ActionUploadMode                // 上傳模式 + 回報 TUI
 )
 
 // DecideAction 根據 daemon 回傳的上傳目標判斷動作。

@@ -33,7 +33,7 @@ func (h HostEntry) IsLocal() bool {
 type AgentEntry struct {
 	Name      string `toml:"name"`
 	Command   string `toml:"command"`
-	Group     string `toml:"group"`      // 群組標題（選填）
+	Group     string `toml:"group"` // 群組標題（選填）
 	Enabled   bool   `toml:"enabled"`
 	SortOrder int    `toml:"sort_order"`
 }
