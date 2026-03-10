@@ -23,9 +23,14 @@ func ItermCoprocessCommand(tsmPath string) string {
 
 // InstallItermCoprocess 設定 iTerm2 的 fileDropCoprocess。
 func InstallItermCoprocess() (string, error) {
-	tsmPath, err := os.Executable()
+	// 優先用 PATH 中的 tsm（selfinstall 已安裝到正確位置），
+	// 避免升級時從暫存檔執行 setup 導致路徑錯誤。
+	tsmPath, err := osexec.LookPath("tsm")
 	if err != nil {
-		return "", fmt.Errorf("取得 tsm 路徑失敗: %w", err)
+		tsmPath, err = os.Executable()
+		if err != nil {
+			return "", fmt.Errorf("取得 tsm 路徑失敗: %w", err)
+		}
 	}
 
 	cmd := ItermCoprocessCommand(tsmPath)
@@ -34,7 +39,7 @@ func InstallItermCoprocess() (string, error) {
 		return "", fmt.Errorf("defaults write 失敗: %w", err)
 	}
 
-	return fmt.Sprintf("已設定 fileDropCoprocess\n  手動設定: iTerm2 Settings → Advanced → 搜尋 \"file drop\"\n  值: %s\n  需重啟 iTerm2 生效", cmd), nil
+	return fmt.Sprintf("已設定 fileDropCoprocess\n  手動設定: iTerm2 Settings → Advanced → 搜尋 \"file drop\"\n  值: %s", cmd), nil
 }
 
 // UninstallItermCoprocess 移除 iTerm2 的 fileDropCoprocess 設定。
