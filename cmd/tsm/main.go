@@ -52,15 +52,25 @@ func parseRunMode(args []string) runMode {
 	return modeAuto
 }
 
-// parseRemoteHosts 從命令列參數中收集所有 --remote <host> 的主機名稱。
-func parseRemoteHosts(args []string) []string {
+// parseHostFlags 從命令列參數中收集所有 --host <value> 的主機名稱。
+func parseHostFlags(args []string) []string {
 	var hosts []string
 	for i, a := range args {
-		if a == "--remote" && i+1 < len(args) {
+		if a == "--host" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
 			hosts = append(hosts, args[i+1])
 		}
 	}
 	return hosts
+}
+
+// parseLocalFlag 回傳命令列中是否包含 --local 旗標。
+func parseLocalFlag(args []string) bool {
+	return containsFlag(args, "--local")
+}
+
+// hasHostMode 回傳命令列中是否指定了多主機模式（--host 或 --local）。
+func hasHostMode(args []string) bool {
+	return containsFlag(args, "--host") || containsFlag(args, "--local")
 }
 
 func main() {
@@ -81,8 +91,8 @@ func main() {
 		return // exit 0
 	}
 
-	if args[0] == "--remote" {
-		hosts := parseRemoteHosts(args)
+	if args[0] == "--remote" || args[0] == "--host" {
+		hosts := parseHostFlags(args)
 		if len(hosts) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: --remote 需要指定主機名稱")
 			fmt.Fprintln(os.Stderr, "Usage: tsm --remote <host> [--remote <host2> ...]")

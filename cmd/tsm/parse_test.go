@@ -4,70 +4,76 @@ import (
 	"testing"
 )
 
-func TestParseRemoteHosts(t *testing.T) {
+func TestParseHostFlags(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
 		want []string
 	}{
-		{
-			name: "無 remote 參數",
-			args: []string{"--inline"},
-			want: nil,
-		},
-		{
-			name: "單一 remote",
-			args: []string{"--remote", "hostA"},
-			want: []string{"hostA"},
-		},
-		{
-			name: "多個 remote",
-			args: []string{"--remote", "hostA", "--remote", "hostB"},
-			want: []string{"hostA", "hostB"},
-		},
-		{
-			name: "三個 remote",
-			args: []string{"--remote", "hostA", "--remote", "hostB", "--remote", "hostC"},
-			want: []string{"hostA", "hostB", "hostC"},
-		},
-		{
-			name: "remote 混合其他 flag",
-			args: []string{"--inline", "--remote", "hostA", "--popup", "--remote", "hostB"},
-			want: []string{"hostA", "hostB"},
-		},
-		{
-			name: "尾端 remote 缺少值",
-			args: []string{"--remote", "hostA", "--remote"},
-			want: []string{"hostA"},
-		},
-		{
-			name: "僅有尾端 remote 缺少值",
-			args: []string{"--remote"},
-			want: nil,
-		},
-		{
-			name: "空 args",
-			args: []string{},
-			want: nil,
-		},
-		{
-			name: "remote 值不應包含其他 flag",
-			args: []string{"--remote", "--inline"},
-			want: []string{"--inline"},
-		},
+		{name: "無 host 參數", args: []string{"--inline"}, want: nil},
+		{name: "單一 host", args: []string{"--host", "hostA"}, want: []string{"hostA"}},
+		{name: "多個 host", args: []string{"--host", "hostA", "--host", "hostB"}, want: []string{"hostA", "hostB"}},
+		{name: "host 混合其他 flag", args: []string{"--inline", "--host", "hostA", "--local", "--host", "hostB"}, want: []string{"hostA", "hostB"}},
+		{name: "尾端 host 缺少值", args: []string{"--host", "hostA", "--host"}, want: []string{"hostA"}},
+		{name: "空 args", args: []string{}, want: nil},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseRemoteHosts(tt.args)
+			got := parseHostFlags(tt.args)
 			if len(got) != len(tt.want) {
-				t.Errorf("parseRemoteHosts(%v) = %v, want %v", tt.args, got, tt.want)
+				t.Errorf("parseHostFlags(%v) = %v, want %v", tt.args, got, tt.want)
 				return
 			}
 			for i := range got {
 				if got[i] != tt.want[i] {
-					t.Errorf("parseRemoteHosts(%v)[%d] = %q, want %q", tt.args, i, got[i], tt.want[i])
+					t.Errorf("parseHostFlags(%v)[%d] = %q, want %q", tt.args, i, got[i], tt.want[i])
 				}
+			}
+		})
+	}
+}
+
+func TestParseLocalFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "無 local", args: []string{"--host", "a"}, want: false},
+		{name: "有 local", args: []string{"--local"}, want: true},
+		{name: "local 與 host 混合", args: []string{"--local", "--host", "a"}, want: true},
+		{name: "空 args", args: []string{}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseLocalFlag(tt.args)
+			if got != tt.want {
+				t.Errorf("parseLocalFlag(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasHostMode(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "裸 --host", args: []string{"--host"}, want: true},
+		{name: "有值 --host", args: []string{"--host", "a"}, want: true},
+		{name: "無 --host", args: []string{"--inline"}, want: false},
+		{name: "--local 也算 host 模式", args: []string{"--local"}, want: true},
+		{name: "空 args", args: []string{}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := hasHostMode(tt.args)
+			if got != tt.want {
+				t.Errorf("hasHostMode(%v) = %v, want %v", tt.args, got, tt.want)
 			}
 		})
 	}
