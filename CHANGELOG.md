@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.27.1] - 2026-03-11
+
+### Fixed
+- iTerm2 fileDropCoprocess 在升級/安裝時誤寫暫存路徑，改用 `exec.LookPath` 取得已安裝路徑
+- 移除 iTerm2 coprocess 設定後「需重啟 iTerm2 生效」的多餘說明
+
 ## [0.27.0] - 2026-03-11
 
 ### Added
