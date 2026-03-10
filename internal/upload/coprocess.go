@@ -64,7 +64,10 @@ func RunCoprocess(filenames []string) {
 		return
 	}
 
-	// Local daemon 無 session 且非 upload mode → 嘗試 remote daemon
+	// Local daemon 無 session 且非 upload mode → 嘗試 remote daemon。
+	// 注意：fallback 後 c 仍指向 local daemon，ReportUploadResult 會送到 local daemon。
+	// 這在 auto-upload 路徑影響有限（僅錯誤回報），upload mode 在此場景下不會觸發
+	// （TUI 直接連 remote daemon 設定 upload mode）。
 	if resp.SessionName == "" && !resp.UploadMode {
 		if remoteResp := resolveRemoteTarget(ctx, cfg.Hosts, fileExists, dialAndGetTarget); remoteResp != nil {
 			logger.Printf("fallback to remote: host=%s session=%s", remoteResp.SshTarget, remoteResp.SessionName)
