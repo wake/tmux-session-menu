@@ -18,7 +18,7 @@ func DetectIterm2() bool {
 
 // ItermCoprocessCommand 回傳 fileDropCoprocess 的設定值。
 func ItermCoprocessCommand(tsmPath string) string {
-	return fmt.Sprintf(`%s iterm-coprocess \(filenames)`, tsmPath)
+	return fmt.Sprintf(`"%s" iterm-coprocess \(filenames)`, tsmPath)
 }
 
 // InstallItermCoprocess 設定 iTerm2 的 fileDropCoprocess。

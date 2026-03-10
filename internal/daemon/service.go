@@ -197,7 +197,11 @@ func (s *Service) GetUploadTarget(_ context.Context, _ *tsmv1.GetUploadTargetReq
 	if s.state.uploadState.IsUploadMode() {
 		resp.UploadMode = true
 		resp.SessionName = s.state.uploadState.SessionName()
-		// TODO: 上傳模式的 upload_path 需要 PaneCurrentPath（Task 15）
+		if s.tmuxMgr != nil {
+			if path, err := s.tmuxMgr.PaneCurrentPath(resp.SessionName); err == nil {
+				resp.UploadPath = path
+			}
+		}
 		return resp, nil
 	}
 
@@ -234,14 +238,13 @@ func (s *Service) SetUploadMode(_ context.Context, req *tsmv1.SetUploadModeReque
 }
 
 // ReportUploadResult 回報上傳結果。
-// 事件儲存後由下次 StateManager 掃描時透過 BuildSnapshot 推送給 watchers，
-// 不主動觸發 Scan() 以避免事件在推送前被提前消耗。
 func (s *Service) ReportUploadResult(_ context.Context, req *tsmv1.ReportUploadResultRequest) (*emptypb.Empty, error) {
 	event := &tsmv1.UploadEvent{
 		Files: req.Files,
 		Error: req.Error,
 	}
 	s.state.uploadState.AddEvent(event)
+	s.state.Scan()
 	return &emptypb.Empty{}, nil
 }
 

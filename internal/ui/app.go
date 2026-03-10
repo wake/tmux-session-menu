@@ -885,8 +885,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.upgradeChecking = true
 		return m, checkUpgradeCmd(m.deps.Upgrader)
 	case "U":
-		// Shift+U：上傳模式
-		if m.deps.Client == nil && m.deps.HostMgr == nil {
+		// Shift+U：上傳模式（僅限 daemon 模式，不支援多主機模式）
+		if m.deps.Client == nil {
 			return m, nil
 		}
 		if m.cursor < 0 || m.cursor >= len(m.items) || m.items[m.cursor].Type != ItemSession {

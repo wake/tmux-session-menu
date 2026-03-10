@@ -35,7 +35,8 @@ func CopyLocal(files []string, dstDir string) ([]*tsmv1.UploadedFile, error) {
 
 // ScpUpload 透過 scp 上傳檔案到遠端。
 func ScpUpload(sshTarget string, sshPort int, dstDir string, files []string) ([]*tsmv1.UploadedFile, error) {
-	mkdirArgs := []string{sshTarget, "mkdir", "-p", dstDir}
+	mkdirCmd := fmt.Sprintf("mkdir -p -- '%s'", strings.ReplaceAll(dstDir, "'", "'\\''"))
+	mkdirArgs := []string{sshTarget, mkdirCmd}
 	if sshPort != 0 && sshPort != 22 {
 		mkdirArgs = append([]string{"-p", fmt.Sprintf("%d", sshPort)}, mkdirArgs...)
 	}
@@ -95,8 +96,10 @@ func copyFile(src, dst string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer out.Close()
 
 	n, err := io.Copy(out, in)
+	if closeErr := out.Close(); err == nil {
+		err = closeErr
+	}
 	return n, err
 }

@@ -327,12 +327,16 @@ func TestService_ReportUploadResult(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events := sm.uploadState.DrainEvents()
-	if len(events) != 1 {
-		t.Fatalf("got %d events, want 1", len(events))
+	// Scan() 已被呼叫，事件透過 BuildSnapshot 被 drain 到 snapshot 中
+	snap := sm.Snapshot()
+	if snap == nil {
+		t.Fatal("snapshot is nil")
 	}
-	if len(events[0].Files) != 1 {
-		t.Fatalf("got %d files, want 1", len(events[0].Files))
+	if len(snap.UploadEvents) != 1 {
+		t.Fatalf("got %d events, want 1", len(snap.UploadEvents))
+	}
+	if len(snap.UploadEvents[0].Files) != 1 {
+		t.Fatalf("got %d files, want 1", len(snap.UploadEvents[0].Files))
 	}
 }
 
@@ -349,11 +353,15 @@ func TestService_ReportUploadResult_Error(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events := sm.uploadState.DrainEvents()
-	if len(events) != 1 {
-		t.Fatalf("got %d events, want 1", len(events))
+	// Scan() 已被呼叫，事件透過 BuildSnapshot 被 drain 到 snapshot 中
+	snap := sm.Snapshot()
+	if snap == nil {
+		t.Fatal("snapshot is nil")
 	}
-	if events[0].Error != "scp timeout" {
-		t.Errorf("got error %q, want scp timeout", events[0].Error)
+	if len(snap.UploadEvents) != 1 {
+		t.Fatalf("got %d events, want 1", len(snap.UploadEvents))
+	}
+	if snap.UploadEvents[0].Error != "scp timeout" {
+		t.Errorf("got error %q, want scp timeout", snap.UploadEvents[0].Error)
 	}
 }
