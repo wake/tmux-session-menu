@@ -28,9 +28,10 @@ type StateManager struct {
 	mu   sync.RWMutex
 	last *tsmv1.StateSnapshot
 
-	scanCh      chan struct{}       // debounce channel for Scan() requests
-	running     int32              // atomic: 1 when Run() is active
-	syncedNames map[string]string  // 追蹤已同步的 @tsm_name 值
+	scanCh      chan struct{}     // debounce channel for Scan() requests
+	running     int32             // atomic: 1 when Run() is active
+	syncedNames map[string]string // 追蹤已同步的 @tsm_name 值
+	uploadState *UploadState      // 上傳模式狀態與事件佇列
 }
 
 // NewStateManager 建立新的 StateManager。
@@ -43,6 +44,7 @@ func NewStateManager(mgr *tmux.Manager, st *store.Store, cfg config.Config, stat
 		hub:         hub,
 		scanCh:      make(chan struct{}, 1),
 		syncedNames: make(map[string]string),
+		uploadState: NewUploadState(),
 	}
 }
 
@@ -169,7 +171,11 @@ func (sm *StateManager) Snapshot() *tsmv1.StateSnapshot {
 // 此方法是 public 的，方便測試和 service 層使用。
 func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 	if sm.tmuxMgr == nil {
-		return &tsmv1.StateSnapshot{}
+		snap := &tsmv1.StateSnapshot{}
+		if sm.uploadState.IsUploadMode() {
+			snap.UploadEvents = sm.uploadState.DrainEvents()
+		}
+		return snap
 	}
 
 	sessions, err := sm.tmuxMgr.ListSessions()
@@ -236,7 +242,12 @@ func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 		}
 	}
 
-	return toProtoSnapshot(sessions, groups)
+	snap := toProtoSnapshot(sessions, groups)
+	// 只在上傳模式啟用時才排出事件，避免事件在非上傳畫面被消耗而遺失
+	if sm.uploadState.IsUploadMode() {
+		snap.UploadEvents = sm.uploadState.DrainEvents()
+	}
+	return snap
 }
 
 // detectStatus 整合三層狀態偵測。

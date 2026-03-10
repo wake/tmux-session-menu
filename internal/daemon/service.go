@@ -189,6 +189,65 @@ func (s *Service) DaemonStatus(_ context.Context, _ *emptypb.Empty) (*tsmv1.Daem
 	}, nil
 }
 
+// GetUploadTarget 查詢當前 focused session 的上傳目標。
+func (s *Service) GetUploadTarget(_ context.Context, _ *tsmv1.GetUploadTargetRequest) (*tsmv1.GetUploadTargetResponse, error) {
+	resp := &tsmv1.GetUploadTargetResponse{}
+
+	// 上傳模式
+	if s.state.uploadState.IsUploadMode() {
+		resp.UploadMode = true
+		resp.SessionName = s.state.uploadState.SessionName()
+		if s.tmuxMgr != nil {
+			if path, err := s.tmuxMgr.PaneCurrentPath(resp.SessionName); err == nil {
+				resp.UploadPath = path
+			}
+		}
+		return resp, nil
+	}
+
+	// 自動模式：查詢 focused session
+	snap := s.state.Snapshot()
+	if snap == nil {
+		cfg := loadServerConfig()
+		resp.UploadPath = cfg.Upload.RemotePath
+		return resp, nil
+	}
+
+	// 找 attached session
+	for _, sess := range snap.Sessions {
+		if sess.Attached {
+			resp.SessionName = sess.Name
+			resp.IsClaudeActive = sess.Status == tsmv1.SessionStatus_SESSION_STATUS_RUNNING ||
+				sess.Status == tsmv1.SessionStatus_SESSION_STATUS_WAITING
+			break
+		}
+	}
+
+	// TODO: 遠端 session 偵測需要 hostmgr 整合
+	cfg := loadServerConfig()
+	resp.UploadPath = cfg.Upload.RemotePath
+
+	return resp, nil
+}
+
+// SetUploadMode 設定上傳模式開關。
+func (s *Service) SetUploadMode(_ context.Context, req *tsmv1.SetUploadModeRequest) (*emptypb.Empty, error) {
+	s.state.uploadState.SetMode(req.Enabled, req.SessionName)
+	s.state.Scan()
+	return &emptypb.Empty{}, nil
+}
+
+// ReportUploadResult 回報上傳結果。
+func (s *Service) ReportUploadResult(_ context.Context, req *tsmv1.ReportUploadResultRequest) (*emptypb.Empty, error) {
+	event := &tsmv1.UploadEvent{
+		Files: req.Files,
+		Error: req.Error,
+	}
+	s.state.uploadState.AddEvent(event)
+	s.state.Scan()
+	return &emptypb.Empty{}, nil
+}
+
 // loadServerConfig 讀取伺服器端的 config.toml，讀取失敗時回傳預設值。
 func loadServerConfig() config.Config {
 	cfg := config.Default()

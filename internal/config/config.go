@@ -33,9 +33,14 @@ func (h HostEntry) IsLocal() bool {
 type AgentEntry struct {
 	Name      string `toml:"name"`
 	Command   string `toml:"command"`
-	Group     string `toml:"group"`      // 群組標題（選填）
+	Group     string `toml:"group"` // 群組標題（選填）
 	Enabled   bool   `toml:"enabled"`
 	SortOrder int    `toml:"sort_order"`
+}
+
+// UploadConfig 是拖曳上傳的設定。
+type UploadConfig struct {
+	RemotePath string `toml:"remote_path"` // 自動模式遠端上傳目錄
 }
 
 // Config 是 TSM 的全域設定。
@@ -51,6 +56,7 @@ type Config struct {
 
 	Hosts  []HostEntry  `toml:"hosts"`  // 主機清單
 	Agents []AgentEntry `toml:"agents"` // Agent 預設清單
+	Upload UploadConfig `toml:"upload"` // 拖曳上傳設定
 }
 
 // Default 回傳預設設定。
@@ -71,6 +77,9 @@ func Default() Config {
 		},
 		Hosts: []HostEntry{
 			{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		},
+		Upload: UploadConfig{
+			RemotePath: "/tmp/iterm-upload",
 		},
 	}
 }

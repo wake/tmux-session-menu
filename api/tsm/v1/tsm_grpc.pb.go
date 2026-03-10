@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v6.33.4
-// source: api/proto/tsm/v1/tsm.proto
+// source: tsm/v1/tsm.proto
 
 package tsmv1
 
@@ -20,18 +20,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SessionManager_Watch_FullMethodName          = "/tsm.v1.SessionManager/Watch"
-	SessionManager_CreateSession_FullMethodName  = "/tsm.v1.SessionManager/CreateSession"
-	SessionManager_KillSession_FullMethodName    = "/tsm.v1.SessionManager/KillSession"
-	SessionManager_RenameSession_FullMethodName  = "/tsm.v1.SessionManager/RenameSession"
-	SessionManager_CreateGroup_FullMethodName    = "/tsm.v1.SessionManager/CreateGroup"
-	SessionManager_RenameGroup_FullMethodName    = "/tsm.v1.SessionManager/RenameGroup"
-	SessionManager_MoveSession_FullMethodName    = "/tsm.v1.SessionManager/MoveSession"
-	SessionManager_Reorder_FullMethodName        = "/tsm.v1.SessionManager/Reorder"
-	SessionManager_ToggleCollapse_FullMethodName = "/tsm.v1.SessionManager/ToggleCollapse"
-	SessionManager_DaemonStatus_FullMethodName   = "/tsm.v1.SessionManager/DaemonStatus"
-	SessionManager_GetConfig_FullMethodName      = "/tsm.v1.SessionManager/GetConfig"
-	SessionManager_SetConfig_FullMethodName      = "/tsm.v1.SessionManager/SetConfig"
+	SessionManager_Watch_FullMethodName              = "/tsm.v1.SessionManager/Watch"
+	SessionManager_CreateSession_FullMethodName      = "/tsm.v1.SessionManager/CreateSession"
+	SessionManager_KillSession_FullMethodName        = "/tsm.v1.SessionManager/KillSession"
+	SessionManager_RenameSession_FullMethodName      = "/tsm.v1.SessionManager/RenameSession"
+	SessionManager_CreateGroup_FullMethodName        = "/tsm.v1.SessionManager/CreateGroup"
+	SessionManager_RenameGroup_FullMethodName        = "/tsm.v1.SessionManager/RenameGroup"
+	SessionManager_MoveSession_FullMethodName        = "/tsm.v1.SessionManager/MoveSession"
+	SessionManager_Reorder_FullMethodName            = "/tsm.v1.SessionManager/Reorder"
+	SessionManager_ToggleCollapse_FullMethodName     = "/tsm.v1.SessionManager/ToggleCollapse"
+	SessionManager_DaemonStatus_FullMethodName       = "/tsm.v1.SessionManager/DaemonStatus"
+	SessionManager_GetConfig_FullMethodName          = "/tsm.v1.SessionManager/GetConfig"
+	SessionManager_SetConfig_FullMethodName          = "/tsm.v1.SessionManager/SetConfig"
+	SessionManager_GetUploadTarget_FullMethodName    = "/tsm.v1.SessionManager/GetUploadTarget"
+	SessionManager_SetUploadMode_FullMethodName      = "/tsm.v1.SessionManager/SetUploadMode"
+	SessionManager_ReportUploadResult_FullMethodName = "/tsm.v1.SessionManager/ReportUploadResult"
 )
 
 // SessionManagerClient is the client API for SessionManager service.
@@ -58,6 +61,12 @@ type SessionManagerClient interface {
 	GetConfig(ctx context.Context, in *GetConfigRequest, opts ...grpc.CallOption) (*GetConfigResponse, error)
 	// SetConfig 更新 daemon 所在主機的設定。
 	SetConfig(ctx context.Context, in *SetConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// GetUploadTarget 查詢當前 focused session 的上傳目標。
+	GetUploadTarget(ctx context.Context, in *GetUploadTargetRequest, opts ...grpc.CallOption) (*GetUploadTargetResponse, error)
+	// SetUploadMode 設定上傳模式開關（TUI 控制）。
+	SetUploadMode(ctx context.Context, in *SetUploadModeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// ReportUploadResult 回報上傳結果（coprocess 呼叫）。
+	ReportUploadResult(ctx context.Context, in *ReportUploadResultRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type sessionManagerClient struct {
@@ -197,6 +206,36 @@ func (c *sessionManagerClient) SetConfig(ctx context.Context, in *SetConfigReque
 	return out, nil
 }
 
+func (c *sessionManagerClient) GetUploadTarget(ctx context.Context, in *GetUploadTargetRequest, opts ...grpc.CallOption) (*GetUploadTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUploadTargetResponse)
+	err := c.cc.Invoke(ctx, SessionManager_GetUploadTarget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionManagerClient) SetUploadMode(ctx context.Context, in *SetUploadModeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, SessionManager_SetUploadMode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionManagerClient) ReportUploadResult(ctx context.Context, in *ReportUploadResultRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, SessionManager_ReportUploadResult_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionManagerServer is the server API for SessionManager service.
 // All implementations must embed UnimplementedSessionManagerServer
 // for forward compatibility.
@@ -221,6 +260,12 @@ type SessionManagerServer interface {
 	GetConfig(context.Context, *GetConfigRequest) (*GetConfigResponse, error)
 	// SetConfig 更新 daemon 所在主機的設定。
 	SetConfig(context.Context, *SetConfigRequest) (*emptypb.Empty, error)
+	// GetUploadTarget 查詢當前 focused session 的上傳目標。
+	GetUploadTarget(context.Context, *GetUploadTargetRequest) (*GetUploadTargetResponse, error)
+	// SetUploadMode 設定上傳模式開關（TUI 控制）。
+	SetUploadMode(context.Context, *SetUploadModeRequest) (*emptypb.Empty, error)
+	// ReportUploadResult 回報上傳結果（coprocess 呼叫）。
+	ReportUploadResult(context.Context, *ReportUploadResultRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedSessionManagerServer()
 }
 
@@ -266,6 +311,15 @@ func (UnimplementedSessionManagerServer) GetConfig(context.Context, *GetConfigRe
 }
 func (UnimplementedSessionManagerServer) SetConfig(context.Context, *SetConfigRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetConfig not implemented")
+}
+func (UnimplementedSessionManagerServer) GetUploadTarget(context.Context, *GetUploadTargetRequest) (*GetUploadTargetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUploadTarget not implemented")
+}
+func (UnimplementedSessionManagerServer) SetUploadMode(context.Context, *SetUploadModeRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetUploadMode not implemented")
+}
+func (UnimplementedSessionManagerServer) ReportUploadResult(context.Context, *ReportUploadResultRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportUploadResult not implemented")
 }
 func (UnimplementedSessionManagerServer) mustEmbedUnimplementedSessionManagerServer() {}
 func (UnimplementedSessionManagerServer) testEmbeddedByValue()                        {}
@@ -497,6 +551,60 @@ func _SessionManager_SetConfig_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SessionManager_GetUploadTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUploadTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).GetUploadTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_GetUploadTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).GetUploadTarget(ctx, req.(*GetUploadTargetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SessionManager_SetUploadMode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetUploadModeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).SetUploadMode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_SetUploadMode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).SetUploadMode(ctx, req.(*SetUploadModeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SessionManager_ReportUploadResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportUploadResultRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).ReportUploadResult(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_ReportUploadResult_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).ReportUploadResult(ctx, req.(*ReportUploadResultRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SessionManager_ServiceDesc is the grpc.ServiceDesc for SessionManager service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -548,6 +656,18 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "SetConfig",
 			Handler:    _SessionManager_SetConfig_Handler,
 		},
+		{
+			MethodName: "GetUploadTarget",
+			Handler:    _SessionManager_GetUploadTarget_Handler,
+		},
+		{
+			MethodName: "SetUploadMode",
+			Handler:    _SessionManager_SetUploadMode_Handler,
+		},
+		{
+			MethodName: "ReportUploadResult",
+			Handler:    _SessionManager_ReportUploadResult_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -556,5 +676,5 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "api/proto/tsm/v1/tsm.proto",
+	Metadata: "tsm/v1/tsm.proto",
 }

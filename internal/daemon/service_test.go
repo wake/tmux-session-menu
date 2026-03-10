@@ -249,3 +249,125 @@ func TestService_Reorder_Group(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+// --- Upload RPC 測試 ---
+
+func TestService_GetUploadTarget_Default(t *testing.T) {
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+	svc := NewService(nil, nil, hub, sm)
+
+	resp, err := svc.GetUploadTarget(context.Background(), &tsmv1.GetUploadTargetRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.IsRemote {
+		t.Error("expected local session")
+	}
+	if resp.UploadMode {
+		t.Error("expected upload mode off")
+	}
+	if resp.UploadPath != "/tmp/iterm-upload" {
+		t.Errorf("got upload_path %q, want /tmp/iterm-upload", resp.UploadPath)
+	}
+}
+
+func TestService_GetUploadTarget_UploadMode(t *testing.T) {
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+	svc := NewService(nil, nil, hub, sm)
+
+	sm.uploadState.SetMode(true, "my-session")
+
+	resp, err := svc.GetUploadTarget(context.Background(), &tsmv1.GetUploadTargetRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.UploadMode {
+		t.Error("expected upload mode on")
+	}
+	if resp.SessionName != "my-session" {
+		t.Errorf("got session %q, want my-session", resp.SessionName)
+	}
+}
+
+func TestService_SetUploadMode(t *testing.T) {
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+	svc := NewService(nil, nil, hub, sm)
+
+	_, err := svc.SetUploadMode(context.Background(), &tsmv1.SetUploadModeRequest{
+		Enabled:     true,
+		SessionName: "test-sess",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !sm.uploadState.IsUploadMode() {
+		t.Error("expected upload mode on")
+	}
+	if sm.uploadState.SessionName() != "test-sess" {
+		t.Errorf("got %q, want test-sess", sm.uploadState.SessionName())
+	}
+}
+
+func TestService_ReportUploadResult(t *testing.T) {
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+	svc := NewService(nil, nil, hub, sm)
+
+	// 啟用上傳模式，BuildSnapshot 才會 drain 事件
+	sm.uploadState.SetMode(true, "test-sess")
+
+	_, err := svc.ReportUploadResult(context.Background(), &tsmv1.ReportUploadResultRequest{
+		SessionName: "test-sess",
+		Files: []*tsmv1.UploadedFile{
+			{LocalPath: "/tmp/a.png", RemotePath: "/data/a.png", SizeBytes: 512},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Scan() 已被呼叫，事件透過 BuildSnapshot 被 drain 到 snapshot 中
+	snap := sm.Snapshot()
+	if snap == nil {
+		t.Fatal("snapshot is nil")
+	}
+	if len(snap.UploadEvents) != 1 {
+		t.Fatalf("got %d events, want 1", len(snap.UploadEvents))
+	}
+	if len(snap.UploadEvents[0].Files) != 1 {
+		t.Fatalf("got %d files, want 1", len(snap.UploadEvents[0].Files))
+	}
+}
+
+func TestService_ReportUploadResult_Error(t *testing.T) {
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+	svc := NewService(nil, nil, hub, sm)
+
+	// 啟用上傳模式，BuildSnapshot 才會 drain 事件
+	sm.uploadState.SetMode(true, "test-sess")
+
+	_, err := svc.ReportUploadResult(context.Background(), &tsmv1.ReportUploadResultRequest{
+		SessionName: "test-sess",
+		Error:       "scp timeout",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Scan() 已被呼叫，事件透過 BuildSnapshot 被 drain 到 snapshot 中
+	snap := sm.Snapshot()
+	if snap == nil {
+		t.Fatal("snapshot is nil")
+	}
+	if len(snap.UploadEvents) != 1 {
+		t.Fatalf("got %d events, want 1", len(snap.UploadEvents))
+	}
+	if snap.UploadEvents[0].Error != "scp timeout" {
+		t.Errorf("got error %q, want scp timeout", snap.UploadEvents[0].Error)
+	}
+}

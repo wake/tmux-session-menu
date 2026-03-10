@@ -191,6 +191,30 @@ func (c *Client) SetConfig(ctx context.Context, values []*tsmv1.ConfigValue) err
 	return err
 }
 
+// GetUploadTarget 查詢當前 focused session 的上傳目標。
+func (c *Client) GetUploadTarget(ctx context.Context) (*tsmv1.GetUploadTargetResponse, error) {
+	return c.rpc.GetUploadTarget(ctx, &tsmv1.GetUploadTargetRequest{})
+}
+
+// SetUploadMode 設定上傳模式開關。
+func (c *Client) SetUploadMode(ctx context.Context, enabled bool, sessionName string) error {
+	_, err := c.rpc.SetUploadMode(ctx, &tsmv1.SetUploadModeRequest{
+		Enabled:     enabled,
+		SessionName: sessionName,
+	})
+	return err
+}
+
+// ReportUploadResult 回報上傳結果。
+func (c *Client) ReportUploadResult(ctx context.Context, sessionName string, files []*tsmv1.UploadedFile, uploadErr string) error {
+	_, err := c.rpc.ReportUploadResult(ctx, &tsmv1.ReportUploadResultRequest{
+		SessionName: sessionName,
+		Files:       files,
+		Error:       uploadErr,
+	})
+	return err
+}
+
 // tryConnect 嘗試連線到 unix socket。
 func tryConnect(sockPath string) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
