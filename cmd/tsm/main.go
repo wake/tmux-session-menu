@@ -91,51 +91,41 @@ func main() {
 		return // exit 0
 	}
 
-	if args[0] == "--host" || args[0] == "--local" {
-		runMultiHost(parseHostFlags(args), parseLocalFlag(args))
-		return
-	}
-
-	if args[0] == "--inline" || args[0] == "--popup" {
+	// --host / --local / --inline / --popup 都可能混合出現
+	if hasHostMode(args) || args[0] == "--inline" || args[0] == "--popup" {
 		runWithMode(parseRunMode(args))
 		return
 	}
 
+	// 子命令保持不變
 	if args[0] == "bind" {
 		runBind(args[1:])
 		return
 	}
-
 	if args[0] == "hooks" {
 		runHooks(args[1:])
 		return
 	}
-
 	if args[0] == "status-name" {
 		runStatusName()
 		return
 	}
-
 	if args[0] == "daemon" {
 		runDaemon(args[1:])
 		return
 	}
-
 	if args[0] == "config" {
 		runConfig()
 		return
 	}
-
 	if args[0] == "iterm-coprocess" {
 		runItermCoprocess(args[1:])
 		return
 	}
-
 	if args[0] == "setup" {
 		runSetup(args[1:])
 		return
 	}
-
 	if args[0] == "upgrade" {
 		force := containsFlag(args[1:], "--force") || containsFlag(args[1:], "-f")
 		runUpgrade(force)
@@ -166,7 +156,14 @@ func runWithMode(mode runMode) {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		cmd := osexec.Command("tmux", "display-popup", "-E", "-w", "80%", "-h", "80%", exe, "--inline")
+		// 轉送 CLI 旗標到 popup 子程序（排除 --popup 本身）
+		popupArgs := []string{exe, "--inline"}
+		for _, a := range os.Args[1:] {
+			if a != "--popup" {
+				popupArgs = append(popupArgs, a)
+			}
+		}
+		cmd := osexec.Command("tmux", append([]string{"display-popup", "-E", "-w", "80%", "-h", "80%"}, popupArgs...)...)
 		cmd.Env = append(os.Environ(), "TSM_IN_POPUP=1")
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
@@ -204,11 +201,7 @@ func runClientLauncher(dataDir string) {
 		runRemote(host)
 
 	case launcher.ChoiceLocal:
-		cfg := loadConfig()
-		cfg.InTmux = os.Getenv("TMUX") != ""
-		cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
-		ensureLocalStatusBar(cfg)
-		runTUILegacy(cfg)
+		runTUI()
 
 	case launcher.ChoiceFullSetup:
 		// 切換到 full mode 並執行 setup
@@ -218,27 +211,45 @@ func runClientLauncher(dataDir string) {
 	}
 }
 
-// runMultiHost 以多主機模式啟動 TUI。
-// 使用 HostManager 管理所有主機的連線與快照聚合，
-// 使用者選取 session 後依據所屬主機決定 attach 方式。
-func runMultiHost(hostFlags []string, localFlag bool) {
+// runTUI 是所有 TUI 模式的統一入口。
+// 無論是無參數啟動（local only）、--host/--local 多主機模式，或 client launcher 呼叫，
+// 一律建立 HostManager 管理所有主機的連線與快照聚合。
+func runTUI() {
 	cfg := loadConfig()
 	cfg.InTmux = os.Getenv("TMUX") != ""
 	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
 
 	ensureLocalStatusBar(cfg)
 
-	// 整合主機清單（config.Hosts + --host/--local 旗標）
-	merged := config.MergeHosts(cfg.Hosts, hostFlags, localFlag)
-	cfg.Hosts = merged
+	args := os.Args[1:]
+	hostFlags := parseHostFlags(args)
+	localFlag := parseLocalFlag(args)
+	hostMode := hasHostMode(args)
+
+	// 決定 host 清單
+	if hostMode && (len(hostFlags) > 0 || localFlag) {
+		// 有明確旗標 → merge + 存 config
+		merged := config.MergeHosts(cfg.Hosts, hostFlags, localFlag)
+		cfg.Hosts = merged
+		cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
+		_ = config.SaveConfig(cfgPath, cfg)
+	} else if !hostMode {
+		// tsm 無參數 → 強制只啟用 local，不存 config
+		for i := range cfg.Hosts {
+			if cfg.Hosts[i].IsLocal() {
+				cfg.Hosts[i].Enabled = true
+			} else {
+				cfg.Hosts[i].Enabled = false
+			}
+		}
+	}
+	// else: tsm --host 裸用 → 直接使用 config 中的 enabled 狀態
 
 	// 建立 HostManager
 	mgr := hostmgr.New()
-	for _, h := range merged {
+	for _, h := range cfg.Hosts {
 		mgr.AddHost(h)
 	}
-
-	// 為 local host 設定全域 config（讓 hostmgr 的 connect 可以使用 client.Dial）
 	for _, h := range mgr.Hosts() {
 		if h.IsLocal() {
 			h.SetGlobalConfig(cfg)
@@ -250,11 +261,17 @@ func runMultiHost(hostFlags []string, localFlag bool) {
 	mgr.StartAll(ctx)
 	defer mgr.Close()
 
+	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
 	exec := tmux.NewRealExecutor()
-
 	upgrader := upgrade.DefaultUpgrader()
+
 	for {
-		deps := ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: config.ExpandPath("~/.config/tsm/config.toml"), Upgrader: upgrader}
+		deps := ui.Deps{
+			HostMgr:    mgr,
+			Cfg:        cfg,
+			ConfigPath: cfgPath,
+			Upgrader:   upgrader,
+		}
 		m := ui.NewModel(deps)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 
@@ -265,41 +282,46 @@ func runMultiHost(hostFlags []string, localFlag bool) {
 		}
 
 		fm, ok := finalModel.(ui.Model)
-		if !ok || fm.Selected() == "" {
-			if ok && fm.UpgradeReady() {
-				cancel()
-				runPostUpgrade(fm, cfg)
-				return
-			}
-			if ok && fm.OpenConfig() {
-				runConfig()
-				cfg = loadConfig()
-				cfg.InTmux = os.Getenv("TMUX") != ""
-				cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
-				continue
+		if !ok {
+			return
+		}
+
+		if fm.UpgradeReady() {
+			cancel()
+			runPostUpgrade(fm, cfg)
+			return
+		}
+		if fm.OpenConfig() {
+			runConfig()
+			cfg = loadConfig()
+			cfg.InTmux = os.Getenv("TMUX") != ""
+			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+			continue
+		}
+
+		selected := fm.Selected()
+		if selected == "" {
+			if fm.ExitTmux() && os.Getenv("TMUX") != "" {
+				_ = remote.WriteExitMarker()
+				_ = osexec.Command("tmux", "detach-client").Run()
 			}
 			return
 		}
 
-		// 取得選取的 item，判斷要 attach 到哪台主機
+		// 判斷選取的 session 屬於哪台主機
 		item := fm.SelectedItem()
 		host := mgr.Host(item.HostID)
-		if host == nil {
-			fmt.Fprintf(os.Stderr, "Error: 找不到主機 %s\n", item.HostID)
-			continue
-		}
 
-		if host.IsLocal() {
-			// 本機：使用現有的 switch-client 邏輯
-			switchToSession(fm.Selected(), fm.ReadOnly())
-			// Popup 模式下，切換後直接關閉（避免選單再次出現）
+		if host == nil || host.IsLocal() {
+			// 本機 session
+			switchToSession(selected, fm.ReadOnly())
 			if cfg.InPopup {
 				return
 			}
 			continue
 		}
 
-		// 遠端：套用該主機的 status bar 顏色，然後 SSH attach
+		// 遠端 session — attach
 		hostCfg := host.Config()
 		applyHostBar := func() {
 			if hostCfg.Color != "" {
@@ -315,37 +337,30 @@ func runMultiHost(hostFlags []string, localFlag bool) {
 		}
 
 		applyHostBar()
-		selected := fm.Selected()
 		result := remote.Attach(hostCfg.Address, selected)
-
-		// 恢復本機 status bar
 		_ = tmux.ApplyStatusBar(exec, cfg.Local)
 
 		if result == remote.AttachDetached {
 			if remote.CheckAndClearExitRequested(hostCfg.Address) {
-				return // 使用者按 ctrl+e → 退出整個遠端模式
+				return
 			}
-			continue // 正常 detach → 回到多主機選單
+			continue
 		}
 
-		// 連線中斷 — 顯示重連 popup，等待 HostManager 自動重連後 re-attach
+		// 斷線重連
 		for {
 			if !doMultiHostReconnect(mgr, item.HostID, selected) {
-				break // 使用者選擇回到選單或退出
+				break
 			}
-
-			// 重連成功，重新套用 status bar 並 attach
 			applyHostBar()
 			result = remote.Attach(hostCfg.Address, selected)
 			_ = tmux.ApplyStatusBar(exec, cfg.Local)
-
 			if result == remote.AttachDetached {
 				if remote.CheckAndClearExitRequested(hostCfg.Address) {
-					return // 使用者按 ctrl+e → 退出整個遠端模式
+					return
 				}
-				break // 正常 detach → 回到多主機選單
+				break
 			}
-			// 又斷線 → 迴圈繼續顯示重連 popup
 		}
 	}
 }
@@ -680,126 +695,6 @@ func loadConfig() config.Config {
 		}
 	}
 	return cfg
-}
-
-func runTUI() {
-	cfg := loadConfig()
-	cfg.InTmux = os.Getenv("TMUX") != ""
-	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
-
-	ensureLocalStatusBar(cfg)
-
-	// 嘗試連線 daemon（會自動啟動）
-	c, err := client.Dial(cfg)
-	if err == nil {
-		defer c.Close()
-		runTUIWithClient(c, cfg)
-		return
-	}
-
-	// Daemon 連線失敗，降級到直接模式
-	fmt.Fprintf(os.Stderr, "Warning: daemon 連線失敗，使用直接模式: %v\n", err)
-	runTUILegacy(cfg)
-}
-
-// runTUIWithClient 使用 gRPC daemon 模式啟動 TUI。
-// 使用迴圈確保 config 等子畫面結束後能回到主選單。
-func runTUIWithClient(c *client.Client, cfg config.Config) {
-	for {
-		deps := ui.Deps{
-			Client:   c,
-			Cfg:      cfg,
-			Upgrader: upgrade.DefaultUpgrader(),
-		}
-
-		m := ui.NewModel(deps)
-		p := tea.NewProgram(m, tea.WithAltScreen())
-
-		finalModel, err := p.Run()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-
-		fm, ok := finalModel.(ui.Model)
-		if !ok {
-			return
-		}
-		if fm.UpgradeReady() {
-			c.Close()
-			runPostUpgrade(fm, cfg)
-			return
-		}
-		if fm.OpenConfig() {
-			runConfig()
-			cfg = loadConfig()
-			cfg.InTmux = os.Getenv("TMUX") != ""
-			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
-			continue
-		}
-		handlePostTUI(fm)
-		return
-	}
-}
-
-// runTUILegacy 使用舊的直接模式啟動 TUI（不透過 daemon）。
-// 使用迴圈確保 config 等子畫面結束後能回到主選單。
-func runTUILegacy(cfg config.Config) {
-	dataDir := config.ExpandPath(cfg.DataDir)
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: 無法建立資料目錄 %s: %v\n", dataDir, err)
-	}
-
-	var st *store.Store
-	dbPath := filepath.Join(dataDir, "state.db")
-	if s, err := store.Open(dbPath); err == nil {
-		st = s
-		defer st.Close()
-	} else {
-		fmt.Fprintf(os.Stderr, "Warning: 無法開啟資料庫 %s: %v\n", dbPath, err)
-	}
-
-	exec := tmux.NewRealExecutor()
-	mgr := tmux.NewManager(exec)
-
-	statusDir := filepath.Join(dataDir, "status")
-
-	for {
-		deps := ui.Deps{
-			TmuxMgr:   mgr,
-			Store:     st,
-			Cfg:       cfg,
-			StatusDir: statusDir,
-			Upgrader:  upgrade.DefaultUpgrader(),
-		}
-
-		m := ui.NewModel(deps)
-		p := tea.NewProgram(m, tea.WithAltScreen())
-
-		finalModel, err := p.Run()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-
-		fm, ok := finalModel.(ui.Model)
-		if !ok {
-			return
-		}
-		if fm.UpgradeReady() {
-			runPostUpgrade(fm, cfg)
-			return
-		}
-		if fm.OpenConfig() {
-			runConfig()
-			cfg = loadConfig()
-			cfg.InTmux = os.Getenv("TMUX") != ""
-			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
-			continue
-		}
-		handlePostTUI(fm)
-		return
-	}
 }
 
 // postTUIPath 回傳 post-TUI tmux 指令檔的路徑。
