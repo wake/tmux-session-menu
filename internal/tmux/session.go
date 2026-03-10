@@ -113,6 +113,20 @@ func (m *Manager) CapturePane(name string, lines int) (string, error) {
 	return m.exec.Execute("capture-pane", "-t", name, "-p", "-S", fmt.Sprintf("-%d", lines))
 }
 
+// PaneCurrentPath 取得指定 session 的當前 pane 工作目錄。
+// sessionName 為空時取得當前 session。
+func (m *Manager) PaneCurrentPath(sessionName string) (string, error) {
+	args := []string{"display-message", "-p", "#{pane_current_path}"}
+	if sessionName != "" {
+		args = []string{"display-message", "-t", sessionName, "-p", "#{pane_current_path}"}
+	}
+	out, err := m.exec.Execute(args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // ListPaneTitles 列出所有 pane 的 title，回傳 session name → pane title 的對應。
 func (m *Manager) ListPaneTitles() (map[string]string, error) {
 	output, err := m.exec.Execute("list-panes", "-a", "-F", PaneTitleFormat)
