@@ -353,6 +353,29 @@ func TestSaveConfig_WithAgents(t *testing.T) {
 	assert.Equal(t, "Claude", loaded.Agents[0].Name)
 }
 
+// --- UploadConfig 測試 ---
+
+func TestDefaultUploadConfig(t *testing.T) {
+	cfg := config.Default()
+	if cfg.Upload.RemotePath != "/tmp/iterm-upload" {
+		t.Errorf("got %q, want /tmp/iterm-upload", cfg.Upload.RemotePath)
+	}
+}
+
+func TestLoadUploadConfig(t *testing.T) {
+	data := `
+[upload]
+remote_path = "/data/uploads"
+`
+	cfg, err := config.LoadFromString(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Upload.RemotePath != "/data/uploads" {
+		t.Errorf("got %q, want /data/uploads", cfg.Upload.RemotePath)
+	}
+}
+
 func TestExpandPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
