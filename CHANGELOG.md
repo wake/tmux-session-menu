@@ -2,6 +2,26 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.27.0] - 2026-03-11
+
+### Added
+- 統一 HostManager 啟動路徑：所有模式（單機、多主機）皆走 HostManager，`[h]` 主機管理永遠可用
+- `--host` 旗標：`tsm --host` 讀取設定啟動所有已啟用主機；`tsm --host <name>` 指定主機並覆寫設定
+- `--local` 旗標：僅啟動本地端並覆寫設定，可搭配 `--host` 使用（如 `tsm --local --host air-2019`）
+- `MergeHosts` 新增 `localFlag` 參數，支援 `--local` 語意
+- `FlattenMultiHost` 智慧標題：只有 local 單獨啟用時隱藏主機標題，多主機時全部顯示
+- `[U]` 上傳功能支援 HostManager 模式，`MultiHostSnapshotMsg` 聚合多主機上傳事件
+
+### Changed
+- `--remote` 旗標移除，改用 `--host`（**Breaking Change**）
+- `tsm` 無參數啟動時強制 local-only（不讀 config 中其他 enabled hosts），`[h]` 可用
+- `MergeHosts` 語意變更：有旗標時未指定的主機一律停用（舊版保持原設定）
+- 合併 `runTUI` / `runMultiHost` / `runTUIWithClient` 為統一入口，移除 `runTUILegacy`
+
+### Fixed
+- `--inline --host dev` 混合旗標無法辨識的問題（改用 `hasHostMode()` 全域掃描）
+- Popup 模式正確轉發 `--host` / `--local` 旗標到子程序
+
 ## [0.26.1] - 2026-03-10
 
 ### Fixed
