@@ -2,6 +2,35 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.26.1] - 2026-03-10
+
+### Fixed
+- 重連後清空 stdin 緩衝區，避免 iTerm2 XTVERSION DCS 回應（`P>|iTerm2 x.y.z`）洩漏到遠端 shell 輸入行
+
+## [0.26.0] - 2026-03-10
+
+### Added
+- iTerm2 拖曳上傳整合：`tsm iterm-coprocess` 子命令作為 fileDropCoprocess 處理器
+- 上傳模式（Shift+U）：TUI 中開啟 Upload Modal，拖曳檔案到 iTerm2 即可上傳到 session 工作目錄
+- 自動上傳模式：遠端 session + Claude Code 運行中 → scp 上傳後 bracketed paste 輸出遠端路徑
+- `GetUploadTarget`、`SetUploadMode`、`ReportUploadResult` 三個新 gRPC RPC
+- `UploadState` daemon 端上傳狀態追蹤，Watch stream 推送 `UploadEvent`
+- `internal/upload/` 套件：`CopyLocal`、`ScpUpload`、`FormatBracketedPaste`、`ParseFilenames`
+- `internal/setup/iterm.go`：iTerm2 偵測與 coprocess 自動安裝
+- `PaneCurrentPath` tmux 方法取得當前 pane 工作目錄
+- `UploadConfig` 設定結構（預設 remote_path: `/tmp/iterm-upload`）
+
+### Fixed
+- `DrainEvents` 改為僅在上傳模式啟用時才排出事件，避免事件在非上傳畫面被消耗而遺失
+- SSH 命令注入修正：`ScpUpload` 對目標路徑使用 shell 單引號跳脫
+- `copyFile` 明確關閉檔案並捕獲錯誤（取代 defer）
+- Upload Modal 僅限 gRPC 模式（非多主機模式）可觸發
+
+## [0.25.2] - 2026-03-09
+
+### Fixed
+- `ctrl+e` 在遠端模式下正確退出到筆電 shell
+
 ## [0.25.1] - 2026-03-09
 
 ### Fixed
