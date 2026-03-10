@@ -94,13 +94,16 @@ func (m Model) updateUpload(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // setUploadModeCmd 透過 gRPC 設定上傳模式。
+// 多主機模式下使用 clientForCursor() 路由到正確的主機。
 func (m Model) setUploadModeCmd(enabled bool, sessionName string) tea.Cmd {
+	c := m.clientForCursor()
+	if c == nil {
+		return nil
+	}
 	return func() tea.Msg {
-		if m.deps.Client != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			_ = m.deps.Client.SetUploadMode(ctx, enabled, sessionName)
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = c.SetUploadMode(ctx, enabled, sessionName)
 		return nil
 	}
 }
