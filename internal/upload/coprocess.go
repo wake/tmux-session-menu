@@ -11,6 +11,7 @@ import (
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/remote"
 )
 
 // Action 代表 coprocess 的決策結果。
@@ -61,6 +62,17 @@ func RunCoprocess(filenames []string) {
 		logger.Printf("GetUploadTarget 失敗: %v", err)
 		fmt.Print(FormatLocalPaths(filenames))
 		return
+	}
+
+	// Local daemon 無 session 且非 upload mode → 嘗試 remote daemon。
+	// 注意：fallback 後 c 仍指向 local daemon，ReportUploadResult 會送到 local daemon。
+	// 這在 auto-upload 路徑影響有限（僅錯誤回報），upload mode 在此場景下不會觸發
+	// （TUI 直接連 remote daemon 設定 upload mode）。
+	if resp.SessionName == "" && !resp.UploadMode {
+		if remoteResp := resolveRemoteTarget(ctx, cfg.Hosts, fileExists, dialAndGetTarget); remoteResp != nil {
+			logger.Printf("fallback to remote: host=%s session=%s", remoteResp.SshTarget, remoteResp.SessionName)
+			resp = remoteResp
+		}
 	}
 
 	action := DecideAction(resp)
@@ -114,6 +126,53 @@ func handleAutoUpload(ctx context.Context, c *client.Client, resp *tsmv1.GetUplo
 		remotePaths[i] = r.RemotePath
 	}
 	fmt.Print(FormatBracketedPaste(remotePaths))
+}
+
+// fileExists 檢查檔案是否存在。
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// dialAndGetTarget 連到指定 socket 並取得上傳目標。
+func dialAndGetTarget(ctx context.Context, sockPath string) (*tsmv1.GetUploadTargetResponse, error) {
+	c, err := client.DialSocket(sockPath)
+	if err != nil {
+		return nil, err
+	}
+	defer c.Close()
+	return c.GetUploadTarget(ctx)
+}
+
+// resolveRemoteTarget 在 local daemon 無 session 時，嘗試透過 tunnel socket 連到 remote daemon。
+// 回傳 nil 代表沒有找到可用的 remote daemon。
+func resolveRemoteTarget(
+	ctx context.Context,
+	hosts []config.HostEntry,
+	socketExists func(string) bool,
+	dialAndGet func(ctx context.Context, sockPath string) (*tsmv1.GetUploadTargetResponse, error),
+) *tsmv1.GetUploadTargetResponse {
+	for _, h := range hosts {
+		if h.IsLocal() || !h.Enabled {
+			continue
+		}
+		sockPath := remote.LocalSocketPath(h.Address)
+		if !socketExists(sockPath) {
+			continue
+		}
+		resp, err := dialAndGet(ctx, sockPath)
+		if err != nil {
+			continue
+		}
+		// 有 session 或 upload mode 才算有效
+		if resp.SessionName == "" && !resp.UploadMode {
+			continue
+		}
+		resp.IsRemote = true
+		resp.SshTarget = h.Address
+		return resp
+	}
+	return nil
 }
 
 // ParseFilenames 解析 iTerm2 傳入的 filenames 字串。
