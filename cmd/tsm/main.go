@@ -215,6 +215,9 @@ func runClientLauncher(dataDir string) {
 // 無論是無參數啟動（local only）、--host/--local 多主機模式，或 client launcher 呼叫，
 // 一律建立 HostManager 管理所有主機的連線與快照聚合。
 func runTUI() {
+	// 防禦性清理：移除可能殘留的舊 exit-requested sentinel 檔案
+	remote.RemoveExitMarker()
+
 	cfg := loadConfig()
 	cfg.InTmux = os.Getenv("TMUX") != ""
 	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
@@ -226,12 +229,13 @@ func runTUI() {
 	localFlag := parseLocalFlag(args)
 	hostMode := hasHostMode(args)
 
+	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
+
 	// 決定 host 清單
 	if hostMode && (len(hostFlags) > 0 || localFlag) {
 		// 有明確旗標 → merge + 存 config
 		merged := config.MergeHosts(cfg.Hosts, hostFlags, localFlag)
 		cfg.Hosts = merged
-		cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
 		_ = config.SaveConfig(cfgPath, cfg)
 	} else if !hostMode {
 		// tsm 無參數 → 強制只啟用 local，不存 config
@@ -260,8 +264,6 @@ func runTUI() {
 	defer cancel()
 	mgr.StartAll(ctx)
 	defer mgr.Close()
-
-	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
 	exec := tmux.NewRealExecutor()
 	upgrader := upgrade.DefaultUpgrader()
 
@@ -695,35 +697,6 @@ func loadConfig() config.Config {
 		}
 	}
 	return cfg
-}
-
-// postTUIPath 回傳 post-TUI tmux 指令檔的路徑。
-func postTUIPath() string {
-	return config.ExpandPath("~/.config/tsm/post-tui.conf")
-}
-
-// handlePostTUI 處理 TUI 結束後的動作。
-func handlePostTUI(m ui.Model) {
-	// 先清除舊的 post-tui 檔案，避免 popup 關閉後執行過期指令
-	os.Remove(postTUIPath())
-	// 清除可能殘留的舊 exit-requested sentinel 檔案
-	remote.RemoveExitMarker()
-
-	if selected := m.Selected(); selected != "" {
-		switchToSession(selected, m.ReadOnly())
-		return
-	}
-	if m.OpenConfig() {
-		runConfig()
-		return
-	}
-	// ctrl+e：退出 tmux — 寫入 sentinel 檔案後 detach tmux client
-	if m.ExitTmux() && os.Getenv("TMUX") != "" {
-		// 寫入 sentinel 讓遠端模式的 runRemote() 偵測到需要退出
-		_ = remote.WriteExitMarker()
-		// detach tmux client，使用者離開 tmux 回到外層 shell
-		_ = osexec.Command("tmux", "detach-client").Run()
-	}
 }
 
 func switchToSession(name string, readOnly bool) {
