@@ -82,10 +82,10 @@ type Model struct {
 	selected       string // Enter 選取的 session name
 	selectedHostID string // Enter 選取的 session 所屬主機 ID（多主機模式）
 	readOnly_      bool   // R 鍵：唯讀進入 session
-	exitTmux_   bool   // ctrl+e：退出 tmux
-	openConfig_ bool   // c 鍵：開啟 config TUI
-	watchFailed bool   // remote 模式 Watch stream 失敗
-	err         error
+	exitTmux_      bool   // ctrl+e：退出 tmux
+	openConfig_    bool   // c 鍵：開啟 config TUI
+	watchFailed    bool   // remote 模式 Watch stream 失敗
+	err            error
 
 	// 動畫
 	animFrame int // running 狀態閃動用的 frame 計數器
@@ -125,6 +125,9 @@ type Model struct {
 	upgradeBinPath  string // restart-only 時直接 exec 的路徑
 	upgradeVersion  string
 	upgradeChecking bool // 防止 ctrl+u 重複觸發
+
+	// 上傳模式
+	uploadModal uploadModal
 }
 
 // NewModel 建立初始 Model。
@@ -608,6 +611,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
 		}
+		// 上傳模式：處理 upload events
+		if m.mode == ModeUpload && msg.Snapshot.UploadEvents != nil {
+			for _, event := range msg.Snapshot.UploadEvents {
+				m.uploadModal.addEvent(event)
+			}
+		}
 		// 繼續接收下一個快照；若有 running session 則啟動動畫 tick
 		var cmds []tea.Cmd
 		if m.deps.Client != nil {
@@ -716,6 +725,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateHostPicker(msg)
 		case ModeNewSession:
 			return m.updateNewSession(msg)
+		case ModeUpload:
+			return m.updateUpload(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -873,6 +884,18 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.upgradeChecking = true
 		return m, checkUpgradeCmd(m.deps.Upgrader)
+	case "U":
+		// Shift+U：上傳模式
+		if m.deps.Client == nil && m.deps.HostMgr == nil {
+			return m, nil
+		}
+		if m.cursor < 0 || m.cursor >= len(m.items) || m.items[m.cursor].Type != ItemSession {
+			return m, nil
+		}
+		item := m.items[m.cursor]
+		m.mode = ModeUpload
+		m.uploadModal = newUploadModal(item.Session.Name, item.HostID, item.Session.Path)
+		return m, m.setUploadModeCmd(true, item.Session.Name)
 	case "d":
 		// 刪除 session：僅對 ItemSession 生效
 		if m.cursor >= 0 && m.cursor < len(m.items) {
@@ -1799,6 +1822,9 @@ func (m Model) View() string {
 		b.WriteString(m.renderHostPicker())
 	case ModeNewSession:
 		b.WriteString(m.renderNewSession())
+	case ModeUpload:
+		b.WriteString("\n")
+		b.WriteString(m.uploadModal.view())
 	default:
 		b.WriteString("\n")
 		b.WriteString(m.renderToolbar())

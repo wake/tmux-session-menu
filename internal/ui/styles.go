@@ -16,6 +16,8 @@ var (
 	keyStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#D77757")).Bold(true) // shortcut key: terracotta bold
 	versionStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#C1C1C1"))            // version/hints
 	summaryStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#ABB5F7"))            // AI summary
+	successStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#91E200"))            // success green
+	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B80"))            // error red
 	cursorBgStyle      = lipgloss.NewStyle().Background(lipgloss.Color("#373737"))            // cursor row background
 	previewBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), true, false, false, false).
