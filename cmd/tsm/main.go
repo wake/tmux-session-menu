@@ -91,14 +91,8 @@ func main() {
 		return // exit 0
 	}
 
-	if args[0] == "--remote" || args[0] == "--host" {
-		hosts := parseHostFlags(args)
-		if len(hosts) == 0 {
-			fmt.Fprintln(os.Stderr, "Error: --remote 需要指定主機名稱")
-			fmt.Fprintln(os.Stderr, "Usage: tsm --remote <host> [--remote <host2> ...]")
-			os.Exit(1)
-		}
-		runMultiHost(hosts)
+	if args[0] == "--host" || args[0] == "--local" {
+		runMultiHost(parseHostFlags(args), parseLocalFlag(args))
 		return
 	}
 
@@ -227,15 +221,15 @@ func runClientLauncher(dataDir string) {
 // runMultiHost 以多主機模式啟動 TUI。
 // 使用 HostManager 管理所有主機的連線與快照聚合，
 // 使用者選取 session 後依據所屬主機決定 attach 方式。
-func runMultiHost(remoteFlags []string) {
+func runMultiHost(hostFlags []string, localFlag bool) {
 	cfg := loadConfig()
 	cfg.InTmux = os.Getenv("TMUX") != ""
 	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
 
 	ensureLocalStatusBar(cfg)
 
-	// 整合主機清單（config.Hosts + --remote 旗標）
-	merged := config.MergeHosts(cfg.Hosts, remoteFlags, false)
+	// 整合主機清單（config.Hosts + --host/--local 旗標）
+	merged := config.MergeHosts(cfg.Hosts, hostFlags, localFlag)
 	cfg.Hosts = merged
 
 	// 建立 HostManager
@@ -1006,7 +1000,9 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  --version, -v      顯示版本號")
 	fmt.Fprintln(os.Stderr, "  --inline           強制使用內嵌全螢幕模式")
-	fmt.Fprintln(os.Stderr, "  --remote <host>    透過 SSH 連線遠端主機的 tsm-daemon")
+	fmt.Fprintln(os.Stderr, "  --host             啟動多主機模式（讀取設定中已啟用的主機）")
+	fmt.Fprintln(os.Stderr, "  --host <name>      啟動指定主機（可多次使用，覆寫設定）")
+	fmt.Fprintln(os.Stderr, "  --local            僅啟動本地端（可搭配 --host 使用，覆寫設定）")
 	fmt.Fprintln(os.Stderr, "  --popup            強制使用 tmux popup 模式")
 	fmt.Fprintln(os.Stderr, "  --dry-run          預覽變更，不實際寫入")
 }
