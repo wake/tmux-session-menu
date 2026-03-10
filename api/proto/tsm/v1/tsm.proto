@@ -42,6 +42,7 @@ message Group {
 message StateSnapshot {
   repeated Session sessions = 1;
   repeated Group groups = 2;
+  repeated UploadEvent upload_events = 3;
 }
 
 // WatchRequest 是 Watch RPC 的請求（目前為空，未來可擴充過濾條件）。
@@ -136,6 +137,47 @@ message SetConfigRequest {
   repeated ConfigValue values = 1;
 }
 
+// UploadedFile 代表一個已上傳的檔案。
+message UploadedFile {
+  string local_path = 1;
+  string remote_path = 2;
+  int64 size_bytes = 3;
+}
+
+// UploadEvent 代表一次上傳事件的結果。
+message UploadEvent {
+  repeated UploadedFile files = 1;
+  string error = 2;
+  int64 timestamp = 3;
+}
+
+// GetUploadTargetRequest 查詢當前 focused session 的上傳目標資訊。
+message GetUploadTargetRequest {}
+
+// GetUploadTargetResponse 回傳上傳目標判斷結果。
+message GetUploadTargetResponse {
+  bool upload_mode = 1;
+  bool is_remote = 2;
+  bool is_claude_active = 3;
+  string ssh_target = 4;
+  int32 ssh_port = 5;
+  string upload_path = 6;
+  string session_name = 7;
+}
+
+// SetUploadModeRequest 設定上傳模式開關。
+message SetUploadModeRequest {
+  bool enabled = 1;
+  string session_name = 2;
+}
+
+// ReportUploadResultRequest 回報上傳結果。
+message ReportUploadResultRequest {
+  string session_name = 1;
+  repeated UploadedFile files = 2;
+  string error = 3;
+}
+
 // SessionManager 是 tsm daemon 的核心 gRPC service。
 service SessionManager {
   // Watch 建立 server streaming，持續推送 StateSnapshot。
@@ -159,4 +201,11 @@ service SessionManager {
   rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
   // SetConfig 更新 daemon 所在主機的設定。
   rpc SetConfig(SetConfigRequest) returns (google.protobuf.Empty);
+
+  // GetUploadTarget 查詢當前 focused session 的上傳目標。
+  rpc GetUploadTarget(GetUploadTargetRequest) returns (GetUploadTargetResponse);
+  // SetUploadMode 設定上傳模式開關（TUI 控制）。
+  rpc SetUploadMode(SetUploadModeRequest) returns (google.protobuf.Empty);
+  // ReportUploadResult 回報上傳結果（coprocess 呼叫）。
+  rpc ReportUploadResult(ReportUploadResultRequest) returns (google.protobuf.Empty);
 }
