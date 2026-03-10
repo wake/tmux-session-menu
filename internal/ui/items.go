@@ -90,25 +90,27 @@ func FlattenItems(groups []store.Group, sessions []tmux.Session) []ListItem {
 
 // FlattenMultiHost 將多台主機的快照扁平化為一維列表。
 // 每台主機先放一個 ItemHostTitle，若已連線（Status==2）再展開其 sessions/groups。
+// 例外：若 enabled 的主機只有 local 一台，則隱藏 host title。
 func FlattenMultiHost(snaps []HostSnapshotInput) []ListItem {
+	hideTitle := isLocalOnly(snaps)
+
 	var items []ListItem
 
 	for _, snap := range snaps {
-		// 已停用的主機不顯示
 		if snap.Status == HostStateDisabled {
 			continue
 		}
 
-		// 主機標題列
-		items = append(items, ListItem{
-			Type:      ItemHostTitle,
-			HostID:    snap.HostID,
-			HostColor: snap.Color,
-			HostState: snap.Status,
-			HostError: snap.Error,
-		})
+		if !hideTitle {
+			items = append(items, ListItem{
+				Type:      ItemHostTitle,
+				HostID:    snap.HostID,
+				HostColor: snap.Color,
+				HostState: snap.Status,
+				HostError: snap.Error,
+			})
+		}
 
-		// 僅已連線的主機才展開 sessions
 		if snap.Status == HostStateConnected && len(snap.Sessions) > 0 {
 			sub := FlattenItems(snap.Groups, snap.Sessions)
 			for i := range sub {
@@ -120,4 +122,19 @@ func FlattenMultiHost(snaps []HostSnapshotInput) []ListItem {
 	}
 
 	return items
+}
+
+// isLocalOnly 判斷 enabled 的主機是否只有 local 一台。
+func isLocalOnly(snaps []HostSnapshotInput) bool {
+	enabledCount := 0
+	hasLocalEnabled := false
+	for _, s := range snaps {
+		if s.Status != HostStateDisabled {
+			enabledCount++
+			if s.HostID == "local" {
+				hasLocalEnabled = true
+			}
+		}
+	}
+	return enabledCount == 1 && hasLocalEnabled
 }

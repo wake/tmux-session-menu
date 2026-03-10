@@ -462,7 +462,8 @@ func recvSnapshotCmd(c *client.Client) tea.Cmd {
 
 // MultiHostSnapshotMsg 是多主機模式下從 HostManager 接收的聚合快照訊息。
 type MultiHostSnapshotMsg struct {
-	Snapshots []HostSnapshotInput // 使用 items.go 定義的 UI 端型別
+	Snapshots    []HostSnapshotInput    // 使用 items.go 定義的 UI 端型別
+	UploadEvents []*tsmv1.UploadEvent   // 聚合所有主機的上傳事件
 }
 
 // recvMultiHostCmd 等待 HostManager 快照通知，回傳 MultiHostSnapshotMsg。
@@ -481,6 +482,7 @@ func recvMultiHostCmd(mgr *hostmgr.HostManager) tea.Cmd {
 func buildMultiHostMsg(mgr *hostmgr.HostManager) MultiHostSnapshotMsg {
 	hostSnaps := mgr.Snapshot()
 	var inputs []HostSnapshotInput
+	var uploadEvents []*tsmv1.UploadEvent
 	for _, hs := range hostSnaps {
 		input := HostSnapshotInput{
 			HostID: hs.HostID,
@@ -492,10 +494,11 @@ func buildMultiHostMsg(mgr *hostmgr.HostManager) MultiHostSnapshotMsg {
 		if hs.Snapshot != nil {
 			input.Sessions = ConvertProtoSessions(hs.Snapshot.Sessions)
 			input.Groups = ConvertProtoGroups(hs.Snapshot.Groups)
+			uploadEvents = append(uploadEvents, hs.Snapshot.UploadEvents...)
 		}
 		inputs = append(inputs, input)
 	}
-	return MultiHostSnapshotMsg{Snapshots: inputs}
+	return MultiHostSnapshotMsg{Snapshots: inputs, UploadEvents: uploadEvents}
 }
 
 // clientForCursor 回傳目前游標所在主機的 gRPC 客戶端。
@@ -563,7 +566,7 @@ func (m Model) pollInterval() time.Duration {
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
 	if m.deps.HostMgr != nil {
-		// 多主機模式：立即送出目前快照（含連線中的主機），再等待後續通知
+		// 多主機模式（主要路徑）：立即送出目前快照，再等待後續通知
 		mgr := m.deps.HostMgr
 		return tea.Batch(
 			func() tea.Msg { return buildMultiHostMsg(mgr) },
@@ -571,10 +574,10 @@ func (m Model) Init() tea.Cmd {
 		)
 	}
 	if m.deps.Client != nil {
-		// gRPC daemon 模式：啟動 Watch stream
+		// 單一遠端模式（runRemote 使用）：啟動 Watch stream
 		return watchCmd(m.deps.Client)
 	}
-	// 舊模式：直接輪詢
+	// 舊模式：直接輪詢（保留給測試用）
 	return tea.Batch(
 		loadSessionsCmd(m.deps),
 		tickCmd(m.pollInterval()),
@@ -630,6 +633,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.items = FlattenMultiHost(msg.Snapshots)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
+		}
+		// 上傳模式：處理 upload events
+		if m.mode == ModeUpload && len(msg.UploadEvents) > 0 {
+			for _, event := range msg.UploadEvents {
+				m.uploadModal.addEvent(event)
+			}
 		}
 		var cmds []tea.Cmd
 		cmds = append(cmds, recvMultiHostCmd(m.deps.HostMgr))
@@ -885,8 +894,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.upgradeChecking = true
 		return m, checkUpgradeCmd(m.deps.Upgrader)
 	case "U":
-		// Shift+U：上傳模式（僅限 daemon 模式，不支援多主機模式）
-		if m.deps.Client == nil {
+		// Shift+U：上傳模式（需有 gRPC 連線）
+		if m.clientForCursor() == nil {
 			return m, nil
 		}
 		if m.cursor < 0 || m.cursor >= len(m.items) || m.items[m.cursor].Type != ItemSession {
@@ -1854,7 +1863,7 @@ func (m Model) renderToolbar() string {
 	if m.deps.HostMgr != nil {
 		line2Parts = append(line2Parts, render("[h]", "主機管理"))
 	}
-	if m.deps.Client != nil {
+	if m.deps.HostMgr != nil || m.deps.Client != nil {
 		line2Parts = append(line2Parts, render("[U]", "上傳"))
 	}
 	if m.deps.Upgrader != nil {
