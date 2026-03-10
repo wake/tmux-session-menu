@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
@@ -259,4 +260,76 @@ func TestFlattenItemsUnchanged(t *testing.T) {
 	for i, item := range items {
 		assert.Empty(t, item.HostID, "items[%d].HostID should be empty", i)
 	}
+}
+
+func TestFlattenMultiHostLocalOnlyHidesTitle(t *testing.T) {
+	// 只有 local enabled → 不顯示 host title
+	snaps := []ui.HostSnapshotInput{
+		{
+			HostID:   "local",
+			Name:     "local",
+			Color:    "#5f8787",
+			Status:   2, // connected
+			Sessions: []tmux.Session{{Name: "dev", SortOrder: 0}, {Name: "web", SortOrder: 1}},
+		},
+	}
+
+	items := ui.FlattenMultiHost(snaps)
+
+	// 應只有 2 個 session item，無 host title
+	require.Len(t, items, 2)
+	assert.Equal(t, ui.ItemSession, items[0].Type)
+	assert.Equal(t, "dev", items[0].Session.Name)
+	assert.Equal(t, ui.ItemSession, items[1].Type)
+	assert.Equal(t, "web", items[1].Session.Name)
+}
+
+func TestFlattenMultiHostLocalOnlyWithDisabledOthers(t *testing.T) {
+	// local enabled + 其他 disabled → 只有 local，隱藏標題
+	snaps := []ui.HostSnapshotInput{
+		{
+			HostID:   "local",
+			Name:     "local",
+			Color:    "#5f8787",
+			Status:   2,
+			Sessions: []tmux.Session{{Name: "dev", SortOrder: 0}},
+		},
+		{
+			HostID: "remote-a",
+			Name:   "remote-a",
+			Color:  "#ff0000",
+			Status: 0, // disabled
+		},
+	}
+
+	items := ui.FlattenMultiHost(snaps)
+
+	require.Len(t, items, 1)
+	assert.Equal(t, ui.ItemSession, items[0].Type)
+	assert.Equal(t, "dev", items[0].Session.Name)
+}
+
+func TestFlattenMultiHostSingleRemoteShowsTitle(t *testing.T) {
+	// 只有一台 remote enabled（local disabled）→ 顯示 title
+	snaps := []ui.HostSnapshotInput{
+		{
+			HostID: "local",
+			Name:   "local",
+			Status: 0, // disabled
+		},
+		{
+			HostID:   "remote-a",
+			Name:     "remote-a",
+			Color:    "#ff0000",
+			Status:   2,
+			Sessions: []tmux.Session{{Name: "web", SortOrder: 0}},
+		},
+	}
+
+	items := ui.FlattenMultiHost(snaps)
+
+	require.Len(t, items, 2)
+	assert.Equal(t, ui.ItemHostTitle, items[0].Type)
+	assert.Equal(t, "remote-a", items[0].HostID)
+	assert.Equal(t, ui.ItemSession, items[1].Type)
 }
