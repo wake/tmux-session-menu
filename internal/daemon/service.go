@@ -223,7 +223,7 @@ func (s *Service) GetUploadTarget(_ context.Context, _ *tsmv1.GetUploadTargetReq
 		}
 	}
 
-	// TODO: 遠端 session 偵測需要 hostmgr 整合
+	// IsRemote 由 client 端 coprocess 根據連線來源 overlay，daemon 不需設定。
 	cfg := loadServerConfig()
 	resp.UploadPath = cfg.Upload.RemotePath
 
