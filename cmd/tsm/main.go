@@ -26,6 +26,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
 	"github.com/wake/tmux-session-menu/internal/upgrade"
+	"github.com/wake/tmux-session-menu/internal/upload"
 	"github.com/wake/tmux-session-menu/internal/version"
 )
 
@@ -118,6 +119,11 @@ func main() {
 
 	if args[0] == "config" {
 		runConfig()
+		return
+	}
+
+	if args[0] == "iterm-coprocess" {
+		runItermCoprocess(args[1:])
 		return
 	}
 
@@ -1362,9 +1368,39 @@ func buildSetupComponents() []setup.Component {
 	bindComp.FullOnly = true
 	hooksComp := hooks.BuildComponent()
 	hooksComp.FullOnly = true
-	return []setup.Component{
+	components := []setup.Component{
 		selfinstall.BuildComponent(),
 		bindComp,
 		hooksComp,
 	}
+
+	if setup.DetectIterm2() {
+		components = append(components, setup.Component{
+			Label:       "iTerm2 拖曳上傳",
+			InstallFn:   setup.InstallItermCoprocess,
+			UninstallFn: setup.UninstallItermCoprocess,
+			Checked:     true,
+			Installed:   setup.DetectItermCoprocessInstalled(),
+			Note:        "設定 fileDropCoprocess，支援拖曳檔案自動上傳到遠端",
+		})
+	}
+
+	return components
+}
+
+// runItermCoprocess 執行 iTerm2 fileDropCoprocess 邏輯。
+func runItermCoprocess(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: tsm iterm-coprocess <filenames>")
+		os.Exit(1)
+	}
+	var filenames []string
+	for _, arg := range args {
+		parsed := upload.ParseFilenames(arg)
+		filenames = append(filenames, parsed...)
+	}
+	if len(filenames) == 0 {
+		return
+	}
+	upload.RunCoprocess(filenames)
 }
