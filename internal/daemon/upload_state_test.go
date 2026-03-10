@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
+	"github.com/wake/tmux-session-menu/internal/config"
 )
 
 func TestUploadState_SetMode(t *testing.T) {
@@ -58,5 +59,27 @@ func TestUploadState_SetModeOff_ClearsEvents(t *testing.T) {
 
 	if len(us.DrainEvents()) != 0 {
 		t.Fatal("expected events cleared when mode turned off")
+	}
+}
+
+func TestStateManager_UploadEventsInSnapshot(t *testing.T) {
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+
+	sm.uploadState.AddEvent(&tsmv1.UploadEvent{
+		Files: []*tsmv1.UploadedFile{
+			{LocalPath: "/tmp/test.png", RemotePath: "/data/test.png"},
+		},
+	})
+
+	snap := sm.BuildSnapshot()
+	if len(snap.UploadEvents) != 1 {
+		t.Fatalf("got %d upload events, want 1", len(snap.UploadEvents))
+	}
+
+	// drain 後第二次 snapshot 應為空
+	snap2 := sm.BuildSnapshot()
+	if len(snap2.UploadEvents) != 0 {
+		t.Fatalf("got %d upload events after drain, want 0", len(snap2.UploadEvents))
 	}
 }
