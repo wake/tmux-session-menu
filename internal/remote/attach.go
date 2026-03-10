@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
+	"time"
 )
 
 // AttachResult 代表 SSH attach 工作階段的結果。
@@ -35,10 +37,31 @@ func attachArgs(host, sessionName string) []string {
 	}
 }
 
+// flushStdin 清空終端輸入緩衝區中殘留的 escape sequence 回應。
+// 重連時 Bubble Tea alt screen 退出後，local tmux 可能重新查詢終端，
+// iTerm2 的 XTVERSION DCS 回應會殘留在 stdin，若不清除會洩漏到遠端 shell。
+func flushStdin() {
+	time.Sleep(50 * time.Millisecond)
+	fd := int(os.Stdin.Fd())
+	if err := syscall.SetNonblock(fd, true); err != nil {
+		return
+	}
+	buf := make([]byte, 256)
+	for {
+		n, _ := syscall.Read(fd, buf)
+		if n <= 0 {
+			break
+		}
+	}
+	_ = syscall.SetNonblock(fd, false)
+}
+
 // Attach 啟動 `ssh -t host` 並透過遠端 login shell 執行 tmux attach-session。
 // 使用 login shell 確保 PATH 包含 Homebrew 等非系統路徑。
 // 使用者正常 detach 回傳 AttachDetached，連線中斷回傳 AttachDisconnected。
 func Attach(host, sessionName string) AttachResult {
+	flushStdin()
+
 	args := attachArgs(host, sessionName)
 	cmd := exec.Command("ssh", args...)
 	cmd.Stdin = os.Stdin
