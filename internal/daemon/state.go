@@ -28,10 +28,10 @@ type StateManager struct {
 	mu   sync.RWMutex
 	last *tsmv1.StateSnapshot
 
-	scanCh      chan struct{}       // debounce channel for Scan() requests
-	running     int32              // atomic: 1 when Run() is active
-	syncedNames map[string]string  // 追蹤已同步的 @tsm_name 值
-	uploadState *UploadState       // 上傳模式狀態與事件佇列
+	scanCh      chan struct{}     // debounce channel for Scan() requests
+	running     int32             // atomic: 1 when Run() is active
+	syncedNames map[string]string // 追蹤已同步的 @tsm_name 值
+	uploadState *UploadState      // 上傳模式狀態與事件佇列
 }
 
 // NewStateManager 建立新的 StateManager。
