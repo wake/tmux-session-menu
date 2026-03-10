@@ -119,6 +119,7 @@ internal/
   store/                 資料儲存層（SQLite）
   tmux/                  tmux 偵測、解析與執行
   ui/                    主 TUI 畫面與樣式
+  upload/                iTerm2 拖曳上傳整合（coprocess + 上傳邏輯）
   upgrade/               自動升級（GitHub release）
   version/               版本資訊（ldflags 注入）
 api/                     Protocol Buffers 定義與生成碼

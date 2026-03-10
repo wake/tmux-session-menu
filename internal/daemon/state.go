@@ -172,7 +172,9 @@ func (sm *StateManager) Snapshot() *tsmv1.StateSnapshot {
 func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 	if sm.tmuxMgr == nil {
 		snap := &tsmv1.StateSnapshot{}
-		snap.UploadEvents = sm.uploadState.DrainEvents()
+		if sm.uploadState.IsUploadMode() {
+			snap.UploadEvents = sm.uploadState.DrainEvents()
+		}
 		return snap
 	}
 
@@ -241,7 +243,10 @@ func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 	}
 
 	snap := toProtoSnapshot(sessions, groups)
-	snap.UploadEvents = sm.uploadState.DrainEvents()
+	// 只在上傳模式啟用時才排出事件，避免事件在非上傳畫面被消耗而遺失
+	if sm.uploadState.IsUploadMode() {
+		snap.UploadEvents = sm.uploadState.DrainEvents()
+	}
 	return snap
 }
 

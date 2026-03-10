@@ -317,6 +317,9 @@ func TestService_ReportUploadResult(t *testing.T) {
 	sm := NewStateManager(nil, nil, config.Default(), "", hub)
 	svc := NewService(nil, nil, hub, sm)
 
+	// 啟用上傳模式，BuildSnapshot 才會 drain 事件
+	sm.uploadState.SetMode(true, "test-sess")
+
 	_, err := svc.ReportUploadResult(context.Background(), &tsmv1.ReportUploadResultRequest{
 		SessionName: "test-sess",
 		Files: []*tsmv1.UploadedFile{
@@ -344,6 +347,9 @@ func TestService_ReportUploadResult_Error(t *testing.T) {
 	hub := NewWatcherHub()
 	sm := NewStateManager(nil, nil, config.Default(), "", hub)
 	svc := NewService(nil, nil, hub, sm)
+
+	// 啟用上傳模式，BuildSnapshot 才會 drain 事件
+	sm.uploadState.SetMode(true, "test-sess")
 
 	_, err := svc.ReportUploadResult(context.Background(), &tsmv1.ReportUploadResultRequest{
 		SessionName: "test-sess",

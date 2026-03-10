@@ -66,6 +66,9 @@ func TestStateManager_UploadEventsInSnapshot(t *testing.T) {
 	hub := NewWatcherHub()
 	sm := NewStateManager(nil, nil, config.Default(), "", hub)
 
+	// 啟用上傳模式，BuildSnapshot 才會 drain 事件
+	sm.uploadState.SetMode(true, "test-sess")
+
 	sm.uploadState.AddEvent(&tsmv1.UploadEvent{
 		Files: []*tsmv1.UploadedFile{
 			{LocalPath: "/tmp/test.png", RemotePath: "/data/test.png"},
