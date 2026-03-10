@@ -1854,6 +1854,9 @@ func (m Model) renderToolbar() string {
 	if m.deps.HostMgr != nil {
 		line2Parts = append(line2Parts, render("[h]", "主機管理"))
 	}
+	if m.deps.Client != nil {
+		line2Parts = append(line2Parts, render("[U]", "上傳"))
+	}
 	if m.deps.Upgrader != nil {
 		line2Parts = append(line2Parts, render("[ctrl+u]", "升級"))
 	}

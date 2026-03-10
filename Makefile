@@ -54,11 +54,14 @@ publish: release
 clean:
 	rm -rf bin/ dist/ coverage.out
 
+INSTALL_DIR ?= $(HOME)/.local/bin
+
 install: build
-	install -m 755 bin/$(BINARY) $$(go env GOPATH)/bin/$(BINARY)
+	@mkdir -p $(INSTALL_DIR)
+	install -m 755 bin/$(BINARY) $(INSTALL_DIR)/$(BINARY)
 
 uninstall:
-	rm -f $$(go env GOPATH)/bin/$(BINARY)
+	rm -f $(INSTALL_DIR)/$(BINARY)
 
 run: build
 	./bin/$(BINARY)
