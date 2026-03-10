@@ -11,22 +11,21 @@ import (
 // --- MergeHosts 測試 ---
 
 func TestMergeHostsNoRemoteFlag(t *testing.T) {
-	// 沒有 --remote 旗標時：local 強制啟用，其他保持原狀
+	// 無旗標（localFlag=false, hostFlags=nil）：不修改，直接回傳副本
 	hosts := []config.HostEntry{
 		{Name: "local", Address: "", Color: "#5f8787", Enabled: false, SortOrder: 0},
 		{Name: "server-a", Address: "10.0.0.1", Color: "#73daca", Enabled: true, SortOrder: 1},
 		{Name: "server-b", Address: "10.0.0.2", Color: "#ff9e64", Enabled: false, SortOrder: 2},
 	}
 
-	result := config.MergeHosts(hosts, nil)
+	result := config.MergeHosts(hosts, nil, false)
 
 	require.Len(t, result, 3)
 
-	// local 應強制啟用（即使原本 Enabled=false）
+	// 無旗標時不修改任何狀態，直接回傳副本
 	assert.Equal(t, "local", result[0].Name)
-	assert.True(t, result[0].Enabled, "local 應強制啟用")
+	assert.False(t, result[0].Enabled, "local 保持原狀（false）")
 
-	// 其他主機保持原設定
 	assert.Equal(t, "server-a", result[1].Name)
 	assert.True(t, result[1].Enabled, "server-a 保持啟用")
 
@@ -35,64 +34,57 @@ func TestMergeHostsNoRemoteFlag(t *testing.T) {
 }
 
 func TestMergeHostsNoRemoteFlag_NoLocalHost(t *testing.T) {
-	// 使用者 config 中沒有 local host 時，應自動補上
+	// 無旗標（localFlag=false, hostFlags=nil）且 config 中沒有 local host：不修改，不自動補上
 	hosts := []config.HostEntry{
 		{Name: "server-a", Address: "10.0.0.1", Color: "#73daca", Enabled: true, SortOrder: 1},
 	}
 
-	result := config.MergeHosts(hosts, nil)
+	result := config.MergeHosts(hosts, nil, false)
 
-	// 應自動補上 local host 在最前面
-	require.True(t, len(result) >= 2, "應至少有 local + server-a")
-
-	// 第一筆應為 local
-	assert.True(t, result[0].IsLocal(), "第一筆應為 local host")
-	assert.True(t, result[0].Enabled, "local 應為啟用")
-	assert.Equal(t, "local", result[0].Name)
-
-	// server-a 保持原狀
-	assert.Equal(t, "server-a", result[1].Name)
-	assert.True(t, result[1].Enabled)
+	// 無旗標時不自動補上 local host
+	require.Len(t, result, 1)
+	assert.Equal(t, "server-a", result[0].Name)
+	assert.True(t, result[0].Enabled)
 }
 
 func TestMergeHostsWithRemoteFlags(t *testing.T) {
-	// --remote dev：local 停用，dev 啟用
+	// --host dev：local 停用，dev 啟用，staging 不在旗標中應停用
 	hosts := []config.HostEntry{
 		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
 		{Name: "dev", Address: "10.0.0.1", Color: "#73daca", Enabled: false, SortOrder: 1},
 		{Name: "staging", Address: "10.0.0.2", Color: "#ff9e64", Enabled: true, SortOrder: 2},
 	}
 
-	result := config.MergeHosts(hosts, []string{"dev"})
+	result := config.MergeHosts(hosts, []string{"dev"}, false)
 
 	require.Len(t, result, 3)
 
 	// local 應被停用
 	assert.Equal(t, "local", result[0].Name)
-	assert.False(t, result[0].Enabled, "有 --remote 時 local 應停用")
+	assert.False(t, result[0].Enabled, "有 --host 時 local 應停用")
 
 	// dev 在旗標中 → 應啟用
 	assert.Equal(t, "dev", result[1].Name)
-	assert.True(t, result[1].Enabled, "dev 在 --remote 旗標中應啟用")
+	assert.True(t, result[1].Enabled, "dev 在 --host 旗標中應啟用")
 
-	// staging 不在旗標中 → 保持原設定
+	// staging 不在旗標中應停用
 	assert.Equal(t, "staging", result[2].Name)
-	assert.True(t, result[2].Enabled, "staging 不在旗標中，保持原設定")
+	assert.False(t, result[2].Enabled, "staging 不在旗標中應停用")
 }
 
 func TestMergeHostsNewRemoteHost(t *testing.T) {
-	// --remote newhost：不在清單中的主機應自動新增
+	// --host newhost：不在清單中的主機應自動新增
 	hosts := []config.HostEntry{
 		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
 	}
 
-	result := config.MergeHosts(hosts, []string{"newhost"})
+	result := config.MergeHosts(hosts, []string{"newhost"}, false)
 
 	require.Len(t, result, 2, "應有 local + newhost")
 
 	// local 停用
 	assert.Equal(t, "local", result[0].Name)
-	assert.False(t, result[0].Enabled, "有 --remote 時 local 應停用")
+	assert.False(t, result[0].Enabled, "有 --host 時 local 應停用")
 
 	// 新增的 newhost
 	assert.Equal(t, "newhost", result[1].Name)
@@ -107,7 +99,7 @@ func TestMergeHostsNewRemoteHost_AutoColor(t *testing.T) {
 		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
 	}
 
-	result := config.MergeHosts(hosts, []string{"host-a", "host-b"})
+	result := config.MergeHosts(hosts, []string{"host-a", "host-b"}, false)
 
 	require.Len(t, result, 3)
 
@@ -131,12 +123,12 @@ func TestMergeHostsMatchByAddress(t *testing.T) {
 	}
 
 	// 用 Address 比對
-	result := config.MergeHosts(hosts, []string{"dev.example.com"})
+	result := config.MergeHosts(hosts, []string{"dev.example.com"}, false)
 
 	require.Len(t, result, 2, "不應新增，因為 Address 已匹配")
 
 	// local 停用
-	assert.False(t, result[0].Enabled, "有 --remote 時 local 應停用")
+	assert.False(t, result[0].Enabled, "有 --host 時 local 應停用")
 
 	// my-dev-server 的 Address 匹配旗標 → 應啟用
 	assert.Equal(t, "my-dev-server", result[1].Name)
@@ -150,7 +142,7 @@ func TestMergeHostsMatchByName(t *testing.T) {
 		{Name: "dev", Address: "10.0.0.1", Color: "#73daca", Enabled: false, SortOrder: 1},
 	}
 
-	result := config.MergeHosts(hosts, []string{"dev"})
+	result := config.MergeHosts(hosts, []string{"dev"}, false)
 
 	require.Len(t, result, 2)
 	assert.True(t, result[1].Enabled, "Name 匹配旗標時應啟用")
@@ -165,7 +157,7 @@ func TestMergeHostsPreserveOrder(t *testing.T) {
 		{Name: "gamma", Address: "10.0.0.3", Color: "#c678dd", Enabled: true, SortOrder: 3},
 	}
 
-	result := config.MergeHosts(hosts, []string{"beta"})
+	result := config.MergeHosts(hosts, []string{"beta"}, false)
 
 	require.Len(t, result, 4)
 
@@ -183,7 +175,7 @@ func TestMergeHostsPreserveOrder_NewHostsAppendedAtEnd(t *testing.T) {
 		{Name: "alpha", Address: "10.0.0.1", Color: "#73daca", Enabled: true, SortOrder: 1},
 	}
 
-	result := config.MergeHosts(hosts, []string{"new-host"})
+	result := config.MergeHosts(hosts, []string{"new-host"}, false)
 
 	require.Len(t, result, 3)
 	assert.Equal(t, "local", result[0].Name)
@@ -192,18 +184,71 @@ func TestMergeHostsPreserveOrder_NewHostsAppendedAtEnd(t *testing.T) {
 }
 
 func TestMergeHostsEmptyRemoteFlags(t *testing.T) {
-	// 空的 remoteFlags slice（非 nil）與有值的行為應一致：
-	// 長度為 0 → 視同沒有 --remote，與 nil 相同行為
+	// 空的 hostFlags slice（非 nil）+ localFlag=false：不修改，直接回傳副本
 	hosts := []config.HostEntry{
 		{Name: "local", Address: "", Color: "#5f8787", Enabled: false, SortOrder: 0},
 		{Name: "dev", Address: "10.0.0.1", Color: "#73daca", Enabled: true, SortOrder: 1},
 	}
 
-	result := config.MergeHosts(hosts, []string{})
+	result := config.MergeHosts(hosts, []string{}, false)
 
-	// 空 slice 視同 nil：local 強制啟用
-	assert.True(t, result[0].Enabled, "空 remoteFlags 時 local 應強制啟用")
+	// 無旗標時不修改任何狀態
+	assert.False(t, result[0].Enabled, "無旗標時 local 保持原狀（false）")
 	assert.True(t, result[1].Enabled, "dev 保持原設定")
+}
+
+// --- localFlag 測試 ---
+
+func TestMergeHostsLocalFlagOnly(t *testing.T) {
+	// --local：enable local, disable 其餘
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: false, SortOrder: 0},
+		{Name: "dev", Address: "10.0.0.1", Color: "#73daca", Enabled: true, SortOrder: 1},
+		{Name: "staging", Address: "10.0.0.2", Color: "#ff9e64", Enabled: true, SortOrder: 2},
+	}
+	result := config.MergeHosts(hosts, nil, true)
+	require.Len(t, result, 3)
+	assert.True(t, result[0].Enabled, "local 應啟用")
+	assert.False(t, result[1].Enabled, "dev 應停用")
+	assert.False(t, result[2].Enabled, "staging 應停用")
+}
+
+func TestMergeHostsLocalFlagWithHostFlags(t *testing.T) {
+	// --local --host dev：enable local + dev, disable 其餘
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: false, SortOrder: 0},
+		{Name: "dev", Address: "10.0.0.1", Color: "#73daca", Enabled: false, SortOrder: 1},
+		{Name: "staging", Address: "10.0.0.2", Color: "#ff9e64", Enabled: true, SortOrder: 2},
+	}
+	result := config.MergeHosts(hosts, []string{"dev"}, true)
+	require.Len(t, result, 3)
+	assert.True(t, result[0].Enabled, "local 應啟用（--local）")
+	assert.True(t, result[1].Enabled, "dev 應啟用（--host dev）")
+	assert.False(t, result[2].Enabled, "staging 應停用")
+}
+
+func TestMergeHostsLocalFlagNoLocalInConfig(t *testing.T) {
+	// --local 但 config 中沒有 local host → 自動補上
+	hosts := []config.HostEntry{
+		{Name: "dev", Address: "10.0.0.1", Color: "#73daca", Enabled: true, SortOrder: 0},
+	}
+	result := config.MergeHosts(hosts, nil, true)
+	require.True(t, len(result) >= 2)
+	assert.True(t, result[0].IsLocal(), "應自動補上 local")
+	assert.True(t, result[0].Enabled, "local 應啟用")
+	assert.False(t, result[1].Enabled, "dev 應停用")
+}
+
+func TestMergeHostsNoFlags(t *testing.T) {
+	// 無旗標（tsm 無參數）：不修改，直接回傳副本
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "dev", Address: "10.0.0.1", Color: "#73daca", Enabled: false, SortOrder: 1},
+	}
+	result := config.MergeHosts(hosts, nil, false)
+	require.Len(t, result, 2)
+	assert.True(t, result[0].Enabled, "local 保持啟用")
+	assert.False(t, result[1].Enabled, "dev 保持停用")
 }
 
 // --- DefaultColors 測試 ---

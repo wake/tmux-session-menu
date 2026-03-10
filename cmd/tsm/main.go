@@ -225,7 +225,7 @@ func runMultiHost(remoteFlags []string) {
 	ensureLocalStatusBar(cfg)
 
 	// 整合主機清單（config.Hosts + --remote 旗標）
-	merged := config.MergeHosts(cfg.Hosts, remoteFlags)
+	merged := config.MergeHosts(cfg.Hosts, remoteFlags, false)
 	cfg.Hosts = merged
 
 	// 建立 HostManager

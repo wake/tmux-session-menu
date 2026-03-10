@@ -6,27 +6,28 @@ var DefaultColors = []string{
 	"#C678DD", "#56B6C2", "#E5C07B", "#98C379",
 }
 
-// MergeHosts 整合 config 中的主機清單與 --remote 參數。
+// MergeHosts 整合 config 中的主機清單與 --host / --local 參數。
 //
-// 當 remoteFlags 為 nil 或空：
-//   - local host（IsLocal()==true）強制啟用
-//   - 若清單中不存在 local host，自動在最前面補上
-//   - 其他主機保持原設定
-//
-// 當 remoteFlags 有值：
-//   - 旗標中的主機（以 Name 或 Address 比對）→ 啟用
-//   - 旗標中但不在清單的主機 → 自動新增（enabled=true，自動分配顏色）
-//   - 不在旗標中的主機 → 保持原設定
-//   - local host → 停用
-func MergeHosts(hosts []HostEntry, remoteFlags []string) []HostEntry {
-	if len(remoteFlags) == 0 {
-		return mergeNoRemote(hosts)
+// hostFlags=[], localFlag=false → 不修改，直接回傳副本
+// hostFlags=[], localFlag=true  → 啟用 local（不存在則自動補上），停用其餘
+// hostFlags 有值, localFlag=false → 啟用匹配的主機，停用 local 及未匹配的主機
+// hostFlags 有值, localFlag=true  → 啟用 local + 匹配的主機，停用未匹配的主機
+func MergeHosts(hosts []HostEntry, hostFlags []string, localFlag bool) []HostEntry {
+	if len(hostFlags) == 0 && !localFlag {
+		// 無旗標：直接回傳副本，不修改
+		result := make([]HostEntry, len(hosts))
+		copy(result, hosts)
+		return result
 	}
-	return mergeWithRemote(hosts, remoteFlags)
+	if len(hostFlags) == 0 && localFlag {
+		return mergeLocalOnly(hosts)
+	}
+	return mergeWithFlags(hosts, hostFlags, localFlag)
 }
 
-// mergeNoRemote 處理沒有 --remote 旗標的情況。
-func mergeNoRemote(hosts []HostEntry) []HostEntry {
+// mergeLocalOnly 處理僅有 --local 旗標的情況。
+// 啟用 local host（不存在則自動補上），停用所有其他主機。
+func mergeLocalOnly(hosts []HostEntry) []HostEntry {
 	result := make([]HostEntry, len(hosts))
 	copy(result, hosts)
 
@@ -35,10 +36,12 @@ func mergeNoRemote(hosts []HostEntry) []HostEntry {
 		if result[i].IsLocal() {
 			result[i].Enabled = true
 			hasLocal = true
+		} else {
+			result[i].Enabled = false
 		}
 	}
 
-	// 使用者 config 中沒有 local host 時，自動補上在最前面
+	// config 中沒有 local host 時，自動補上在最前面
 	if !hasLocal {
 		local := HostEntry{
 			Name:      "local",
@@ -53,11 +56,13 @@ func mergeNoRemote(hosts []HostEntry) []HostEntry {
 	return result
 }
 
-// mergeWithRemote 處理有 --remote 旗標的情況。
-func mergeWithRemote(hosts []HostEntry, remoteFlags []string) []HostEntry {
+// mergeWithFlags 處理有 hostFlags 的情況（localFlag 可為 true 或 false）。
+// localFlag=false：停用 local + 未匹配的主機，啟用匹配的主機
+// localFlag=true：啟用 local + 匹配的主機，停用未匹配的主機
+func mergeWithFlags(hosts []HostEntry, hostFlags []string, localFlag bool) []HostEntry {
 	// 建立旗標查詢集合
-	flagSet := make(map[string]bool, len(remoteFlags))
-	for _, f := range remoteFlags {
+	flagSet := make(map[string]bool, len(hostFlags))
+	for _, f := range hostFlags {
 		flagSet[f] = true
 	}
 
@@ -73,28 +78,35 @@ func mergeWithRemote(hosts []HostEntry, remoteFlags []string) []HostEntry {
 	copy(result, hosts)
 
 	// 記錄哪些旗標值已被既有主機匹配
-	matched := make(map[string]bool, len(remoteFlags))
+	matched := make(map[string]bool, len(hostFlags))
 
 	for i := range result {
 		if result[i].IsLocal() {
-			// local host 停用
-			result[i].Enabled = false
+			// local host 依 localFlag 決定啟停
+			result[i].Enabled = localFlag
 			continue
 		}
 
 		// 比對 Name 或 Address
-		if flagSet[result[i].Name] {
+		nameMatch := flagSet[result[i].Name]
+		addrMatch := flagSet[result[i].Address]
+
+		if nameMatch || addrMatch {
 			result[i].Enabled = true
-			matched[result[i].Name] = true
-		}
-		if flagSet[result[i].Address] {
-			result[i].Enabled = true
-			matched[result[i].Address] = true
+			if nameMatch {
+				matched[result[i].Name] = true
+			}
+			if addrMatch {
+				matched[result[i].Address] = true
+			}
+		} else {
+			// 不在旗標中的主機 → 停用
+			result[i].Enabled = false
 		}
 	}
 
 	// 處理旗標中未匹配到的 → 新增主機
-	for _, f := range remoteFlags {
+	for _, f := range hostFlags {
 		if matched[f] {
 			continue
 		}
