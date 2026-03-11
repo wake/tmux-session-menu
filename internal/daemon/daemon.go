@@ -26,9 +26,21 @@ type Daemon struct {
 	cfg       config.Config
 	server    *grpc.Server
 	hub       *WatcherHub
+	mhub      *MultiHostHub  // nil = 一般模式
+	hubMgr    *HubManager    // nil = 一般模式
 	state     *StateManager
 	store     *store.Store
 	cancelRun context.CancelFunc
+}
+
+// hasRemoteHosts 回傳設定中是否有已啟用的非本機主機。
+func hasRemoteHosts(hosts []config.HostEntry) bool {
+	for _, h := range hosts {
+		if !h.IsLocal() && h.Enabled {
+			return true
+		}
+	}
+	return false
 }
 
 // NewDaemon 建立新的 Daemon。
@@ -94,7 +106,24 @@ func (d *Daemon) Run() error {
 	defer d.hub.Close()
 
 	d.state = NewStateManager(mgr, st, d.cfg, statusDir, d.hub)
-	svc := NewService(mgr, st, d.hub, nil, nil, d.state)
+
+	// Hub 模式：若 config 中有非 local 且 enabled 的 host，啟動 HubManager
+	if hasRemoteHosts(d.cfg.Hosts) {
+		d.mhub = NewMultiHostHub()
+		d.hubMgr = NewHubManager(d.mhub)
+		for _, h := range d.cfg.Hosts {
+			d.hubMgr.AddHost(h)
+		}
+		// 將 local WatcherHub 接入 hub
+		for _, h := range d.cfg.Hosts {
+			if h.IsLocal() && h.Enabled {
+				d.hubMgr.attachLocal(d.hub, d.state, h)
+				break
+			}
+		}
+	}
+
+	svc := NewService(mgr, st, d.hub, d.mhub, d.hubMgr, d.state)
 
 	d.server = grpc.NewServer()
 	tsmv1.RegisterSessionManagerServer(d.server, svc)
@@ -126,6 +155,12 @@ func (d *Daemon) Run() error {
 func (d *Daemon) Shutdown() {
 	if d.cancelRun != nil {
 		d.cancelRun()
+	}
+	if d.hubMgr != nil {
+		d.hubMgr.Close()
+	}
+	if d.mhub != nil {
+		d.mhub.Close()
 	}
 	// 先關閉 hub，讓所有 Watch stream 結束，避免 GracefulStop 死鎖
 	if d.hub != nil {
