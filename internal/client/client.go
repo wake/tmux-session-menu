@@ -19,10 +19,11 @@ import (
 
 // Client 封裝 gRPC client，提供與 daemon 通訊的方法。
 type Client struct {
-	conn   *grpc.ClientConn
-	rpc    tsmv1.SessionManagerClient
-	cfg    config.Config
-	stream tsmv1.SessionManager_WatchClient
+	conn     *grpc.ClientConn
+	rpc      tsmv1.SessionManagerClient
+	cfg      config.Config
+	stream   tsmv1.SessionManager_WatchClient
+	mhStream tsmv1.SessionManager_WatchMultiHostClient
 }
 
 // Dial 連線到 daemon。如果連不上會嘗試自動啟動 daemon。
@@ -93,6 +94,45 @@ func (c *Client) RecvSnapshot() (*tsmv1.StateSnapshot, error) {
 		return nil, fmt.Errorf("watch stream not started")
 	}
 	return c.stream.Recv()
+}
+
+// WatchMultiHost 開始監聽多主機聚合快照 stream（hub 模式）。
+func (c *Client) WatchMultiHost(ctx context.Context) error {
+	stream, err := c.rpc.WatchMultiHost(ctx, &tsmv1.WatchMultiHostRequest{})
+	if err != nil {
+		return err
+	}
+	c.mhStream = stream
+	return nil
+}
+
+// RecvMultiHostSnapshot 從 WatchMultiHost stream 接收下一個快照。
+func (c *Client) RecvMultiHostSnapshot() (*tsmv1.MultiHostSnapshot, error) {
+	if c.mhStream == nil {
+		return nil, fmt.Errorf("multi-host watch not started")
+	}
+	return c.mhStream.Recv()
+}
+
+// ProxyMutation 透過 hub 代理操作到目標主機。
+func (c *Client) ProxyMutation(
+	ctx context.Context, hostID string, mutType tsmv1.MutationType,
+	sessionName, newName, groupID string,
+) error {
+	resp, err := c.rpc.ProxyMutation(ctx, &tsmv1.ProxyMutationRequest{
+		HostId:      hostID,
+		Type:        mutType,
+		SessionName: sessionName,
+		NewName:     newName,
+		GroupId:     groupID,
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("proxy mutation failed: %s", resp.Error)
+	}
+	return nil
 }
 
 // CreateSession 建立新的 tmux session。command 為可選的啟動指令（空字串表示不執行）。
