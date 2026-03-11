@@ -770,6 +770,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.upgradeReady = true
 		m.quitting = true
 		return m, tea.Quit
+	case RemoteUpgradeMsg:
+		m, cmd := m.handleRemoteUpgrade(msg)
+		return m, cmd
 	case tea.KeyMsg:
 		switch m.mode {
 		case ModeInput:

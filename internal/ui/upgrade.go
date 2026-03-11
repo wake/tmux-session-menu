@@ -1,6 +1,12 @@
 package ui
 
 import (
+	"bytes"
+	"context"
+	"os/exec"
+	"strings"
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/wake/tmux-session-menu/internal/upgrade"
@@ -15,6 +21,13 @@ const (
 	UpgradeSuccess
 	UpgradeFailed
 )
+
+// RemoteUpgradeMsg 單台遠端升級結果。
+type RemoteUpgradeMsg struct {
+	HostID  string
+	Version string // 成功時的新版本
+	Error   string // 失敗原因
+}
 
 // upgradeItem 代表升級面板中的一台主機。
 type upgradeItem struct {
@@ -81,6 +94,31 @@ func (m Model) enterModeUpgrade(latestVer string, hostVersions map[string]string
 	return m
 }
 
+// remoteUpgradeCmd 回傳一個 Cmd，SSH 執行遠端 tsm upgrade --silent。
+func remoteUpgradeCmd(address, hostID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "ssh", address, "tsm", "upgrade", "--silent")
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		err := cmd.Run()
+		if err != nil {
+			errMsg := strings.TrimSpace(stderr.String())
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			return RemoteUpgradeMsg{HostID: hostID, Error: errMsg}
+		}
+
+		ver := strings.TrimSpace(stdout.String())
+		return RemoteUpgradeMsg{HostID: hostID, Version: ver}
+	}
+}
+
 // updateUpgrade 處理 ModeUpgrade 的按鍵事件。
 func (m Model) updateUpgrade(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.upgradeRunning {
@@ -141,7 +179,7 @@ func (m Model) updateUpgrade(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// startUpgrade 開始升級流程：標記已勾選的遠端項目為 UpgradeRunning_。
+// startUpgrade 開始升級流程：標記已勾選的遠端項目為 UpgradeRunning_ 並並行執行 remoteUpgradeCmd。
 func (m Model) startUpgrade() (tea.Model, tea.Cmd) {
 	hasChecked := false
 	for _, item := range m.upgradeItems {
@@ -157,14 +195,65 @@ func (m Model) startUpgrade() (tea.Model, tea.Cmd) {
 	m.upgradeRunning = true
 	m.upgradeCancelled = false
 
+	var cmds []tea.Cmd
 	for i := range m.upgradeItems {
 		if m.upgradeItems[i].Checked && !m.upgradeItems[i].IsLocal {
 			m.upgradeItems[i].Status = UpgradeRunning_
+			cmds = append(cmds, remoteUpgradeCmd(m.upgradeItems[i].Address, m.upgradeItems[i].HostID))
 		}
 	}
 
-	// TODO: Task 5 會在這裡加入 remoteUpgradeCmd
-	// TODO: Task 6 會在這裡加入 local 升級邏輯
+	if len(cmds) == 0 {
+		// 只有 local 被勾選，沒有遠端目標
+		// TODO: Task 6 會加入 local 升級邏輯
+		return m, nil
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+// handleRemoteUpgrade 處理單台遠端升級結果，並在所有遠端完成後決定後續流程。
+func (m Model) handleRemoteUpgrade(msg RemoteUpgradeMsg) (Model, tea.Cmd) {
+	for i := range m.upgradeItems {
+		if m.upgradeItems[i].HostID == msg.HostID {
+			if msg.Error != "" {
+				m.upgradeItems[i].Status = UpgradeFailed
+				m.upgradeItems[i].Error = msg.Error
+				m.upgradeItems[i].Checked = true // 失敗項自動勾選方便重試
+			} else {
+				m.upgradeItems[i].Status = UpgradeSuccess
+				m.upgradeItems[i].NewVer = msg.Version
+				m.upgradeItems[i].Checked = false
+			}
+			break
+		}
+	}
+
+	// 檢查是否所有遠端都完成
+	allRemoteDone := true
+	for _, item := range m.upgradeItems {
+		if !item.IsLocal && item.Status == UpgradeRunning_ {
+			allRemoteDone = false
+			break
+		}
+	}
+
+	if allRemoteDone {
+		if m.upgradeCancelled {
+			m.upgradeRunning = false
+			return m, nil
+		}
+		// 檢查 local 是否需要升級
+		for i, item := range m.upgradeItems {
+			if item.IsLocal && item.Checked {
+				m.upgradeItems[i].Status = UpgradeRunning_
+				// TODO: Task 6 會觸發 local 升級
+				return m, nil
+			}
+		}
+		// local 未勾選 → 完成
+		m.upgradeRunning = false
+	}
 	return m, nil
 }
 

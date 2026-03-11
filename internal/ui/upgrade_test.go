@@ -224,6 +224,75 @@ func TestUpgrade_CtrlUStartsUpgrade(t *testing.T) {
 	}
 }
 
+func TestUpgrade_RemoteUpgradeSuccess(t *testing.T) {
+	m := setupUpgradeModel(t)
+	// 觸發升級讓遠端項目進入 UpgradeRunning_
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = result.(ui.Model)
+	// 模擬收到遠端升級成功
+	msg := ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"}
+	result, _ = m.Update(msg)
+	model := result.(ui.Model)
+	items := model.UpgradeItems()
+	for _, item := range items {
+		if item.HostID == "air-2019" {
+			assert.Equal(t, ui.UpgradeSuccess, item.Status)
+			assert.Equal(t, "0.28.0", item.NewVer)
+			assert.False(t, item.Checked) // 成功後取消勾選
+		}
+	}
+}
+
+func TestUpgrade_RemoteUpgradeFailed(t *testing.T) {
+	m := setupUpgradeModel(t)
+	// 觸發升級讓遠端項目進入 UpgradeRunning_
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = result.(ui.Model)
+	msg := ui.RemoteUpgradeMsg{HostID: "air-2019", Error: "connection refused"}
+	result, _ = m.Update(msg)
+	model := result.(ui.Model)
+	items := model.UpgradeItems()
+	for _, item := range items {
+		if item.HostID == "air-2019" {
+			assert.Equal(t, ui.UpgradeFailed, item.Status)
+			assert.Equal(t, "connection refused", item.Error)
+			assert.True(t, item.Checked) // 失敗自動勾選
+		}
+	}
+}
+
+func TestUpgrade_AllRemoteDone_RunningStops(t *testing.T) {
+	m := setupUpgradeModel(t)
+	// 先取消 local 勾選
+	// cursor 在 0（local），按 space 取消
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = result.(ui.Model)
+	// 觸發升級
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = result.(ui.Model)
+	assert.True(t, m.UpgradeRunning())
+	// 遠端完成
+	result, _ = m.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"})
+	model := result.(ui.Model)
+	assert.False(t, model.UpgradeRunning()) // local 未勾選，應停止
+}
+
+func TestUpgrade_EscDuringUpgrade_Cancels(t *testing.T) {
+	m := setupUpgradeModel(t)
+	// 觸發升級
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = result.(ui.Model)
+	assert.True(t, m.UpgradeRunning())
+	// Esc
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	model := result.(ui.Model)
+	assert.True(t, model.UpgradeCancelled())
+	// 遠端完成後 running 應停止（因為已取消）
+	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"})
+	model = result.(ui.Model)
+	assert.False(t, model.UpgradeRunning())
+}
+
 func TestUpgrade_LockedDuringRunning(t *testing.T) {
 	m := setupUpgradeModel(t)
 
