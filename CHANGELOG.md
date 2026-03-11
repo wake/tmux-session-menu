@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.28.1] - 2026-03-11
+
+### Fixed
+- 新增 `config.EnsureLocal()` 防禦性確保主機清單中永遠包含 local，避免 config 缺漏導致本機消失
+- 修正 `tsm --host` 裸用語意：直接讀取 config 中的 enabled 狀態，不再強制啟用所有主機
+
 ## [0.28.0] - 2026-03-11
 
 ### Added
