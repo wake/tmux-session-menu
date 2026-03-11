@@ -252,7 +252,10 @@ func runTUI() {
 			}
 		}
 	}
-	// else: tsm --host 裸用 → 直接使用 config 中的 enabled 狀態
+	// else: tsm --host 裸用 → 直接使用 config 中的 enabled 狀態（不存 config）
+
+	// 防禦性確保 local 永遠存在
+	cfg.Hosts = config.EnsureLocal(cfg.Hosts)
 
 	// 建立 HostManager
 	mgr := hostmgr.New()
