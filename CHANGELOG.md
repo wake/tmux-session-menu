@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.28.3] - 2026-03-12
+
+### Fixed
+- Ctrl+Q 動態同步啟動模式：tsm 啟動時將 host 旗標寫入 tmux `@tsm_popup_args`，Ctrl+Q 讀取後重現相同模式
+- 取代 v0.28.2 的靜態 `--host` 寫法，`tsm` 啟動為 local-only、`tsm --host` 啟動為 host mode，Ctrl+Q 皆能正確對應
+
 ## [0.28.2] - 2026-03-12
 
 ### Fixed
