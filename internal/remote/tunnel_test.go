@@ -89,3 +89,40 @@ func TestTunnel_Start_FailsOnBadHost(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve remote socket")
 }
+
+func TestTunnelArgs_WithReverse(t *testing.T) {
+	args := tunnelArgs("mlab", "/tmp/tsm-fwd.sock", "/home/user/.config/tsm/tsm.sock")
+	assert.NotContains(t, args, "-R")
+
+	args = tunnelArgsWithReverse(
+		"mlab",
+		"/tmp/tsm-fwd.sock",
+		"/home/user/.config/tsm/tsm.sock",
+		"/tmp/tsm-reverse-abc.sock",
+		"/home/air/.config/tsm/tsm.sock",
+	)
+	assert.Contains(t, args, "-L")
+	assert.Contains(t, args, "-R")
+
+	for i, a := range args {
+		if a == "-R" {
+			assert.Equal(t, "/tmp/tsm-reverse-abc.sock:/home/air/.config/tsm/tsm.sock", args[i+1])
+			break
+		}
+	}
+}
+
+func TestReverseSocketPath(t *testing.T) {
+	path := ReverseSocketPath("mlab")
+	assert.Contains(t, path, "tsm-hub-")
+	assert.True(t, strings.HasPrefix(path, os.TempDir()))
+	assert.Equal(t, path, ReverseSocketPath("mlab"))
+	assert.NotEqual(t, path, ReverseSocketPath("air"))
+}
+
+func TestNewTunnel_WithReverse(t *testing.T) {
+	tun := NewTunnel("mlab", WithReverse("/home/air/.config/tsm/tsm.sock"))
+	assert.True(t, tun.hasReverse)
+	assert.Equal(t, "/home/air/.config/tsm/tsm.sock", tun.reverseLocalSock)
+	assert.Equal(t, ReverseSocketPath("mlab"), tun.reverseRemoteSock)
+}
