@@ -334,6 +334,12 @@ func TestInstall_UpgradesOutdatedBlock(t *testing.T) {
 	}
 }
 
+func TestBindBlock_HasHubSocketCheck(t *testing.T) {
+	if !strings.Contains(bindBlock, "@tsm_hub_socket") {
+		t.Error("bindBlock 應包含 @tsm_hub_socket 條件判斷")
+	}
+}
+
 func TestBindBlock_DynamicPopupArgs(t *testing.T) {
 	// bindBlock 應透過 tmux @tsm_popup_args 動態決定 host 模式，
 	// 不應寫死 --host 或強制任何模式。

@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+// sshRunFn 執行 SSH 命令，可在測試中替換。
+var sshRunFn = func(name string, args ...string) error {
+	return exec.Command(name, args...).Run()
+}
+
 // AttachResult 代表 SSH attach 工作階段的結果。
 type AttachResult int
 
@@ -54,6 +59,16 @@ func flushStdin() {
 		}
 	}
 	_ = syscall.SetNonblock(fd, false)
+}
+
+// SetHubSocket 在遠端主機的 tmux 設定 hub socket 路徑。
+func SetHubSocket(host, socketPath string) error {
+	return sshRunFn("ssh", host, "tmux", "set-option", "-g", "@tsm_hub_socket", socketPath)
+}
+
+// ClearHubSocket 清除遠端主機的 hub socket 設定。
+func ClearHubSocket(host string) error {
+	return sshRunFn("ssh", host, "tmux", "set-option", "-gu", "@tsm_hub_socket")
 }
 
 // Attach 啟動 `ssh -t host` 並透過遠端 login shell 執行 tmux attach-session。

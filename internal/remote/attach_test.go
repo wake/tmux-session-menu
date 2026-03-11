@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,4 +27,51 @@ func TestAttachArgs_Format(t *testing.T) {
 	args := attachArgs("user@host", "my-session")
 	assert.Equal(t, "-t", args[0])
 	assert.Contains(t, args, "user@host")
+}
+
+func TestSetHubSocket_CallsSSHWithCorrectArgs(t *testing.T) {
+	var capturedName string
+	var capturedArgs []string
+	orig := sshRunFn
+	sshRunFn = func(name string, args ...string) error {
+		capturedName = name
+		capturedArgs = args
+		return nil
+	}
+	defer func() { sshRunFn = orig }()
+
+	err := SetHubSocket("user@host", "/tmp/tsm-hub.sock")
+	if err != nil {
+		t.Fatalf("SetHubSocket unexpected error: %v", err)
+	}
+	assert.Equal(t, "ssh", capturedName)
+	assert.Contains(t, capturedArgs, "user@host")
+	assert.Contains(t, capturedArgs, "@tsm_hub_socket")
+	assert.Contains(t, capturedArgs, "/tmp/tsm-hub.sock")
+
+	// 確認有傳遞 set-option 指令
+	argsStr := strings.Join(capturedArgs, " ")
+	assert.Contains(t, argsStr, "set-option")
+}
+
+func TestClearHubSocket_CallsSSHWithUnsetFlag(t *testing.T) {
+	var capturedArgs []string
+	orig := sshRunFn
+	sshRunFn = func(name string, args ...string) error {
+		capturedArgs = args
+		return nil
+	}
+	defer func() { sshRunFn = orig }()
+
+	err := ClearHubSocket("user@host")
+	if err != nil {
+		t.Fatalf("ClearHubSocket unexpected error: %v", err)
+	}
+	assert.Contains(t, capturedArgs, "user@host")
+	assert.Contains(t, capturedArgs, "@tsm_hub_socket")
+
+	argsStr := strings.Join(capturedArgs, " ")
+	assert.Contains(t, argsStr, "set-option")
+	// 應帶 -gu 旗標（unset global option）
+	assert.Contains(t, capturedArgs, "-gu")
 }
