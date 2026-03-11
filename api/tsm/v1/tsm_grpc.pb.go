@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v6.33.4
-// source: tsm/v1/tsm.proto
+// source: api/proto/tsm/v1/tsm.proto
 
 package tsmv1
 
@@ -35,6 +35,8 @@ const (
 	SessionManager_GetUploadTarget_FullMethodName    = "/tsm.v1.SessionManager/GetUploadTarget"
 	SessionManager_SetUploadMode_FullMethodName      = "/tsm.v1.SessionManager/SetUploadMode"
 	SessionManager_ReportUploadResult_FullMethodName = "/tsm.v1.SessionManager/ReportUploadResult"
+	SessionManager_WatchMultiHost_FullMethodName     = "/tsm.v1.SessionManager/WatchMultiHost"
+	SessionManager_ProxyMutation_FullMethodName      = "/tsm.v1.SessionManager/ProxyMutation"
 )
 
 // SessionManagerClient is the client API for SessionManager service.
@@ -67,6 +69,10 @@ type SessionManagerClient interface {
 	SetUploadMode(ctx context.Context, in *SetUploadModeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// ReportUploadResult 回報上傳結果（coprocess 呼叫）。
 	ReportUploadResult(ctx context.Context, in *ReportUploadResultRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// WatchMultiHost 回傳多主機聚合快照 stream（hub 模式專用）。
+	WatchMultiHost(ctx context.Context, in *WatchMultiHostRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MultiHostSnapshot], error)
+	// ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
+	ProxyMutation(ctx context.Context, in *ProxyMutationRequest, opts ...grpc.CallOption) (*ProxyMutationResponse, error)
 }
 
 type sessionManagerClient struct {
@@ -236,6 +242,35 @@ func (c *sessionManagerClient) ReportUploadResult(ctx context.Context, in *Repor
 	return out, nil
 }
 
+func (c *sessionManagerClient) WatchMultiHost(ctx context.Context, in *WatchMultiHostRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MultiHostSnapshot], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SessionManager_ServiceDesc.Streams[1], SessionManager_WatchMultiHost_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchMultiHostRequest, MultiHostSnapshot]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SessionManager_WatchMultiHostClient = grpc.ServerStreamingClient[MultiHostSnapshot]
+
+func (c *sessionManagerClient) ProxyMutation(ctx context.Context, in *ProxyMutationRequest, opts ...grpc.CallOption) (*ProxyMutationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProxyMutationResponse)
+	err := c.cc.Invoke(ctx, SessionManager_ProxyMutation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionManagerServer is the server API for SessionManager service.
 // All implementations must embed UnimplementedSessionManagerServer
 // for forward compatibility.
@@ -266,6 +301,10 @@ type SessionManagerServer interface {
 	SetUploadMode(context.Context, *SetUploadModeRequest) (*emptypb.Empty, error)
 	// ReportUploadResult 回報上傳結果（coprocess 呼叫）。
 	ReportUploadResult(context.Context, *ReportUploadResultRequest) (*emptypb.Empty, error)
+	// WatchMultiHost 回傳多主機聚合快照 stream（hub 模式專用）。
+	WatchMultiHost(*WatchMultiHostRequest, grpc.ServerStreamingServer[MultiHostSnapshot]) error
+	// ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
+	ProxyMutation(context.Context, *ProxyMutationRequest) (*ProxyMutationResponse, error)
 	mustEmbedUnimplementedSessionManagerServer()
 }
 
@@ -320,6 +359,12 @@ func (UnimplementedSessionManagerServer) SetUploadMode(context.Context, *SetUplo
 }
 func (UnimplementedSessionManagerServer) ReportUploadResult(context.Context, *ReportUploadResultRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportUploadResult not implemented")
+}
+func (UnimplementedSessionManagerServer) WatchMultiHost(*WatchMultiHostRequest, grpc.ServerStreamingServer[MultiHostSnapshot]) error {
+	return status.Error(codes.Unimplemented, "method WatchMultiHost not implemented")
+}
+func (UnimplementedSessionManagerServer) ProxyMutation(context.Context, *ProxyMutationRequest) (*ProxyMutationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProxyMutation not implemented")
 }
 func (UnimplementedSessionManagerServer) mustEmbedUnimplementedSessionManagerServer() {}
 func (UnimplementedSessionManagerServer) testEmbeddedByValue()                        {}
@@ -605,6 +650,35 @@ func _SessionManager_ReportUploadResult_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SessionManager_WatchMultiHost_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchMultiHostRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SessionManagerServer).WatchMultiHost(m, &grpc.GenericServerStream[WatchMultiHostRequest, MultiHostSnapshot]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SessionManager_WatchMultiHostServer = grpc.ServerStreamingServer[MultiHostSnapshot]
+
+func _SessionManager_ProxyMutation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProxyMutationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).ProxyMutation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_ProxyMutation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).ProxyMutation(ctx, req.(*ProxyMutationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SessionManager_ServiceDesc is the grpc.ServiceDesc for SessionManager service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -668,6 +742,10 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ReportUploadResult",
 			Handler:    _SessionManager_ReportUploadResult_Handler,
 		},
+		{
+			MethodName: "ProxyMutation",
+			Handler:    _SessionManager_ProxyMutation_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -675,6 +753,11 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _SessionManager_Watch_Handler,
 			ServerStreams: true,
 		},
+		{
+			StreamName:    "WatchMultiHost",
+			Handler:       _SessionManager_WatchMultiHost_Handler,
+			ServerStreams: true,
+		},
 	},
-	Metadata: "tsm/v1/tsm.proto",
+	Metadata: "api/proto/tsm/v1/tsm.proto",
 }
