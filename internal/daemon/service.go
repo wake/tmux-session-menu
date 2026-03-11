@@ -294,15 +294,13 @@ func (s *Service) WatchMultiHost(
 }
 
 // ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
-// 實際路由由 Chunk 6 實作，此為佔位 stub。
 func (s *Service) ProxyMutation(
 	ctx context.Context, req *tsmv1.ProxyMutationRequest,
 ) (*tsmv1.ProxyMutationResponse, error) {
 	if s.hubMgr == nil {
 		return nil, status.Error(codes.Unavailable, "not in hub mode")
 	}
-	// 實際路由由 Chunk 6 實作
-	return &tsmv1.ProxyMutationResponse{Success: false, Error: "not implemented"}, nil
+	return s.hubMgr.ProxyMutation(ctx, req)
 }
 
 // loadServerConfig 讀取伺服器端的 config.toml，讀取失敗時回傳預設值。
