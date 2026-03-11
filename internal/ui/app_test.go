@@ -2918,3 +2918,116 @@ func TestDownloadUpgradeMsg_RestartOnly(t *testing.T) {
 	assert.True(t, model.UpgradeReady())
 	assert.NotNil(t, cmd) // tea.Quit
 }
+
+// --- ModeUpgrade 入口測試（Task 3）---
+
+func TestModel_CheckUpgradeMsg_EntersModeUpgrade(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Address: "", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "air-2019", Address: "air-2019", Enabled: true})
+
+	deps := ui.Deps{HostMgr: mgr, Upgrader: &upgrade.Upgrader{}}
+	m := ui.NewModel(deps)
+
+	msg := ui.CheckUpgradeMsg{
+		Release:      &upgrade.Release{Version: "0.28.0"},
+		HostVersions: map[string]string{"local": "0.27.0", "air-2019": "0.26.0"},
+	}
+	result, _ := m.Update(msg)
+	model := result.(ui.Model)
+	assert.Equal(t, ui.ModeUpgrade, model.Mode())
+}
+
+func TestModel_CheckUpgradeMsg_NoHostMgr_StaysModeConfirm(t *testing.T) {
+	// 無 HostMgr 時維持既有 ModeConfirm 邏輯
+	origVersion := version.Version
+	version.Version = "1.0.0"
+	defer func() { version.Version = origVersion }()
+
+	m := ui.NewModel(ui.Deps{Upgrader: &upgrade.Upgrader{}})
+
+	msg := ui.CheckUpgradeMsg{
+		Release: &upgrade.Release{
+			Version: "99.0.0",
+			Assets:  map[string]string{upgrade.AssetName(): "https://example.com/dl"},
+		},
+	}
+	result, _ := m.Update(msg)
+	model := result.(ui.Model)
+	assert.Equal(t, ui.ModeConfirm, model.Mode())
+	assert.Contains(t, model.ConfirmPrompt(), "升級")
+}
+
+func TestModel_ModeUpgrade_EscReturnsToNormal(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Address: "", Enabled: true})
+
+	deps := ui.Deps{HostMgr: mgr, Upgrader: &upgrade.Upgrader{}}
+	m := ui.NewModel(deps)
+
+	// 進入 ModeUpgrade
+	msg := ui.CheckUpgradeMsg{
+		Release:      &upgrade.Release{Version: "0.28.0"},
+		HostVersions: map[string]string{"local": "0.27.0"},
+	}
+	result, _ := m.Update(msg)
+	model := result.(ui.Model)
+	assert.Equal(t, ui.ModeUpgrade, model.Mode())
+
+	// 按 Esc 應回到 ModeNormal
+	result2, _ := model.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	model2 := result2.(ui.Model)
+	assert.Equal(t, ui.ModeNormal, model2.Mode())
+}
+
+func TestModel_ModeUpgrade_ItemsPopulated(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Address: "", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "air-2019", Address: "air-2019", Enabled: true})
+
+	deps := ui.Deps{HostMgr: mgr, Upgrader: &upgrade.Upgrader{}}
+	m := ui.NewModel(deps)
+
+	msg := ui.CheckUpgradeMsg{
+		Release:      &upgrade.Release{Version: "0.28.0"},
+		HostVersions: map[string]string{"local": "0.27.0", "air-2019": "0.26.0"},
+	}
+	result, _ := m.Update(msg)
+	model := result.(ui.Model)
+	items := model.UpgradeItems()
+	assert.Len(t, items, 2)
+
+	// local 應在第一個且 IsLocal = true
+	assert.Equal(t, "local", items[0].HostID)
+	assert.True(t, items[0].IsLocal)
+	assert.Equal(t, "0.27.0", items[0].Version)
+	assert.True(t, items[0].Checked, "local 需要升級應預設勾選")
+
+	// 遠端主機
+	assert.Equal(t, "air-2019", items[1].HostID)
+	assert.False(t, items[1].IsLocal)
+	assert.Equal(t, "0.26.0", items[1].Version)
+	assert.True(t, items[1].Checked, "遠端需要升級應預設勾選")
+}
+
+func TestModel_ModeUpgrade_AlreadyLatestNotChecked(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Address: "", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "remote", Address: "10.0.0.1", Enabled: true})
+
+	deps := ui.Deps{HostMgr: mgr, Upgrader: &upgrade.Upgrader{}}
+	m := ui.NewModel(deps)
+
+	msg := ui.CheckUpgradeMsg{
+		Release:      &upgrade.Release{Version: "0.28.0"},
+		HostVersions: map[string]string{"local": "0.28.0", "remote": "0.28.0"},
+	}
+	result, _ := m.Update(msg)
+	model := result.(ui.Model)
+	items := model.UpgradeItems()
+	assert.Len(t, items, 2)
+
+	// 兩台都已是最新，不應預設勾選
+	assert.False(t, items[0].Checked, "local 已是最新不應勾選")
+	assert.False(t, items[1].Checked, "remote 已是最新不應勾選")
+}

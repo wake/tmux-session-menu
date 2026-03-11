@@ -14,6 +14,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
+	"github.com/wake/tmux-session-menu/internal/version"
 )
 
 // Service 實作 tsmv1.SessionManagerServer gRPC 介面。
@@ -186,6 +187,7 @@ func (s *Service) DaemonStatus(_ context.Context, _ *emptypb.Empty) (*tsmv1.Daem
 		Pid:          int32(os.Getpid()),
 		StartedAt:    timestamppb.New(s.startedAt),
 		WatcherCount: int32(s.hub.Count()),
+		Version:      version.Version,
 	}, nil
 }
 

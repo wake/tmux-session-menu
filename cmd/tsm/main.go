@@ -128,6 +128,11 @@ func main() {
 	}
 	if args[0] == "upgrade" {
 		force := containsFlag(args[1:], "--force") || containsFlag(args[1:], "-f")
+		silent := containsFlag(args[1:], "--silent")
+		if silent {
+			runSilentUpgrade()
+			return
+		}
 		runUpgrade(force)
 		return
 	}
@@ -863,7 +868,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  hooks install      安裝 tsm hooks 到 Claude Code settings")
 	fmt.Fprintln(os.Stderr, "  hooks uninstall    移除 tsm hooks")
 	fmt.Fprintln(os.Stderr, "  status-name        輸出當前 session 自訂名稱（供 tmux status bar 使用）")
-	fmt.Fprintln(os.Stderr, "  upgrade [--force]  檢查並升級到最新版本")
+	fmt.Fprintln(os.Stderr, "  upgrade [--force] [--silent]  檢查並升級到最新版本")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  --version, -v      顯示版本號")
@@ -1140,6 +1145,70 @@ func runUpgrade(force bool) {
 	os.Remove(tmpPath)
 }
 
+// runSilentUpgrade 執行非互動升級（供遠端 SSH 呼叫）。
+// stdout 只印一行版本號，錯誤走 stderr。不做 syscall.Exec。
+// atomicInstallBinary 以 atomic rename 安裝下載的 binary 到偵測到的安裝路徑。
+func atomicInstallBinary(tmpPath string) (string, error) {
+	det := selfinstall.Detect()
+	targetDir := filepath.Dir(det.Path)
+	if targetDir == "" || targetDir == "." {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("無法取得 home 目錄: %w", err)
+		}
+		targetDir = filepath.Join(home, ".local", "bin")
+	}
+	target := filepath.Join(targetDir, "tsm")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return "", fmt.Errorf("無法建立目錄: %w", err)
+	}
+	// Atomic: 複製 tmp → target.tmp，再 rename → target
+	tmpTarget := target + ".tmp"
+	data, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return "", fmt.Errorf("讀取下載檔案失敗: %w", err)
+	}
+	if err := os.WriteFile(tmpTarget, data, 0o755); err != nil {
+		return "", fmt.Errorf("寫入暫存檔失敗: %w", err)
+	}
+	if err := os.Rename(tmpTarget, target); err != nil {
+		os.Remove(tmpTarget)
+		return "", fmt.Errorf("替換執行檔失敗: %w", err)
+	}
+	return target, nil
+}
+
+func runSilentUpgrade() {
+	u := upgrade.DefaultUpgrader()
+	cfg := loadConfig()
+
+	ops := upgrade.SilentOps{
+		CurrentVersion: upgrade.ExtractSemver(version.Version),
+		CheckLatest:    u.CheckLatest,
+		Download:       u.Download,
+		InstallBinary:  atomicInstallBinary,
+		RemoveTmp: func(path string) {
+			os.Remove(path)
+		},
+		StopDaemon: func() error {
+			if daemon.IsRunning(cfg) {
+				return daemon.Stop(cfg)
+			}
+			return nil
+		},
+		StartDaemon: func() error {
+			return daemon.Start(cfg)
+		},
+	}
+
+	result, err := upgrade.RunSilent(ops)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+	fmt.Println(result.Version)
+}
+
 // runPostUpgrade 執行 TUI 退出後的升級流程。
 // 支援兩種模式：
 //   - 一般升級（tmpPath != ""）：安裝下載的 binary → 重啟 daemon → exec
@@ -1161,35 +1230,7 @@ func runPostUpgrade(m ui.Model, cfg config.Config) {
 	}
 
 	ops := upgrade.PostUpgradeOps{
-		InstallBinary: func(tmp string) (string, error) {
-			det := selfinstall.Detect()
-			targetDir := filepath.Dir(det.Path)
-			if targetDir == "" || targetDir == "." {
-				home, err := os.UserHomeDir()
-				if err != nil {
-					return "", fmt.Errorf("無法取得 home 目錄: %w", err)
-				}
-				targetDir = filepath.Join(home, ".local", "bin")
-			}
-			target := filepath.Join(targetDir, "tsm")
-			if err := os.MkdirAll(targetDir, 0o755); err != nil {
-				return "", fmt.Errorf("無法建立目錄: %w", err)
-			}
-			// Atomic: 複製 tmp → target.tmp，再 rename → target
-			tmpTarget := target + ".tmp"
-			data, err := os.ReadFile(tmp)
-			if err != nil {
-				return "", fmt.Errorf("讀取下載檔案失敗: %w", err)
-			}
-			if err := os.WriteFile(tmpTarget, data, 0o755); err != nil {
-				return "", fmt.Errorf("寫入暫存檔失敗: %w", err)
-			}
-			if err := os.Rename(tmpTarget, target); err != nil {
-				os.Remove(tmpTarget)
-				return "", fmt.Errorf("替換執行檔失敗: %w", err)
-			}
-			return target, nil
-		},
+		InstallBinary: atomicInstallBinary,
 		RemoveTmp: func(path string) {
 			os.Remove(path)
 		},

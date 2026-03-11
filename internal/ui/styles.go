@@ -19,6 +19,15 @@ var (
 	successStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#91E200"))            // success green
 	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B80"))            // error red
 	cursorBgStyle      = lipgloss.NewStyle().Background(lipgloss.Color("#373737"))            // cursor row background
+	activeTabStyle     = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#1a1b26")).
+				Background(lipgloss.Color("#7aa2f7")).
+				Padding(0, 1)
+	inactiveTabStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#787fa0")).
+				Background(lipgloss.Color("#24283b")).
+				Padding(0, 1)
 	previewBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), true, false, false, false).
 				BorderForeground(lipgloss.Color("#505050")) // subtle
