@@ -68,6 +68,35 @@ func parseLocalFlag(args []string) bool {
 	return containsFlag(args, "--local")
 }
 
+// buildPopupHostArgs 從命令列參數中萃取 host 相關旗標，
+// 供寫入 tmux @tsm_popup_args，讓 Ctrl+Q 重現相同模式。
+func buildPopupHostArgs(args []string) string {
+	var parts []string
+	for i, a := range args {
+		if a == "--local" {
+			parts = append(parts, "--local")
+		}
+		if a == "--host" {
+			parts = append(parts, "--host")
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+				parts = append(parts, args[i+1])
+			}
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// tmuxExecFn 可在測試中替換。
+var tmuxExecFn = func(args ...string) {
+	osexec.Command("tmux", args...).Run()
+}
+
+// syncPopupArgs 將 host 相關旗標寫入 tmux @tsm_popup_args，
+// 讓 Ctrl+Q 快捷鍵重現相同的啟動模式。
+func syncPopupArgs(hostArgs string) {
+	tmuxExecFn("set-option", "-g", "@tsm_popup_args", hostArgs)
+}
+
 // hasHostMode 回傳命令列中是否指定了多主機模式（--host 或 --local）。
 func hasHostMode(args []string) bool {
 	return containsFlag(args, "--host") || containsFlag(args, "--local")
@@ -253,6 +282,11 @@ func runTUI() {
 		}
 	}
 	// else: tsm --host 裸用 → 直接使用 config 中的 enabled 狀態（不存 config）
+
+	// 同步 host 旗標到 tmux @tsm_popup_args，讓 Ctrl+Q 重現相同模式
+	if cfg.InTmux {
+		syncPopupArgs(buildPopupHostArgs(args))
+	}
 
 	// 防禦性確保 local 永遠存在
 	cfg.Hosts = config.EnsureLocal(cfg.Hosts)
