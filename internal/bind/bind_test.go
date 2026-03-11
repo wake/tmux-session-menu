@@ -334,15 +334,18 @@ func TestInstall_UpgradesOutdatedBlock(t *testing.T) {
 	}
 }
 
-func TestBindBlock_IncludesHostFlag(t *testing.T) {
-	// Ctrl+Q 快捷鍵命令應包含 --host，以沿用 config 中已儲存的主機設定。
-	// 缺少 --host 會導致 hasHostMode 回傳 false → 強制只顯示 local。
-	if !strings.Contains(bindBlock, "--host") {
-		t.Error("bindBlock 應包含 --host 以沿用 config 中的主機設定")
+func TestBindBlock_DynamicPopupArgs(t *testing.T) {
+	// bindBlock 應透過 tmux @tsm_popup_args 動態決定 host 模式，
+	// 不應寫死 --host 或強制任何模式。
+	if !strings.Contains(bindBlock, "@tsm_popup_args") {
+		t.Error("bindBlock 應包含 @tsm_popup_args 以動態決定 host 模式")
+	}
+	if strings.Contains(bindBlock, `"tsm --host`) {
+		t.Error("bindBlock 不應寫死 --host")
 	}
 }
 
-func TestInstall_BindCommandIncludesHostFlag(t *testing.T) {
+func TestInstall_BindCommandHasDynamicPopupArgs(t *testing.T) {
 	tmp := t.TempDir()
 	confPath := filepath.Join(tmp, ".tmux.conf")
 
@@ -358,9 +361,8 @@ func TestInstall_BindCommandIncludesHostFlag(t *testing.T) {
 	data, _ := os.ReadFile(confPath)
 	content := string(data)
 
-	// 安裝後的 tmux.conf 應包含 --host
-	if !strings.Contains(content, "tsm --host --inline") {
-		t.Errorf("安裝後的命令應為 'tsm --host --inline'，實際內容:\n%s", content)
+	if !strings.Contains(content, "@tsm_popup_args") {
+		t.Errorf("安裝後應包含 @tsm_popup_args，實際內容:\n%s", content)
 	}
 }
 
