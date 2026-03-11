@@ -116,6 +116,7 @@ message DaemonStatusResponse {
   int32 pid = 1;
   google.protobuf.Timestamp started_at = 2;
   int32 watcher_count = 3;
+  string version = 4;
 }
 
 // ConfigValue 代表一個設定鍵值對。

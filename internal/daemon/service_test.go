@@ -16,6 +16,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
+	"github.com/wake/tmux-session-menu/internal/version"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -228,6 +229,7 @@ func TestService_DaemonStatus(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Pid > 0)
 	assert.NotNil(t, resp.StartedAt)
+	assert.Equal(t, version.Version, resp.Version)
 }
 
 func TestService_Reorder_Group(t *testing.T) {

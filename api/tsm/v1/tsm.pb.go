@@ -950,6 +950,7 @@ type DaemonStatusResponse struct {
 	Pid           int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
 	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	WatcherCount  int32                  `protobuf:"varint,3,opt,name=watcher_count,json=watcherCount,proto3" json:"watcher_count,omitempty"`
+	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1003,6 +1004,13 @@ func (x *DaemonStatusResponse) GetWatcherCount() int32 {
 		return x.WatcherCount
 	}
 	return 0
+}
+
+func (x *DaemonStatusResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
 }
 
 // ConfigValue 代表一個設定鍵值對。
@@ -1619,12 +1627,13 @@ const file_tsm_v1_tsm_proto_rawDesc = "" +
 	"\bgroup_id\x18\x02 \x01(\x03R\agroupId\x12$\n" +
 	"\x0enew_sort_order\x18\x03 \x01(\x05R\fnewSortOrder\"2\n" +
 	"\x15ToggleCollapseRequest\x12\x19\n" +
-	"\bgroup_id\x18\x01 \x01(\x03R\agroupId\"\x88\x01\n" +
+	"\bgroup_id\x18\x01 \x01(\x03R\agroupId\"\xa2\x01\n" +
 	"\x14DaemonStatusResponse\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x129\n" +
 	"\n" +
 	"started_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12#\n" +
-	"\rwatcher_count\x18\x03 \x01(\x05R\fwatcherCount\"5\n" +
+	"\rwatcher_count\x18\x03 \x01(\x05R\fwatcherCount\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\"5\n" +
 	"\vConfigValue\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"\x12\n" +
