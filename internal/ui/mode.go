@@ -12,6 +12,7 @@ const (
 	ModeHostPicker             // 主機管理面板
 	ModeNewSession             // 新建 session 多欄位表單
 	ModeUpload                 // 上傳模式
+	ModeUpgrade                // 升級面板
 )
 
 // InputTarget 標識文字輸入的目的。

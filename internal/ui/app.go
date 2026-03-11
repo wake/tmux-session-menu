@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -126,6 +127,14 @@ type Model struct {
 	upgradeVersion  string
 	upgradeChecking bool // 防止 ctrl+u 重複觸發
 
+	// 升級面板
+	upgradeItems     []upgradeItem
+	upgradeCursor    int
+	upgradeRunning   bool
+	upgradeCancelled bool
+	upgradeLatestVer string
+	upgradeBtnFocus  int // 0=升級按鈕, 1=取消按鈕
+
 	// 上傳模式
 	uploadModal uploadModal
 }
@@ -159,8 +168,9 @@ type SessionsMsg struct {
 type CheckUpgradeMsg struct {
 	Release       *upgrade.Release
 	Err           error
-	InstalledVer  string // 磁碟上已安裝的版本（semver 部分）
-	InstalledPath string // 已安裝的路徑
+	InstalledVer  string            // 磁碟上已安裝的版本（semver 部分）
+	InstalledPath string            // 已安裝的路徑
+	HostVersions  map[string]string // hostID → version（遠端 DaemonStatus 取得）
 }
 
 // DownloadUpgradeMsg 下載結果。
@@ -170,7 +180,8 @@ type DownloadUpgradeMsg struct {
 }
 
 // checkUpgradeCmd 回傳一個 Bubble Tea Cmd，非同步呼叫 Upgrader.CheckLatest 並偵測已安裝版本。
-func checkUpgradeCmd(u *upgrade.Upgrader) tea.Cmd {
+// 當 mgr 不為 nil 時，會並行收集各主機的版本資訊。
+func checkUpgradeCmd(u *upgrade.Upgrader, mgr *hostmgr.HostManager) tea.Cmd {
 	return func() tea.Msg {
 		rel, err := u.CheckLatest()
 
@@ -182,10 +193,45 @@ func checkUpgradeCmd(u *upgrade.Upgrader) tea.Cmd {
 			installedPath = det.Path
 		}
 
-		if err != nil {
-			return CheckUpgradeMsg{Err: err, InstalledVer: installedVer, InstalledPath: installedPath}
+		// 收集各主機版本
+		var hostVersions map[string]string
+		if mgr != nil {
+			hostVersions = make(map[string]string)
+			hosts := mgr.Hosts()
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+			for _, h := range hosts {
+				if h.IsLocal() {
+					hostVersions[h.ID()] = upgrade.ExtractSemver(version.Version)
+					continue
+				}
+				c := h.Client()
+				if c == nil {
+					hostVersions[h.ID()] = ""
+					continue
+				}
+				wg.Add(1)
+				go func(hostID string, cl *client.Client) {
+					defer wg.Done()
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					resp, rpcErr := cl.DaemonStatus(ctx)
+					mu.Lock()
+					defer mu.Unlock()
+					if rpcErr != nil || resp.Version == "" {
+						hostVersions[hostID] = ""
+					} else {
+						hostVersions[hostID] = upgrade.ExtractSemver(resp.Version)
+					}
+				}(h.ID(), c)
+			}
+			wg.Wait()
 		}
-		return CheckUpgradeMsg{Release: &rel, InstalledVer: installedVer, InstalledPath: installedPath}
+
+		if err != nil {
+			return CheckUpgradeMsg{Err: err, InstalledVer: installedVer, InstalledPath: installedPath, HostVersions: hostVersions}
+		}
+		return CheckUpgradeMsg{Release: &rel, InstalledVer: installedVer, InstalledPath: installedPath, HostVersions: hostVersions}
 	}
 }
 
@@ -686,6 +732,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.confirmPrompt = fmt.Sprintf("檢查失敗：%v", msg.Err)
 			return m, nil
 		}
+		// 多主機模式：進入升級面板
+		if m.deps.HostMgr != nil && msg.HostVersions != nil && msg.Release != nil {
+			return m.enterModeUpgrade(msg.Release.Version, msg.HostVersions), nil
+		}
 		if !upgrade.NeedsUpgrade(version.Version, msg.Release.Version) {
 			// GitHub 已是最新，但磁碟上的 binary 可能已由其他 tab 更新
 			if msg.InstalledVer != "" && upgrade.NeedsUpgrade(version.Version, msg.InstalledVer) {
@@ -736,6 +786,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateNewSession(msg)
 		case ModeUpload:
 			return m.updateUpload(msg)
+		case ModeUpgrade:
+			return m.updateUpgrade(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -892,7 +944,7 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.upgradeChecking = true
-		return m, checkUpgradeCmd(m.deps.Upgrader)
+		return m, checkUpgradeCmd(m.deps.Upgrader, m.deps.HostMgr)
 	case "U":
 		// Shift+U：上傳模式（需有 gRPC 連線）
 		if m.clientForCursor() == nil {
