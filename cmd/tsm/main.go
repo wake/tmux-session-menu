@@ -102,6 +102,16 @@ func hasHostMode(args []string) bool {
 	return containsFlag(args, "--host") || containsFlag(args, "--local")
 }
 
+// parseHubSocket 從命令列參數中取得 --hub-socket 的值。
+func parseHubSocket(args []string) string {
+	for i, a := range args {
+		if a == "--hub-socket" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
 func main() {
 	args := os.Args[1:]
 
@@ -286,6 +296,32 @@ func runTUI() {
 	// 同步 host 旗標到 tmux @tsm_popup_args，讓 Ctrl+Q 重現相同模式
 	if cfg.InTmux {
 		syncPopupArgs(buildPopupHostArgs(args))
+	}
+
+	// Hub 模式：若提供 --hub-socket，嘗試透過 reverse tunnel socket 連線到 hub daemon
+	// 連線失敗時 graceful degradation 到 local 模式
+	hubSocket := parseHubSocket(args)
+	if hubSocket != "" {
+		c, err := client.DialSocket(hubSocket)
+		if err == nil {
+			if wErr := c.WatchMultiHost(context.Background()); wErr == nil {
+				deps := ui.Deps{
+					Client:  c,
+					Cfg:     cfg,
+					HubMode: true,
+				}
+				p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
+				if _, err := p.Run(); err != nil {
+					fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
+					os.Exit(1)
+				}
+				return
+			}
+			c.Close()
+		}
+		// graceful degradation: hub socket 不可用 → 降級為 local 模式
+		fmt.Fprintf(os.Stderr, "hub socket 連線失敗，降級為 local 模式\n")
+		// fall through to normal mode
 	}
 
 	// 防禦性確保 local 永遠存在
