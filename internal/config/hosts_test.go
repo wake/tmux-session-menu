@@ -251,6 +251,36 @@ func TestMergeHostsNoFlags(t *testing.T) {
 	assert.False(t, result[1].Enabled, "dev 保持停用")
 }
 
+// --- EnsureLocal 測試 ---
+
+func TestEnsureLocal_AlreadyExists(t *testing.T) {
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true},
+		{Name: "mlab", Address: "mlab", Color: "#5B9BD5", Enabled: true},
+	}
+	result := config.EnsureLocal(hosts)
+	require.Len(t, result, 2, "已有 local 時不應新增")
+	assert.Equal(t, "local", result[0].Name)
+}
+
+func TestEnsureLocal_Missing(t *testing.T) {
+	hosts := []config.HostEntry{
+		{Name: "mlab", Address: "mlab", Color: "#5B9BD5", Enabled: true},
+	}
+	result := config.EnsureLocal(hosts)
+	require.Len(t, result, 2, "應自動補上 local")
+	assert.True(t, result[0].IsLocal(), "local 應在最前面")
+	assert.True(t, result[0].Enabled, "自動補上的 local 應啟用")
+	assert.Equal(t, "mlab", result[1].Name, "既有主機保持在後面")
+}
+
+func TestEnsureLocal_EmptyList(t *testing.T) {
+	result := config.EnsureLocal(nil)
+	require.Len(t, result, 1)
+	assert.True(t, result[0].IsLocal())
+	assert.True(t, result[0].Enabled)
+}
+
 // --- DefaultColors 測試 ---
 
 func TestDefaultColors(t *testing.T) {

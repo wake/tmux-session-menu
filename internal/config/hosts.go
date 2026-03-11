@@ -6,6 +6,24 @@ var DefaultColors = []string{
 	"#C678DD", "#56B6C2", "#E5C07B", "#98C379",
 }
 
+// EnsureLocal 確保主機清單中包含 local 主機。
+// 若不存在則自動補上在最前面（Enabled=true）。
+func EnsureLocal(hosts []HostEntry) []HostEntry {
+	for _, h := range hosts {
+		if h.IsLocal() {
+			return hosts
+		}
+	}
+	local := HostEntry{
+		Name:      "local",
+		Address:   "",
+		Color:     "#5f8787",
+		Enabled:   true,
+		SortOrder: 0,
+	}
+	return append([]HostEntry{local}, hosts...)
+}
+
 // MergeHosts 整合 config 中的主機清單與 --host / --local 參數。
 //
 // hostFlags=[], localFlag=false → 不修改，直接回傳副本
