@@ -334,6 +334,36 @@ func TestInstall_UpgradesOutdatedBlock(t *testing.T) {
 	}
 }
 
+func TestBindBlock_IncludesHostFlag(t *testing.T) {
+	// Ctrl+Q 快捷鍵命令應包含 --host，以沿用 config 中已儲存的主機設定。
+	// 缺少 --host 會導致 hasHostMode 回傳 false → 強制只顯示 local。
+	if !strings.Contains(bindBlock, "--host") {
+		t.Error("bindBlock 應包含 --host 以沿用 config 中的主機設定")
+	}
+}
+
+func TestInstall_BindCommandIncludesHostFlag(t *testing.T) {
+	tmp := t.TempDir()
+	confPath := filepath.Join(tmp, ".tmux.conf")
+
+	origFn := tmuxConfPathFn
+	tmuxConfPathFn = func() (string, error) { return confPath, nil }
+	defer func() { tmuxConfPathFn = origFn }()
+
+	_, err := Install(false)
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+
+	data, _ := os.ReadFile(confPath)
+	content := string(data)
+
+	// 安裝後的 tmux.conf 應包含 --host
+	if !strings.Contains(content, "tsm --host --inline") {
+		t.Errorf("安裝後的命令應為 'tsm --host --inline'，實際內容:\n%s", content)
+	}
+}
+
 func TestRemoveBlock(t *testing.T) {
 	input := "line1\n# [tsm] begin\nbind-key stuff\n# [tsm] end\nline2\n"
 	got := removeBlock(input)
