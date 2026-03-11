@@ -555,14 +555,10 @@ type HubSnapshotMsg struct {
 	Err      error
 }
 
-// watchHubCmd 開始監聽 hub daemon 的 WatchMultiHost stream。
+// watchHubCmd 從已建立的 WatchMultiHost stream 接收第一個快照。
+// 呼叫前必須已在 main.go 中呼叫 c.WatchMultiHost() 建立 stream。
 func watchHubCmd(c *client.Client) tea.Cmd {
-	return func() tea.Msg {
-		if err := c.WatchMultiHost(context.Background()); err != nil {
-			return HubSnapshotMsg{Err: err}
-		}
-		return recvHubSnapshotCmd(c)()
-	}
+	return recvHubSnapshotCmd(c)
 }
 
 // recvHubSnapshotCmd 從 WatchMultiHost stream 接收下一個快照。

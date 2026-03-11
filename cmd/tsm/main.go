@@ -304,19 +304,25 @@ func runTUI() {
 	if hubSocket != "" {
 		c, err := client.DialSocket(hubSocket)
 		if err == nil {
-			if wErr := c.WatchMultiHost(context.Background()); wErr == nil {
+			hubCtx, hubCancel := context.WithCancel(context.Background())
+			if wErr := c.WatchMultiHost(hubCtx); wErr == nil {
 				deps := ui.Deps{
 					Client:  c,
 					Cfg:     cfg,
 					HubMode: true,
 				}
 				p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
-				if _, err := p.Run(); err != nil {
-					fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
+				if _, runErr := p.Run(); runErr != nil {
+					fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
+					hubCancel()
+					c.Close()
 					os.Exit(1)
 				}
+				hubCancel()
+				c.Close()
 				return
 			}
+			hubCancel()
 			c.Close()
 		}
 		// graceful degradation: hub socket 不可用 → 降級為 local 模式

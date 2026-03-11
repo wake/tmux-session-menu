@@ -25,6 +25,10 @@ type HubManager struct {
 	order           []string
 	mhub            *MultiHostHub
 	localMutationFn func(req *tsmv1.ProxyMutationRequest) error
+
+	// attachLocal 清理用
+	localHub *WatcherHub
+	localCh  <-chan *tsmv1.StateSnapshot
 }
 
 // hubHost 記錄單台主機的設定、狀態與最新快照。
@@ -108,6 +112,8 @@ func (m *HubManager) attachLocal(hub *WatcherHub, state *StateManager, cfg confi
 			tsmv1.HostStatus_HOST_STATUS_CONNECTED, snap, "")
 	}
 	ch := hub.Register()
+	m.localHub = hub
+	m.localCh = ch
 	go func() {
 		for snap := range ch {
 			m.updateHostSnapshot(cfg.Name, cfg,
@@ -132,6 +138,12 @@ func (m *HubManager) ProxyMutation(
 ) (*tsmv1.ProxyMutationResponse, error) {
 	m.mu.RLock()
 	h, ok := m.hosts[req.HostId]
+	var isLocal bool
+	var mc MutationClient
+	if ok {
+		isLocal = h.isLocal
+		mc = h.client
+	}
 	m.mu.RUnlock()
 
 	if !ok {
@@ -142,14 +154,14 @@ func (m *HubManager) ProxyMutation(
 
 	var err error
 	switch {
-	case h.isLocal:
+	case isLocal:
 		if m.localMutationFn != nil {
 			err = m.localMutationFn(req)
 		} else {
 			err = fmt.Errorf("local mutation handler not configured")
 		}
-	case h.client != nil:
-		err = m.dispatchRemoteMutation(ctx, h.client, req)
+	case mc != nil:
+		err = m.dispatchRemoteMutation(ctx, mc, req)
 	default:
 		return &tsmv1.ProxyMutationResponse{
 			Success: false, Error: "host not connected: " + req.HostId,
@@ -172,7 +184,7 @@ func (m *HubManager) dispatchRemoteMutation(
 	case tsmv1.MutationType_MUTATION_KILL_SESSION:
 		return c.KillSession(ctx, req.SessionName)
 	case tsmv1.MutationType_MUTATION_RENAME_SESSION:
-		return c.RenameSession(ctx, req.SessionName, req.NewName, req.NewName)
+		return c.RenameSession(ctx, req.SessionName, req.NewName, "")
 	case tsmv1.MutationType_MUTATION_CREATE_SESSION:
 		return c.CreateSession(ctx, req.SessionName, "", "")
 	case tsmv1.MutationType_MUTATION_MOVE_SESSION:
@@ -184,7 +196,9 @@ func (m *HubManager) dispatchRemoteMutation(
 	}
 }
 
-// Close 關閉所有連線。
+// Close 關閉所有連線並清理 goroutine。
 func (m *HubManager) Close() {
-	// 目前只管理 state，tunnel/client 由後續 chunk 加入
+	if m.localHub != nil && m.localCh != nil {
+		m.localHub.Unregister(m.localCh)
+	}
 }
