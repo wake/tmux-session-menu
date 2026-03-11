@@ -2,6 +2,11 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.28.2] - 2026-03-12
+
+### Fixed
+- Ctrl+Q 快捷鍵加入 `--host` 旗標，沿用 config 中已儲存的主機設定，不再強制 local-only
+
 ## [0.28.1] - 2026-03-11
 
 ### Fixed
