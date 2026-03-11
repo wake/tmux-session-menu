@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -24,16 +26,21 @@ type Service struct {
 	tmuxMgr   *tmux.Manager
 	store     *store.Store
 	hub       *WatcherHub
+	mhub      *MultiHostHub // nil = 非 hub 模式
+	hubMgr    *HubManager  // nil = 非 hub 模式
 	state     *StateManager
 	startedAt time.Time
 }
 
 // NewService 建立新的 gRPC service。
-func NewService(mgr *tmux.Manager, st *store.Store, hub *WatcherHub, state *StateManager) *Service {
+// mhub 與 hubMgr 為 nil 時表示非 hub 模式。
+func NewService(mgr *tmux.Manager, st *store.Store, hub *WatcherHub, mhub *MultiHostHub, hubMgr *HubManager, state *StateManager) *Service {
 	return &Service{
 		tmuxMgr:   mgr,
 		store:     st,
 		hub:       hub,
+		mhub:      mhub,
+		hubMgr:    hubMgr,
 		state:     state,
 		startedAt: time.Now(),
 	}
@@ -248,6 +255,54 @@ func (s *Service) ReportUploadResult(_ context.Context, req *tsmv1.ReportUploadR
 	s.state.uploadState.AddEvent(event)
 	s.state.Scan()
 	return &emptypb.Empty{}, nil
+}
+
+// WatchMultiHost 建立 server streaming，持續推送 MultiHostSnapshot（hub 模式專用）。
+func (s *Service) WatchMultiHost(
+	req *tsmv1.WatchMultiHostRequest,
+	stream tsmv1.SessionManager_WatchMultiHostServer,
+) error {
+	if s.mhub == nil {
+		return status.Error(codes.Unavailable, "not in hub mode")
+	}
+
+	// 推送初始快照
+	if s.hubMgr != nil {
+		if snap := s.hubMgr.Snapshot(); snap != nil && len(snap.Hosts) > 0 {
+			if err := stream.Send(snap); err != nil {
+				return err
+			}
+		}
+	}
+
+	ch := s.mhub.Register()
+	defer s.mhub.Unregister(ch)
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case snap, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if err := stream.Send(snap); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
+// 實際路由由 Chunk 6 實作，此為佔位 stub。
+func (s *Service) ProxyMutation(
+	ctx context.Context, req *tsmv1.ProxyMutationRequest,
+) (*tsmv1.ProxyMutationResponse, error) {
+	if s.hubMgr == nil {
+		return nil, status.Error(codes.Unavailable, "not in hub mode")
+	}
+	// 實際路由由 Chunk 6 實作
+	return &tsmv1.ProxyMutationResponse{Success: false, Error: "not implemented"}, nil
 }
 
 // loadServerConfig 讀取伺服器端的 config.toml，讀取失敗時回傳預設值。

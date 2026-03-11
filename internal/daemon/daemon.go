@@ -94,7 +94,7 @@ func (d *Daemon) Run() error {
 	defer d.hub.Close()
 
 	d.state = NewStateManager(mgr, st, d.cfg, statusDir, d.hub)
-	svc := NewService(mgr, st, d.hub, d.state)
+	svc := NewService(mgr, st, d.hub, nil, nil, d.state)
 
 	d.server = grpc.NewServer()
 	tsmv1.RegisterSessionManagerServer(d.server, svc)
