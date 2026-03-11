@@ -1268,11 +1268,7 @@ func runItermCoprocess(args []string) {
 		fmt.Fprintln(os.Stderr, "usage: tsm iterm-coprocess <filenames>")
 		os.Exit(1)
 	}
-	var filenames []string
-	for _, arg := range args {
-		parsed := upload.ParseFilenames(arg)
-		filenames = append(filenames, parsed...)
-	}
+	filenames := upload.ReconstructFilenames(args)
 	if len(filenames) == 0 {
 		return
 	}

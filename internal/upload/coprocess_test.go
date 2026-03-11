@@ -245,6 +245,72 @@ func TestResolveRemoteTarget_UploadModeReturned(t *testing.T) {
 	}
 }
 
+func TestReconstructFilenames(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "no spaces",
+			args: []string{"/tmp/a.png", "/tmp/b.png"},
+			want: []string{"/tmp/a.png", "/tmp/b.png"},
+		},
+		{
+			name: "single file with spaces (CleanShot)",
+			args: []string{"/Users/wake/Desktop/CleanShot", "2026-03-11", "at", "12.08.54@2x.png"},
+			want: []string{"/Users/wake/Desktop/CleanShot 2026-03-11 at 12.08.54@2x.png"},
+		},
+		{
+			name: "mixed",
+			args: []string{"/tmp/a.png", "/Users/wake/Desktop/Clean", "Shot.png"},
+			want: []string{"/tmp/a.png", "/Users/wake/Desktop/Clean Shot.png"},
+		},
+		{
+			name: "two files both with spaces",
+			args: []string{"/tmp/a", "b.png", "/tmp/c", "d.png"},
+			want: []string{"/tmp/a b.png", "/tmp/c d.png"},
+		},
+		{
+			name: "three files mixed",
+			args: []string{"/tmp/ok.png", "/tmp/has", "space.png", "/tmp/also", "has", "space.jpg"},
+			want: []string{"/tmp/ok.png", "/tmp/has space.png", "/tmp/also has space.jpg"},
+		},
+		{
+			name: "directory with spaces",
+			args: []string{"/Users/wake/My", "Documents/"},
+			want: []string{"/Users/wake/My Documents/"},
+		},
+		{
+			name: "single file",
+			args: []string{"/tmp/a.png"},
+			want: []string{"/tmp/a.png"},
+		},
+		{
+			name: "empty",
+			args: nil,
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ReconstructFilenames(tt.args)
+			if len(got) == 0 && len(tt.want) == 0 {
+				return
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("got[%d]=%q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestParseFilenames(t *testing.T) {
 	tests := []struct {
 		name string

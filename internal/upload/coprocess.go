@@ -175,6 +175,29 @@ func resolveRemoteTarget(
 	return nil
 }
 
+// ReconstructFilenames 將被 shell word splitting 拆開的絕對路徑片段重組。
+// iTerm2 fileDropCoprocess 的 \(filenames) 替換不會 shell-escape，
+// 導致含空格的檔名被拆成多個 args。因為拖放路徑一定是絕對路徑（/ 開頭），
+// 以 / 開頭的 arg 作為新檔案的起點，其餘片段用空格接回前一個檔案。
+func ReconstructFilenames(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	var result []string
+	var parts []string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "/") && len(parts) > 0 {
+			result = append(result, strings.Join(parts, " "))
+			parts = nil
+		}
+		parts = append(parts, arg)
+	}
+	if len(parts) > 0 {
+		result = append(result, strings.Join(parts, " "))
+	}
+	return result
+}
+
 // ParseFilenames 解析 iTerm2 傳入的 filenames 字串。
 func ParseFilenames(raw string) []string {
 	raw = strings.TrimSpace(raw)
