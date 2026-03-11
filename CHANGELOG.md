@@ -2,6 +2,15 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.28.0] - 2026-03-11
+
+### Added
+- 多主機同步升級：ctrl+u 顯示升級面板，列出所有主機版本，可勾選批次升級
+- `tsm upgrade --silent` 非互動升級模式，供遠端 SSH 呼叫
+- `DaemonStatusResponse.version` gRPC 欄位，支援查詢遠端 daemon 版本
+- ModeUpgrade TUI 面板：即時顯示遠端升級進度，支援重試失敗項目
+- 底部 tab 按鈕列（activeTabStyle / inactiveTabStyle），可鍵盤導航
+
 ## [0.27.1] - 2026-03-11
 
 ### Fixed

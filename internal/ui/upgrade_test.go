@@ -373,6 +373,33 @@ func TestUpgrade_LocalOnlyUpgrade(t *testing.T) {
 	}
 }
 
+func TestUpgrade_FullFlow_RemoteThenLocal(t *testing.T) {
+	m := setupUpgradeModel(t)
+	assert.Equal(t, ui.ModeUpgrade, m.Mode())
+
+	// 觸發升級
+	result, cmds := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model := result.(ui.Model)
+	assert.True(t, model.UpgradeRunning())
+	assert.NotNil(t, cmds) // 應該有 remoteUpgradeCmd
+
+	// 模擬遠端成功
+	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"})
+	model = result.(ui.Model)
+
+	// 遠端全完成，local 應開始升級
+	for _, item := range model.UpgradeItems() {
+		if item.HostID == "air-2019" {
+			assert.Equal(t, ui.UpgradeSuccess, item.Status)
+			assert.Equal(t, "0.28.0", item.NewVer)
+		}
+		if item.IsLocal {
+			assert.Equal(t, ui.UpgradeRunning_, item.Status, "local 應進入 running")
+		}
+	}
+	assert.True(t, model.UpgradeRunning(), "整體仍在 running（local 升級中）")
+}
+
 func TestUpgrade_DownloadFailedInUpgradeMode(t *testing.T) {
 	m := setupUpgradeModel(t)
 	// 模擬下載失敗（在 ModeUpgrade 下）
