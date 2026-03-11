@@ -281,6 +281,15 @@ func TestEnsureLocal_EmptyList(t *testing.T) {
 	assert.True(t, result[0].Enabled)
 }
 
+func TestEnsureLocal_ExistsButDisabled(t *testing.T) {
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: false},
+	}
+	result := config.EnsureLocal(hosts)
+	require.Len(t, result, 1, "不應新增")
+	assert.False(t, result[0].Enabled, "EnsureLocal 不修改已存在 local 的 Enabled 狀態")
+}
+
 // --- DefaultColors 測試 ---
 
 func TestDefaultColors(t *testing.T) {

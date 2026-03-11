@@ -6,8 +6,9 @@ var DefaultColors = []string{
 	"#C678DD", "#56B6C2", "#E5C07B", "#98C379",
 }
 
-// EnsureLocal 確保主機清單中包含 local 主機。
+// EnsureLocal 確保主機清單中包含 local 主機 entry。
 // 若不存在則自動補上在最前面（Enabled=true）。
+// 注意：若 local 已存在但 Enabled=false，本函式不會修改其 Enabled 狀態。
 func EnsureLocal(hosts []HostEntry) []HostEntry {
 	for _, h := range hosts {
 		if h.IsLocal() {
