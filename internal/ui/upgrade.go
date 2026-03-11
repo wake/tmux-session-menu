@@ -290,6 +290,101 @@ func (m Model) handleRemoteUpgrade(msg RemoteUpgradeMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// upgradeCursorOnButtons 判斷游標是否在按鈕列上。
+func (m Model) upgradeCursorOnButtons() bool {
+	return m.upgradeCursor >= len(m.upgradeItems)
+}
+
+// renderUpgrade 渲染 ModeUpgrade 面板：主機清單 + tab 按鈕列。
+func (m Model) renderUpgrade() string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("  %s\n\n", selectedStyle.Render(
+		fmt.Sprintf("升級至 v%s", m.upgradeLatestVer))))
+
+	for i, item := range m.upgradeItems {
+		isCursor := i == m.upgradeCursor && !m.upgradeCursorOnButtons()
+
+		// Checkbox
+		var checkbox string
+		switch item.Status {
+		case UpgradeSuccess:
+			checkbox = successStyle.Render("[✓]")
+		case UpgradeFailed:
+			checkbox = errorStyle.Render("[!]")
+		case UpgradeRunning_:
+			checkbox = dimStyle.Render("[-]")
+		default:
+			if item.Checked {
+				checkbox = "[x]"
+			} else {
+				checkbox = "[ ]"
+			}
+		}
+
+		// 名稱
+		name := item.Name
+
+		// 版本
+		ver := item.Version
+		if ver == "" {
+			ver = "未知"
+		}
+
+		// 狀態文字
+		var statusText string
+		switch item.Status {
+		case UpgradeRunning_:
+			statusText = dimStyle.Render("更新中...")
+		case UpgradeSuccess:
+			statusText = successStyle.Render(fmt.Sprintf("已更新 v%s", item.NewVer))
+		case UpgradeFailed:
+			statusText = errorStyle.Render(fmt.Sprintf("升級失敗: %s", item.Error))
+		default:
+			if item.IsLocal && m.upgradeRunning && !m.upgradeCancelled {
+				statusText = dimStyle.Render("等待遠端完成...")
+			} else if !upgrade.NeedsUpgrade(ver, m.upgradeLatestVer) && ver != "未知" {
+				statusText = dimStyle.Render("(已是最新)")
+			}
+		}
+
+		line := fmt.Sprintf("  %s %-16s %s  %s", checkbox, name, dimStyle.Render(ver), statusText)
+		if isCursor {
+			line = m.cursorLine(line)
+		}
+		b.WriteString(line + "\n")
+	}
+
+	// 按鈕列
+	b.WriteString("\n  ")
+	onButtons := m.upgradeCursorOnButtons()
+	if m.upgradeRunning {
+		b.WriteString(dimStyle.Render("升級進行中...") + "  ")
+		if onButtons {
+			b.WriteString(activeTabStyle.Render("Esc 中止"))
+		} else {
+			b.WriteString(inactiveTabStyle.Render("Esc 中止"))
+		}
+	} else {
+		// 升級按鈕
+		if onButtons && m.upgradeBtnFocus == 0 {
+			b.WriteString(activeTabStyle.Render("ctrl+u 升級"))
+		} else {
+			b.WriteString(inactiveTabStyle.Render("ctrl+u 升級"))
+		}
+		b.WriteString("  ")
+		// 取消按鈕
+		if onButtons && m.upgradeBtnFocus == 1 {
+			b.WriteString(activeTabStyle.Render("Esc 取消"))
+		} else {
+			b.WriteString(inactiveTabStyle.Render("Esc 取消"))
+		}
+	}
+	b.WriteString("\n")
+
+	return b.String()
+}
+
 // UpgradeCursor 回傳升級面板的游標位置（供測試使用）。
 func (m Model) UpgradeCursor() int { return m.upgradeCursor }
 

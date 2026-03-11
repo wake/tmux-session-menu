@@ -1902,6 +1902,8 @@ func (m Model) View() string {
 	case ModeUpload:
 		b.WriteString("\n")
 		b.WriteString(m.uploadModal.view())
+	case ModeUpgrade:
+		b.WriteString(m.renderUpgrade())
 	default:
 		b.WriteString("\n")
 		b.WriteString(m.renderToolbar())
