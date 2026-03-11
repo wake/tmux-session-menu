@@ -175,43 +175,29 @@ func resolveRemoteTarget(
 	return nil
 }
 
-// ParseFilenames 解析 iTerm2 傳入的 filenames 字串。
-func ParseFilenames(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+// ReconstructFilenames 將被 shell word splitting 拆開的絕對路徑片段重組。
+// iTerm2 fileDropCoprocess 的 \(filenames) 替換不會 shell-escape，
+// 導致含空格的檔名被拆成多個 args。因為拖放路徑一定是絕對路徑（/ 開頭），
+// 以 / 開頭的 arg 作為新檔案的起點，其餘片段用空格接回前一個檔案。
+func ReconstructFilenames(args []string) []string {
+	if len(args) == 0 {
 		return nil
 	}
-
-	var files []string
-	var current strings.Builder
-	inQuote := false
-	quoteChar := byte(0)
-
-	for i := 0; i < len(raw); i++ {
-		ch := raw[i]
-		switch {
-		case !inQuote && (ch == '\'' || ch == '"'):
-			inQuote = true
-			quoteChar = ch
-		case inQuote && ch == quoteChar:
-			inQuote = false
-		case !inQuote && ch == '\\' && i+1 < len(raw):
-			i++
-			current.WriteByte(raw[i])
-		case !inQuote && ch == ' ':
-			if current.Len() > 0 {
-				files = append(files, current.String())
-				current.Reset()
-			}
-		default:
-			current.WriteByte(ch)
+	var result []string
+	var parts []string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "/") && len(parts) > 0 {
+			result = append(result, strings.Join(parts, " "))
+			parts = nil
 		}
+		parts = append(parts, arg)
 	}
-	if current.Len() > 0 {
-		files = append(files, current.String())
+	if len(parts) > 0 {
+		result = append(result, strings.Join(parts, " "))
 	}
-	return files
+	return result
 }
+
 
 // setupLogger 建立上傳日誌。
 // 檔案不需要顯式關閉，因為 coprocess 是短命程序，OS 會在程序結束時回收。
