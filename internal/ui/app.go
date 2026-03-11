@@ -762,6 +762,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case DownloadUpgradeMsg:
 		if msg.Err != nil {
+			if m.mode == ModeUpgrade {
+				// 在升級面板中，更新 local 項目為失敗
+				for i := range m.upgradeItems {
+					if m.upgradeItems[i].IsLocal {
+						m.upgradeItems[i].Status = UpgradeFailed
+						m.upgradeItems[i].Error = msg.Err.Error()
+						m.upgradeItems[i].Checked = true
+						break
+					}
+				}
+				m.upgradeRunning = false
+				return m, nil
+			}
 			m.mode = ModeConfirm
 			m.confirmPrompt = fmt.Sprintf("下載失敗：%v", msg.Err)
 			return m, nil

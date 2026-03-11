@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -329,4 +330,64 @@ func TestUpgrade_LockedDuringRunning(t *testing.T) {
 	m = result.(ui.Model)
 	assert.True(t, m.UpgradeCancelled(), "running 時 Esc 應設定 cancelled")
 	assert.Equal(t, ui.ModeUpgrade, m.Mode(), "running 時 Esc 不應離開 ModeUpgrade")
+}
+
+func TestUpgrade_AllRemoteDone_LocalStarts(t *testing.T) {
+	m := setupUpgradeModel(t)
+	// 兩個都勾選（預設已勾選），觸發升級
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model := result.(ui.Model)
+	assert.True(t, model.UpgradeRunning())
+
+	// 遠端完成
+	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"})
+	model = result.(ui.Model)
+
+	// local 應該被標記為 running
+	items := model.UpgradeItems()
+	for _, item := range items {
+		if item.IsLocal {
+			assert.Equal(t, ui.UpgradeRunning_, item.Status)
+		}
+	}
+	// upgradeRunning 仍為 true（local 在升級中）
+	assert.True(t, model.UpgradeRunning())
+}
+
+func TestUpgrade_LocalOnlyUpgrade(t *testing.T) {
+	m := setupUpgradeModel(t)
+	// 取消遠端勾選（cursor=0 → local, j 移到 air-2019, space 取消）
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = result.(ui.Model)
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = result.(ui.Model)
+	// 只剩 local 勾選
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model := result.(ui.Model)
+	assert.True(t, model.UpgradeRunning())
+	items := model.UpgradeItems()
+	for _, item := range items {
+		if item.IsLocal {
+			assert.Equal(t, ui.UpgradeRunning_, item.Status)
+		}
+	}
+}
+
+func TestUpgrade_DownloadFailedInUpgradeMode(t *testing.T) {
+	m := setupUpgradeModel(t)
+	// 模擬下載失敗（在 ModeUpgrade 下）
+	msg := ui.DownloadUpgradeMsg{Err: fmt.Errorf("download failed")}
+	result, _ := m.Update(msg)
+	model := result.(ui.Model)
+	// 應該留在 ModeUpgrade，不切到 ModeConfirm
+	assert.Equal(t, ui.ModeUpgrade, model.Mode())
+	// local 應為失敗狀態
+	items := model.UpgradeItems()
+	for _, item := range items {
+		if item.IsLocal {
+			assert.Equal(t, ui.UpgradeFailed, item.Status)
+			assert.Contains(t, item.Error, "download failed")
+		}
+	}
+	assert.False(t, model.UpgradeRunning())
 }

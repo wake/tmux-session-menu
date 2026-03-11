@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -92,6 +93,30 @@ func (m Model) enterModeUpgrade(latestVer string, hostVersions map[string]string
 	}
 	m.upgradeItems = items
 	return m
+}
+
+// startLocalUpgradeCmd 回傳下載本機升級 binary 的 Cmd。
+func (m Model) startLocalUpgradeCmd() tea.Cmd {
+	if m.deps.Upgrader == nil {
+		return nil
+	}
+	u := m.deps.Upgrader
+	return func() tea.Msg {
+		rel, err := u.CheckLatest()
+		if err != nil {
+			return DownloadUpgradeMsg{Err: err}
+		}
+		asset := upgrade.AssetName()
+		url, ok := rel.Assets[asset]
+		if !ok {
+			return DownloadUpgradeMsg{Err: fmt.Errorf("找不到適用於此平台的檔案 (%s)", asset)}
+		}
+		path, err := u.Download(url)
+		if err != nil {
+			return DownloadUpgradeMsg{Err: err}
+		}
+		return DownloadUpgradeMsg{TmpPath: path}
+	}
 }
 
 // remoteUpgradeCmd 回傳一個 Cmd，SSH 執行遠端 tsm upgrade --silent。
@@ -204,8 +229,16 @@ func (m Model) startUpgrade() (tea.Model, tea.Cmd) {
 	}
 
 	if len(cmds) == 0 {
-		// 只有 local 被勾選，沒有遠端目標
-		// TODO: Task 6 會加入 local 升級邏輯
+		// 只有 local 被勾選，直接開始本機升級
+		for i, item := range m.upgradeItems {
+			if item.IsLocal && item.Checked {
+				m.upgradeItems[i].Status = UpgradeRunning_
+				m.upgradeVersion = m.upgradeLatestVer
+				return m, m.startLocalUpgradeCmd()
+			}
+		}
+		// 不應到這裡（hasChecked=true 但沒有 local 也沒有 remote）
+		m.upgradeRunning = false
 		return m, nil
 	}
 
@@ -247,8 +280,8 @@ func (m Model) handleRemoteUpgrade(msg RemoteUpgradeMsg) (Model, tea.Cmd) {
 		for i, item := range m.upgradeItems {
 			if item.IsLocal && item.Checked {
 				m.upgradeItems[i].Status = UpgradeRunning_
-				// TODO: Task 6 會觸發 local 升級
-				return m, nil
+				m.upgradeVersion = m.upgradeLatestVer // 設定版本供 runPostUpgrade 使用
+				return m, m.startLocalUpgradeCmd()
 			}
 		}
 		// local 未勾選 → 完成
