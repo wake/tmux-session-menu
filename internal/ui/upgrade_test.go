@@ -231,7 +231,7 @@ func TestUpgrade_RemoteUpgradeSuccess(t *testing.T) {
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	m = result.(ui.Model)
 	// 模擬收到遠端升級成功
-	msg := ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"}
+	msg := ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0", Generation: m.UpgradeGen()}
 	result, _ = m.Update(msg)
 	model := result.(ui.Model)
 	items := model.UpgradeItems()
@@ -249,7 +249,7 @@ func TestUpgrade_RemoteUpgradeFailed(t *testing.T) {
 	// 觸發升級讓遠端項目進入 UpgradeRunning_
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	m = result.(ui.Model)
-	msg := ui.RemoteUpgradeMsg{HostID: "air-2019", Error: "connection refused"}
+	msg := ui.RemoteUpgradeMsg{HostID: "air-2019", Error: "connection refused", Generation: m.UpgradeGen()}
 	result, _ = m.Update(msg)
 	model := result.(ui.Model)
 	items := model.UpgradeItems()
@@ -273,7 +273,7 @@ func TestUpgrade_AllRemoteDone_RunningStops(t *testing.T) {
 	m = result.(ui.Model)
 	assert.True(t, m.UpgradeRunning())
 	// 遠端完成
-	result, _ = m.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"})
+	result, _ = m.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0", Generation: m.UpgradeGen()})
 	model := result.(ui.Model)
 	assert.False(t, model.UpgradeRunning()) // local 未勾選，應停止
 }
@@ -289,7 +289,7 @@ func TestUpgrade_EscDuringUpgrade_Cancels(t *testing.T) {
 	model := result.(ui.Model)
 	assert.True(t, model.UpgradeCancelled())
 	// 遠端完成後 running 應停止（因為已取消）
-	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"})
+	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0", Generation: model.UpgradeGen()})
 	model = result.(ui.Model)
 	assert.False(t, model.UpgradeRunning())
 }
@@ -340,7 +340,7 @@ func TestUpgrade_AllRemoteDone_LocalStarts(t *testing.T) {
 	assert.True(t, model.UpgradeRunning())
 
 	// 遠端完成
-	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"})
+	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0", Generation: model.UpgradeGen()})
 	model = result.(ui.Model)
 
 	// local 應該被標記為 running
@@ -384,7 +384,7 @@ func TestUpgrade_FullFlow_RemoteThenLocal(t *testing.T) {
 	assert.NotNil(t, cmds) // 應該有 remoteUpgradeCmd
 
 	// 模擬遠端成功
-	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0"})
+	result, _ = model.Update(ui.RemoteUpgradeMsg{HostID: "air-2019", Version: "0.28.0", Generation: model.UpgradeGen()})
 	model = result.(ui.Model)
 
 	// 遠端全完成，local 應開始升級

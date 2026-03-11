@@ -134,6 +134,7 @@ type Model struct {
 	upgradeCancelled bool
 	upgradeLatestVer string
 	upgradeBtnFocus  int // 0=升級按鈕, 1=取消按鈕
+	upgradeGen       int // 升級輪次，用於丟棄過期的 RemoteUpgradeMsg
 
 	// 上傳模式
 	uploadModal uploadModal

@@ -1147,6 +1147,37 @@ func runUpgrade(force bool) {
 
 // runSilentUpgrade 執行非互動升級（供遠端 SSH 呼叫）。
 // stdout 只印一行版本號，錯誤走 stderr。不做 syscall.Exec。
+// atomicInstallBinary 以 atomic rename 安裝下載的 binary 到偵測到的安裝路徑。
+func atomicInstallBinary(tmpPath string) (string, error) {
+	det := selfinstall.Detect()
+	targetDir := filepath.Dir(det.Path)
+	if targetDir == "" || targetDir == "." {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("無法取得 home 目錄: %w", err)
+		}
+		targetDir = filepath.Join(home, ".local", "bin")
+	}
+	target := filepath.Join(targetDir, "tsm")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return "", fmt.Errorf("無法建立目錄: %w", err)
+	}
+	// Atomic: 複製 tmp → target.tmp，再 rename → target
+	tmpTarget := target + ".tmp"
+	data, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return "", fmt.Errorf("讀取下載檔案失敗: %w", err)
+	}
+	if err := os.WriteFile(tmpTarget, data, 0o755); err != nil {
+		return "", fmt.Errorf("寫入暫存檔失敗: %w", err)
+	}
+	if err := os.Rename(tmpTarget, target); err != nil {
+		os.Remove(tmpTarget)
+		return "", fmt.Errorf("替換執行檔失敗: %w", err)
+	}
+	return target, nil
+}
+
 func runSilentUpgrade() {
 	u := upgrade.DefaultUpgrader()
 	cfg := loadConfig()
@@ -1155,35 +1186,7 @@ func runSilentUpgrade() {
 		CurrentVersion: upgrade.ExtractSemver(version.Version),
 		CheckLatest:    u.CheckLatest,
 		Download:       u.Download,
-		InstallBinary: func(tmpPath string) (string, error) {
-			det := selfinstall.Detect()
-			targetDir := filepath.Dir(det.Path)
-			if targetDir == "" || targetDir == "." {
-				home, err := os.UserHomeDir()
-				if err != nil {
-					return "", fmt.Errorf("無法取得 home 目錄: %w", err)
-				}
-				targetDir = filepath.Join(home, ".local", "bin")
-			}
-			target := filepath.Join(targetDir, "tsm")
-			if err := os.MkdirAll(targetDir, 0o755); err != nil {
-				return "", fmt.Errorf("無法建立目錄: %w", err)
-			}
-			// Atomic: 複製 tmp → target.tmp，再 rename → target
-			tmpTarget := target + ".tmp"
-			data, err := os.ReadFile(tmpPath)
-			if err != nil {
-				return "", fmt.Errorf("讀取下載檔案失敗: %w", err)
-			}
-			if err := os.WriteFile(tmpTarget, data, 0o755); err != nil {
-				return "", fmt.Errorf("寫入暫存檔失敗: %w", err)
-			}
-			if err := os.Rename(tmpTarget, target); err != nil {
-				os.Remove(tmpTarget)
-				return "", fmt.Errorf("替換執行檔失敗: %w", err)
-			}
-			return target, nil
-		},
+		InstallBinary:  atomicInstallBinary,
 		RemoveTmp: func(path string) {
 			os.Remove(path)
 		},
@@ -1227,35 +1230,7 @@ func runPostUpgrade(m ui.Model, cfg config.Config) {
 	}
 
 	ops := upgrade.PostUpgradeOps{
-		InstallBinary: func(tmp string) (string, error) {
-			det := selfinstall.Detect()
-			targetDir := filepath.Dir(det.Path)
-			if targetDir == "" || targetDir == "." {
-				home, err := os.UserHomeDir()
-				if err != nil {
-					return "", fmt.Errorf("無法取得 home 目錄: %w", err)
-				}
-				targetDir = filepath.Join(home, ".local", "bin")
-			}
-			target := filepath.Join(targetDir, "tsm")
-			if err := os.MkdirAll(targetDir, 0o755); err != nil {
-				return "", fmt.Errorf("無法建立目錄: %w", err)
-			}
-			// Atomic: 複製 tmp → target.tmp，再 rename → target
-			tmpTarget := target + ".tmp"
-			data, err := os.ReadFile(tmp)
-			if err != nil {
-				return "", fmt.Errorf("讀取下載檔案失敗: %w", err)
-			}
-			if err := os.WriteFile(tmpTarget, data, 0o755); err != nil {
-				return "", fmt.Errorf("寫入暫存檔失敗: %w", err)
-			}
-			if err := os.Rename(tmpTarget, target); err != nil {
-				os.Remove(tmpTarget)
-				return "", fmt.Errorf("替換執行檔失敗: %w", err)
-			}
-			return target, nil
-		},
+		InstallBinary: atomicInstallBinary,
 		RemoveTmp: func(path string) {
 			os.Remove(path)
 		},

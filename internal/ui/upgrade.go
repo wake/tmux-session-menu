@@ -25,9 +25,10 @@ const (
 
 // RemoteUpgradeMsg 單台遠端升級結果。
 type RemoteUpgradeMsg struct {
-	HostID  string
-	Version string // 成功時的新版本
-	Error   string // 失敗原因
+	HostID     string
+	Version    string // 成功時的新版本
+	Error      string // 失敗原因
+	Generation int    // 升級輪次，用於丟棄取消後的過期訊息
 }
 
 // upgradeItem 代表升級面板中的一台主機。
@@ -120,7 +121,7 @@ func (m Model) startLocalUpgradeCmd() tea.Cmd {
 }
 
 // remoteUpgradeCmd 回傳一個 Cmd，SSH 執行遠端 tsm upgrade --silent。
-func remoteUpgradeCmd(address, hostID string) tea.Cmd {
+func remoteUpgradeCmd(address, hostID string, gen int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -136,11 +137,11 @@ func remoteUpgradeCmd(address, hostID string) tea.Cmd {
 			if errMsg == "" {
 				errMsg = err.Error()
 			}
-			return RemoteUpgradeMsg{HostID: hostID, Error: errMsg}
+			return RemoteUpgradeMsg{HostID: hostID, Error: errMsg, Generation: gen}
 		}
 
 		ver := strings.TrimSpace(stdout.String())
-		return RemoteUpgradeMsg{HostID: hostID, Version: ver}
+		return RemoteUpgradeMsg{HostID: hostID, Version: ver, Generation: gen}
 	}
 }
 
@@ -219,12 +220,14 @@ func (m Model) startUpgrade() (tea.Model, tea.Cmd) {
 
 	m.upgradeRunning = true
 	m.upgradeCancelled = false
+	m.upgradeGen++
 
 	var cmds []tea.Cmd
+	gen := m.upgradeGen
 	for i := range m.upgradeItems {
 		if m.upgradeItems[i].Checked && !m.upgradeItems[i].IsLocal {
 			m.upgradeItems[i].Status = UpgradeRunning_
-			cmds = append(cmds, remoteUpgradeCmd(m.upgradeItems[i].Address, m.upgradeItems[i].HostID))
+			cmds = append(cmds, remoteUpgradeCmd(m.upgradeItems[i].Address, m.upgradeItems[i].HostID, gen))
 		}
 	}
 
@@ -247,6 +250,10 @@ func (m Model) startUpgrade() (tea.Model, tea.Cmd) {
 
 // handleRemoteUpgrade 處理單台遠端升級結果，並在所有遠端完成後決定後續流程。
 func (m Model) handleRemoteUpgrade(msg RemoteUpgradeMsg) (Model, tea.Cmd) {
+	// 丟棄過期輪次的訊息（取消後重啟升級時，舊 SSH 結果可能延遲到達）
+	if msg.Generation != m.upgradeGen {
+		return m, nil
+	}
 	for i := range m.upgradeItems {
 		if m.upgradeItems[i].HostID == msg.HostID {
 			if msg.Error != "" {
@@ -343,7 +350,7 @@ func (m Model) renderUpgrade() string {
 		default:
 			if item.IsLocal && m.upgradeRunning && !m.upgradeCancelled {
 				statusText = dimStyle.Render("等待遠端完成...")
-			} else if !upgrade.NeedsUpgrade(ver, m.upgradeLatestVer) && ver != "未知" {
+			} else if ver != "未知" && !upgrade.NeedsUpgrade(ver, m.upgradeLatestVer) {
 				statusText = dimStyle.Render("(已是最新)")
 			}
 		}
@@ -396,3 +403,6 @@ func (m Model) UpgradeCancelled() bool { return m.upgradeCancelled }
 
 // UpgradeBtnFocus 回傳按鈕區焦點位置（供測試使用）。
 func (m Model) UpgradeBtnFocus() int { return m.upgradeBtnFocus }
+
+// UpgradeGen 回傳升級輪次（供測試使用）。
+func (m Model) UpgradeGen() int { return m.upgradeGen }
