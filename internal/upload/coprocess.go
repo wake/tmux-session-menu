@@ -198,43 +198,6 @@ func ReconstructFilenames(args []string) []string {
 	return result
 }
 
-// ParseFilenames 解析 iTerm2 傳入的 filenames 字串。
-func ParseFilenames(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-
-	var files []string
-	var current strings.Builder
-	inQuote := false
-	quoteChar := byte(0)
-
-	for i := 0; i < len(raw); i++ {
-		ch := raw[i]
-		switch {
-		case !inQuote && (ch == '\'' || ch == '"'):
-			inQuote = true
-			quoteChar = ch
-		case inQuote && ch == quoteChar:
-			inQuote = false
-		case !inQuote && ch == '\\' && i+1 < len(raw):
-			i++
-			current.WriteByte(raw[i])
-		case !inQuote && ch == ' ':
-			if current.Len() > 0 {
-				files = append(files, current.String())
-				current.Reset()
-			}
-		default:
-			current.WriteByte(ch)
-		}
-	}
-	if current.Len() > 0 {
-		files = append(files, current.String())
-	}
-	return files
-}
 
 // setupLogger 建立上傳日誌。
 // 檔案不需要顯式關閉，因為 coprocess 是短命程序，OS 會在程序結束時回收。

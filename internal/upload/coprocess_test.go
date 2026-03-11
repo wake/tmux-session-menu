@@ -311,31 +311,3 @@ func TestReconstructFilenames(t *testing.T) {
 	}
 }
 
-func TestParseFilenames(t *testing.T) {
-	tests := []struct {
-		name string
-		raw  string
-		want []string
-	}{
-		{"single", "/tmp/a.png", []string{"/tmp/a.png"}},
-		{"multiple", "/tmp/a.png /tmp/b.pdf", []string{"/tmp/a.png", "/tmp/b.pdf"}},
-		{"quoted spaces", `"/tmp/my file.png" /tmp/b.pdf`, []string{"/tmp/my file.png", "/tmp/b.pdf"}},
-		{"escaped spaces", `/tmp/my\ file.png /tmp/b.pdf`, []string{"/tmp/my file.png", "/tmp/b.pdf"}},
-		{"empty", "", nil},
-		{"single quoted", `'/tmp/my file.png'`, []string{"/tmp/my file.png"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ParseFilenames(tt.raw)
-			if len(got) != len(tt.want) {
-				t.Fatalf("got %v, want %v", got, tt.want)
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("got[%d]=%q, want %q", i, got[i], tt.want[i])
-				}
-			}
-		})
-	}
-}
