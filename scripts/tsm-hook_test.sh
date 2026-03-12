@@ -44,6 +44,7 @@ assert_status() {
   local test_name="$1"
   local expected_status="$2"
   local expected_event="$3"
+  local expected_ai_type="$4"
   local file="$TSM_STATUS_DIR/test-session"
 
   if [[ ! -f "$file" ]]; then
@@ -52,13 +53,11 @@ assert_status() {
     return
   fi
 
-  # Validate JSON and extract fields with python3
-  # Pass expected values as command-line args to avoid quoting issues
   local result
-  result="$(python3 - "$file" "$expected_status" "$expected_event" <<'PYEOF'
+  result="$(python3 - "$file" "$expected_status" "$expected_event" "$expected_ai_type" <<'PYEOF'
 import json, sys
 
-filepath, exp_status, exp_event = sys.argv[1], sys.argv[2], sys.argv[3]
+filepath, exp_status, exp_event, exp_ai_type = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 with open(filepath) as f:
     d = json.load(f)
 
@@ -69,6 +68,8 @@ if d.get("event") != exp_event:
     errors.append("event: expected %r, got %r" % (exp_event, d.get("event")))
 if not isinstance(d.get("timestamp"), int) or d["timestamp"] < 1000000000:
     errors.append("timestamp: invalid value %r" % (d.get("timestamp"),))
+if d.get("ai_type", "") != exp_ai_type:
+    errors.append("ai_type: expected %r, got %r" % (exp_ai_type, d.get("ai_type", "")))
 if errors:
     print("ERRORS: " + "; ".join(errors))
 else:
@@ -106,13 +107,13 @@ echo ""
 # Test 1: UserPromptSubmit -> running
 setup_env
 echo '{"hook_event_name":"UserPromptSubmit"}' | bash "$HOOK_SCRIPT"
-assert_status "UserPromptSubmit -> running" "running" "UserPromptSubmit"
+assert_status "UserPromptSubmit -> running" "running" "UserPromptSubmit" "claude"
 teardown_env
 
 # Test 2: Stop -> idle
 setup_env
 echo '{"hook_event_name":"Stop"}' | bash "$HOOK_SCRIPT"
-assert_status "Stop -> idle" "idle" "Stop"
+assert_status "Stop -> idle" "idle" "Stop" "claude"
 teardown_env
 
 # Test 3: No TMUX env -> no file written
@@ -125,31 +126,31 @@ teardown_env
 # Test 4: PermissionRequest -> waiting
 setup_env
 echo '{"hook_event_name":"PermissionRequest"}' | bash "$HOOK_SCRIPT"
-assert_status "PermissionRequest -> waiting" "waiting" "PermissionRequest"
+assert_status "PermissionRequest -> waiting" "waiting" "PermissionRequest" "claude"
 teardown_env
 
 # Test 5: SessionStart -> running
 setup_env
 echo '{"hook_event_name":"SessionStart"}' | bash "$HOOK_SCRIPT"
-assert_status "SessionStart -> running" "running" "SessionStart"
+assert_status "SessionStart -> running" "running" "SessionStart" "claude"
 teardown_env
 
 # Test 6: SessionEnd -> idle
 setup_env
 echo '{"hook_event_name":"SessionEnd"}' | bash "$HOOK_SCRIPT"
-assert_status "SessionEnd -> idle" "idle" "SessionEnd"
+assert_status "SessionEnd -> idle" "idle" "SessionEnd" ""
 teardown_env
 
 # Test 7: Notification -> waiting
 setup_env
 echo '{"hook_event_name":"Notification"}' | bash "$HOOK_SCRIPT"
-assert_status "Notification -> waiting" "waiting" "Notification"
+assert_status "Notification -> waiting" "waiting" "Notification" "claude"
 teardown_env
 
 # Test 8: Unknown event -> running (default)
 setup_env
 echo '{"hook_event_name":"SomeUnknownEvent"}' | bash "$HOOK_SCRIPT"
-assert_status "Unknown event -> running (default)" "running" "SomeUnknownEvent"
+assert_status "Unknown event -> running (default)" "running" "SomeUnknownEvent" "claude"
 teardown_env
 
 # Test 9: Empty/invalid JSON -> no file written (graceful handling)

@@ -39,16 +39,16 @@ except Exception:
     print("")
 ' 2>/dev/null || true)"
 
-# --- Map event to status -----------------------------------------------------
+# --- Map event to status + ai_type ----------------------------------------
 case "$HOOK_EVENT" in
-  UserPromptSubmit) STATUS="running"  ;;
-  Stop)             STATUS="idle"     ;;
-  SessionStart)     STATUS="running"  ;;
-  SessionEnd)       STATUS="idle"     ;;
-  PermissionRequest) STATUS="waiting" ;;
-  Notification)     STATUS="waiting"  ;;
-  "")               exit 0            ;;
-  *)                STATUS="running"  ;;
+  SessionEnd)        STATUS="idle";    AI_TYPE="" ;;
+  UserPromptSubmit)  STATUS="running"; AI_TYPE="claude" ;;
+  Stop)              STATUS="idle";    AI_TYPE="claude" ;;
+  SessionStart)      STATUS="running"; AI_TYPE="claude" ;;
+  PermissionRequest) STATUS="waiting"; AI_TYPE="claude" ;;
+  Notification)      STATUS="waiting"; AI_TYPE="claude" ;;
+  "")                exit 0            ;;
+  *)                 STATUS="running"; AI_TYPE="claude" ;;
 esac
 
 # --- Write status JSON -------------------------------------------------------
@@ -57,6 +57,6 @@ mkdir -p "$TSM_STATUS_DIR"
 TIMESTAMP="$(date +%s)"
 
 TMP_FILE="$(mktemp "$TSM_STATUS_DIR/.tsm-hook.XXXXXX")"
-printf '{"status":"%s","timestamp":%s,"event":"%s"}\n' \
-  "$STATUS" "$TIMESTAMP" "$HOOK_EVENT" > "$TMP_FILE"
+printf '{"status":"%s","timestamp":%s,"event":"%s","ai_type":"%s"}\n' \
+  "$STATUS" "$TIMESTAMP" "$HOOK_EVENT" "$AI_TYPE" > "$TMP_FILE"
 mv "$TMP_FILE" "$TSM_STATUS_DIR/$SESSION_NAME"
