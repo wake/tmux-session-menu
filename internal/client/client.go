@@ -29,14 +29,18 @@ type Client struct {
 func Dial(cfg config.Config) (*Client, error) {
 	sockPath := daemon.SocketPath(cfg)
 
-	conn, err := tryConnect(sockPath, 2*time.Second)
+	localCtx, localCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	conn, err := tryConnect(localCtx, sockPath)
+	localCancel()
 	if err != nil {
 		// 嘗試自動啟動 daemon
 		if startErr := autoStartDaemon(sockPath); startErr != nil {
 			return nil, fmt.Errorf("connect failed and auto-start failed: connect=%w, start=%v", err, startErr)
 		}
 		// 重新連線
-		conn, err = tryConnect(sockPath, 2*time.Second)
+		retryCtx, retryCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		conn, err = tryConnect(retryCtx, sockPath)
+		retryCancel()
 		if err != nil {
 			return nil, fmt.Errorf("connect after auto-start: %w", err)
 		}
@@ -51,7 +55,9 @@ func Dial(cfg config.Config) (*Client, error) {
 
 // DialSocket 連線到指定的 unix socket（用於 remote 模式，不觸發 auto-start daemon）。
 func DialSocket(sockPath string) (*Client, error) {
-	conn, err := tryConnect(sockPath, 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	conn, err := tryConnect(ctx, sockPath)
 	if err != nil {
 		return nil, err
 	}
@@ -61,14 +67,16 @@ func DialSocket(sockPath string) (*Client, error) {
 	}, nil
 }
 
-// DialSocketCtx 連線到指定的 unix socket，使用提供的 context 控制逾時。
+// DialSocketCtx 連線到指定的 unix socket，使用提供的 context 控制逾時與取消。
 // 適用於透過 SSH tunnel 連線的場景，需要較長的逾時時間。
+// 若 ctx 沒有 deadline，預設使用 10 秒逾時。
 func DialSocketCtx(ctx context.Context, sockPath string) (*Client, error) {
-	timeout := 10 * time.Second
-	if dl, ok := ctx.Deadline(); ok {
-		timeout = time.Until(dl)
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
 	}
-	conn, err := tryConnect(sockPath, timeout)
+	conn, err := tryConnect(ctx, sockPath)
 	if err != nil {
 		return nil, err
 	}
@@ -271,8 +279,8 @@ func (c *Client) ReportUploadResult(ctx context.Context, sessionName string, fil
 	return err
 }
 
-// tryConnect 嘗試連線到 unix socket，使用指定的逾時時間驗證連線可用性。
-func tryConnect(sockPath string, timeout time.Duration) (*grpc.ClientConn, error) {
+// tryConnect 嘗試連線到 unix socket，使用提供的 context 驗證連線可用性。
+func tryConnect(ctx context.Context, sockPath string) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		"unix://"+sockPath,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -282,8 +290,6 @@ func tryConnect(sockPath string, timeout time.Duration) (*grpc.ClientConn, error
 	}
 
 	// 驗證連線是否可用（socket 是否存在）
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	if _, err := tsmv1.NewSessionManagerClient(conn).DaemonStatus(ctx, &emptypb.Empty{}); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("connect to daemon at %s: %w", sockPath, err)

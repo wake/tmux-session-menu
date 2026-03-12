@@ -593,19 +593,6 @@ func doReconnect(host, session string, tun *remote.Tunnel) *client.Client {
 				continue
 			}
 
-			dctx, dcancel := context.WithTimeout(ctx, 2*time.Second)
-			_, err = newC.DaemonStatus(dctx)
-			dcancel()
-			if err != nil {
-				newC.Close()
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(time.Second):
-				}
-				continue
-			}
-
 			// 先寫入 resultCh，再通知 TUI 結束，避免 race condition：
 			// 若先 Send 再寫 channel，TUI 可能在 goroutine 寫入前就退出，
 			// 導致 non-blocking select 讀不到結果。
