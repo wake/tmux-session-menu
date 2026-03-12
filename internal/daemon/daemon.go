@@ -19,6 +19,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
+	"github.com/wake/tmux-session-menu/internal/version"
 )
 
 // Daemon 是 tsm daemon 的主體。
@@ -73,6 +74,13 @@ func (d *Daemon) Run() error {
 		return fmt.Errorf("write pid file: %w", err)
 	}
 	defer os.Remove(pidPath)
+
+	// 寫入版本檔案
+	verPath := VersionPath(d.cfg)
+	if err := os.WriteFile(verPath, []byte(version.String()), 0o600); err != nil {
+		return fmt.Errorf("write version file: %w", err)
+	}
+	defer os.Remove(verPath)
 
 	// 建立 unix socket listener
 	lis, err := net.Listen("unix", sockPath)
@@ -338,6 +346,17 @@ func Status(cfg config.Config) (string, error) {
 	}
 
 	sockPath := SocketPath(cfg)
+
+	// 讀取版本檔案（舊版 daemon 可能沒有）
+	verPath := VersionPath(cfg)
+	ver := ""
+	if vdata, verErr := os.ReadFile(verPath); verErr == nil {
+		ver = strings.TrimSpace(string(vdata))
+	}
+
+	if ver != "" {
+		return fmt.Sprintf("daemon running (pid=%d, version=%s, socket=%s)", pid, ver, sockPath), nil
+	}
 	return fmt.Sprintf("daemon running (pid=%d, socket=%s)", pid, sockPath), nil
 }
 

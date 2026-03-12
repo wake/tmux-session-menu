@@ -317,3 +317,8 @@ func SocketPath(cfg config.Config) string {
 func PidPath(cfg config.Config) string {
 	return filepath.Join(DataDir(cfg), "tsm.pid")
 }
+
+// VersionPath 回傳 daemon 版本檔案路徑。
+func VersionPath(cfg config.Config) string {
+	return filepath.Join(DataDir(cfg), "tsm.version")
+}
