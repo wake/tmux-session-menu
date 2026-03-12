@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.29.2] - 2026-03-12
+
+### Fixed
+- Popup 內切換 session 後選單不會自動關閉：bindBlock 的 `display-popup` 命令加入 `TSM_IN_POPUP=1` 環境變數
+- 用戶執行 `tsm bind install` 或 `tsm setup` 後 keybinding 會自動升級
+
 ## [0.29.1] - 2026-03-12
 
 ### Fixed
