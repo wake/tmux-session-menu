@@ -13,8 +13,13 @@ import (
 const (
 	markerBegin = "# [tsm] begin"
 	markerEnd   = "# [tsm] end"
-	bindBlock   = `# [tsm] begin
-bind-key -n C-q display-popup -E -w 80% -h 80% 'tsm $(tmux show-option -gqv @tsm_popup_args) --inline'
+	bindBlock = `# [tsm] begin
+bind-key -n C-q run-shell 'HUB=$(tmux show-option -gqv @tsm_hub_socket); \
+  if [ -S "$HUB" ]; then \
+    tmux display-popup -E -w "80%" -h "80%" "tsm --hub-socket $HUB --inline"; \
+  else \
+    tmux display-popup -E -w "80%" -h "80%" "tsm $(tmux show-option -gqv @tsm_popup_args) --inline"; \
+  fi'
 # [tsm] end`
 )
 

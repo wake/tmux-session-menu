@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
@@ -62,4 +63,38 @@ func TestConvertProtoGroups(t *testing.T) {
 	assert.Equal(t, int64(2), groups[1].ID)
 	assert.Equal(t, "personal", groups[1].Name)
 	assert.True(t, groups[1].Collapsed)
+}
+
+func TestConvertMultiHostSnapshot(t *testing.T) {
+	mhs := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{
+				HostId: "air",
+				Name:   "air",
+				Color:  "#5f8787",
+				Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED,
+				Snapshot: &tsmv1.StateSnapshot{
+					Sessions: []*tsmv1.Session{
+						{Name: "main", Id: "$0"},
+					},
+				},
+			},
+			{
+				HostId: "mlab",
+				Name:   "mlab",
+				Color:  "#73daca",
+				Status: tsmv1.HostStatus_HOST_STATUS_CONNECTING,
+			},
+		},
+	}
+
+	inputs := ui.ConvertMultiHostSnapshot(mhs)
+
+	require.Len(t, inputs, 2)
+	assert.Equal(t, "air", inputs[0].HostID)
+	assert.Equal(t, 2, inputs[0].Status) // HOST_STATUS_CONNECTED
+	assert.Len(t, inputs[0].Sessions, 1)
+	assert.Equal(t, "mlab", inputs[1].HostID)
+	assert.Equal(t, 1, inputs[1].Status) // HOST_STATUS_CONNECTING
+	assert.Empty(t, inputs[1].Sessions)
 }

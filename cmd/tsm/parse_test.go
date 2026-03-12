@@ -147,3 +147,24 @@ func TestHasHostMode(t *testing.T) {
 		})
 	}
 }
+
+func TestParseHubSocket(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "無 hub-socket", args: []string{"--inline"}, want: ""},
+		{name: "有 hub-socket", args: []string{"--hub-socket", "/tmp/tsm-hub-abc.sock", "--inline"}, want: "/tmp/tsm-hub-abc.sock"},
+		{name: "尾端缺值", args: []string{"--hub-socket"}, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseHubSocket(tt.args)
+			if got != tt.want {
+				t.Errorf("parseHubSocket(%v) = %q, want %q", tt.args, got, tt.want)
+			}
+		})
+	}
+}

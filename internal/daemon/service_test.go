@@ -41,7 +41,7 @@ func setupTestService(t *testing.T, exec tmux.Executor) (tsmv1.SessionManagerCli
 	// 立即做一次 scan，確保有初始快照
 	sm.Scan()
 
-	svc := NewService(mgr, st, hub, sm)
+	svc := NewService(mgr, st, hub, nil, nil, sm)
 	srv := grpc.NewServer()
 	tsmv1.RegisterSessionManagerServer(srv, svc)
 
@@ -257,7 +257,7 @@ func TestService_Reorder_Group(t *testing.T) {
 func TestService_GetUploadTarget_Default(t *testing.T) {
 	hub := NewWatcherHub()
 	sm := NewStateManager(nil, nil, config.Default(), "", hub)
-	svc := NewService(nil, nil, hub, sm)
+	svc := NewService(nil, nil, hub, nil, nil, sm)
 
 	resp, err := svc.GetUploadTarget(context.Background(), &tsmv1.GetUploadTargetRequest{})
 	if err != nil {
@@ -277,7 +277,7 @@ func TestService_GetUploadTarget_Default(t *testing.T) {
 func TestService_GetUploadTarget_UploadMode(t *testing.T) {
 	hub := NewWatcherHub()
 	sm := NewStateManager(nil, nil, config.Default(), "", hub)
-	svc := NewService(nil, nil, hub, sm)
+	svc := NewService(nil, nil, hub, nil, nil, sm)
 
 	sm.uploadState.SetMode(true, "my-session")
 
@@ -296,7 +296,7 @@ func TestService_GetUploadTarget_UploadMode(t *testing.T) {
 func TestService_SetUploadMode(t *testing.T) {
 	hub := NewWatcherHub()
 	sm := NewStateManager(nil, nil, config.Default(), "", hub)
-	svc := NewService(nil, nil, hub, sm)
+	svc := NewService(nil, nil, hub, nil, nil, sm)
 
 	_, err := svc.SetUploadMode(context.Background(), &tsmv1.SetUploadModeRequest{
 		Enabled:     true,
@@ -317,7 +317,7 @@ func TestService_SetUploadMode(t *testing.T) {
 func TestService_ReportUploadResult(t *testing.T) {
 	hub := NewWatcherHub()
 	sm := NewStateManager(nil, nil, config.Default(), "", hub)
-	svc := NewService(nil, nil, hub, sm)
+	svc := NewService(nil, nil, hub, nil, nil, sm)
 
 	// 啟用上傳模式，BuildSnapshot 才會 drain 事件
 	sm.uploadState.SetMode(true, "test-sess")
@@ -348,7 +348,7 @@ func TestService_ReportUploadResult(t *testing.T) {
 func TestService_ReportUploadResult_Error(t *testing.T) {
 	hub := NewWatcherHub()
 	sm := NewStateManager(nil, nil, config.Default(), "", hub)
-	svc := NewService(nil, nil, hub, sm)
+	svc := NewService(nil, nil, hub, nil, nil, sm)
 
 	// 啟用上傳模式，BuildSnapshot 才會 drain 事件
 	sm.uploadState.SetMode(true, "test-sess")

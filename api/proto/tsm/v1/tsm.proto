@@ -45,8 +45,57 @@ message StateSnapshot {
   repeated UploadEvent upload_events = 3;
 }
 
+// HostStatus 描述主機連線狀態。
+enum HostStatus {
+  HOST_STATUS_DISABLED     = 0;
+  HOST_STATUS_CONNECTING   = 1;
+  HOST_STATUS_CONNECTED    = 2;
+  HOST_STATUS_DISCONNECTED = 3;
+}
+
+// HostState 描述一台主機的連線狀態與快照。
+message HostState {
+  string host_id = 1;
+  string name = 2;
+  string color = 3;
+  HostStatus status = 4;
+  string error = 5;
+  StateSnapshot snapshot = 6;
+}
+
+// MultiHostSnapshot 聚合所有主機的狀態快照。
+message MultiHostSnapshot {
+  repeated HostState hosts = 1;
+}
+
+// MutationType 列舉所有可被代理的操作類型。
+enum MutationType {
+  MUTATION_KILL_SESSION   = 0;
+  MUTATION_RENAME_SESSION = 1;
+  MUTATION_CREATE_SESSION = 2;
+  MUTATION_MOVE_SESSION   = 3;
+}
+
+// ProxyMutationRequest 由遠端 TUI 發送，透過 hub 代理到目標主機。
+message ProxyMutationRequest {
+  string host_id = 1;
+  MutationType type = 2;
+  string session_name = 3;
+  string new_name = 4;
+  string group_id = 5;
+}
+
+// ProxyMutationResponse 代理操作結果。
+message ProxyMutationResponse {
+  bool success = 1;
+  string error = 2;
+}
+
 // WatchRequest 是 Watch RPC 的請求（目前為空，未來可擴充過濾條件）。
 message WatchRequest {}
+
+// WatchMultiHostRequest 是 WatchMultiHost RPC 的請求（hub 模式專用）。
+message WatchMultiHostRequest {}
 
 // CreateSessionRequest 建立新的 tmux session。
 message CreateSessionRequest {
@@ -209,4 +258,10 @@ service SessionManager {
   rpc SetUploadMode(SetUploadModeRequest) returns (google.protobuf.Empty);
   // ReportUploadResult 回報上傳結果（coprocess 呼叫）。
   rpc ReportUploadResult(ReportUploadResultRequest) returns (google.protobuf.Empty);
+
+  // WatchMultiHost 回傳多主機聚合快照 stream（hub 模式專用）。
+  rpc WatchMultiHost(WatchMultiHostRequest) returns (stream MultiHostSnapshot);
+
+  // ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
+  rpc ProxyMutation(ProxyMutationRequest) returns (ProxyMutationResponse);
 }

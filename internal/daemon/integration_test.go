@@ -41,7 +41,7 @@ func TestIntegration_WatchReceivesOperationChanges(t *testing.T) {
 	sm := NewStateManager(mgr, st, config.Default(), "", hub)
 	sm.Scan()
 
-	svc := NewService(mgr, st, hub, sm)
+	svc := NewService(mgr, st, hub, nil, nil, sm)
 	srv := grpc.NewServer()
 	tsmv1.RegisterSessionManagerServer(srv, svc)
 	go func() { _ = srv.Serve(lis) }()
@@ -135,7 +135,7 @@ func TestIntegration_MultipleWatchers(t *testing.T) {
 	sm := NewStateManager(mgr, st, config.Default(), "", hub)
 	sm.Scan()
 
-	svc := NewService(mgr, st, hub, sm)
+	svc := NewService(mgr, st, hub, nil, nil, sm)
 	srv := grpc.NewServer()
 	tsmv1.RegisterSessionManagerServer(srv, svc)
 	go func() { _ = srv.Serve(lis) }()

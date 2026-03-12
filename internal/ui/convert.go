@@ -33,6 +33,26 @@ func ConvertProtoSessions(pbSessions []*tsmv1.Session) []tmux.Session {
 	return sessions
 }
 
+// ConvertMultiHostSnapshot 將 proto MultiHostSnapshot 轉換為 UI 端的 HostSnapshotInput。
+func ConvertMultiHostSnapshot(mhs *tsmv1.MultiHostSnapshot) []HostSnapshotInput {
+	var inputs []HostSnapshotInput
+	for _, hs := range mhs.Hosts {
+		input := HostSnapshotInput{
+			HostID: hs.HostId,
+			Name:   hs.Name,
+			Color:  hs.Color,
+			Status: int(hs.Status),
+			Error:  hs.Error,
+		}
+		if hs.Snapshot != nil {
+			input.Sessions = ConvertProtoSessions(hs.Snapshot.Sessions)
+			input.Groups = ConvertProtoGroups(hs.Snapshot.Groups)
+		}
+		inputs = append(inputs, input)
+	}
+	return inputs
+}
+
 // ConvertProtoGroups 將 proto Group 切片轉換為 store.Group 切片。
 func ConvertProtoGroups(pbGroups []*tsmv1.Group) []store.Group {
 	groups := make([]store.Group, len(pbGroups))

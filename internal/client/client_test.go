@@ -56,7 +56,7 @@ func setupTestClient(t *testing.T, exec tmux.Executor) (*Client, func()) {
 	sm := daemon.NewStateManager(mgr, st, config.Default(), "", hub)
 	sm.Scan()
 
-	svc := daemon.NewService(mgr, st, hub, sm)
+	svc := daemon.NewService(mgr, st, hub, nil, nil, sm)
 	srv := grpc.NewServer()
 	tsmv1.RegisterSessionManagerServer(srv, svc)
 

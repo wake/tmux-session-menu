@@ -42,6 +42,7 @@ type Deps struct {
 	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
 
 	Upgrader *upgrade.Upgrader // nil 時 ctrl+u 無效
+	HubMode  bool              // true = 使用 WatchMultiHost（hub 模式）
 }
 
 // persistHosts 將 HostManager 的主機清單寫回 config.toml。
@@ -548,6 +549,29 @@ func buildMultiHostMsg(mgr *hostmgr.HostManager) MultiHostSnapshotMsg {
 	return MultiHostSnapshotMsg{Snapshots: inputs, UploadEvents: uploadEvents}
 }
 
+// HubSnapshotMsg 是從 hub daemon 接收的多主機聚合快照。
+type HubSnapshotMsg struct {
+	Snapshot *tsmv1.MultiHostSnapshot
+	Err      error
+}
+
+// watchHubCmd 從已建立的 WatchMultiHost stream 接收第一個快照。
+// 呼叫前必須已在 main.go 中呼叫 c.WatchMultiHost() 建立 stream。
+func watchHubCmd(c *client.Client) tea.Cmd {
+	return recvHubSnapshotCmd(c)
+}
+
+// recvHubSnapshotCmd 從 WatchMultiHost stream 接收下一個快照。
+func recvHubSnapshotCmd(c *client.Client) tea.Cmd {
+	return func() tea.Msg {
+		snap, err := c.RecvMultiHostSnapshot()
+		if err != nil {
+			return HubSnapshotMsg{Err: err}
+		}
+		return HubSnapshotMsg{Snapshot: snap}
+	}
+}
+
 // clientForCursor 回傳目前游標所在主機的 gRPC 客戶端。
 // 多主機模式下依 HostID 路由，否則回傳 Deps.Client。
 func (m Model) clientForCursor() *client.Client {
@@ -612,6 +636,10 @@ func (m Model) pollInterval() time.Duration {
 
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
+	if m.deps.HubMode && m.deps.Client != nil {
+		// Hub 模式：透過 WatchMultiHost stream 接收多主機聚合快照
+		return watchHubCmd(m.deps.Client)
+	}
 	if m.deps.HostMgr != nil {
 		// 多主機模式（主要路徑）：立即送出目前快照，再等待後續通知
 		mgr := m.deps.HostMgr
@@ -671,6 +699,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		if m.deps.Client != nil {
 			cmds = append(cmds, recvSnapshotCmd(m.deps.Client))
+		}
+		if m.hasRunning() {
+			cmds = append(cmds, animTickCmd())
+		}
+		return m, tea.Batch(cmds...)
+	case HubSnapshotMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+			if m.deps.RemoteMode {
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		inputs := ConvertMultiHostSnapshot(msg.Snapshot)
+		m.items = FlattenMultiHost(inputs)
+		if m.cursor >= len(m.items) && len(m.items) > 0 {
+			m.cursor = len(m.items) - 1
+		}
+		var cmds []tea.Cmd
+		if m.deps.Client != nil {
+			cmds = append(cmds, recvHubSnapshotCmd(m.deps.Client))
 		}
 		if m.hasRunning() {
 			cmds = append(cmds, animTickCmd())

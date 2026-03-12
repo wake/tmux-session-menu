@@ -18,6 +18,13 @@ func LocalSocketPath(host string) string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("tsm-%x.sock", h[:8]))
 }
 
+// ReverseSocketPath 根據主機名稱產生確定性的 hub reverse tunnel 本地 socket 路徑。
+// 使用 "hub:" 前綴以確保與 LocalSocketPath 不同。
+func ReverseSocketPath(host string) string {
+	h := sha256.Sum256([]byte("hub:" + host))
+	return filepath.Join(os.TempDir(), fmt.Sprintf("tsm-hub-%x.sock", h[:8]))
+}
+
 // tunnelArgs 建構 SSH 通道轉發所需的命令列參數，含 keepalive 偵測斷線。
 func tunnelArgs(host, localSock, remoteSock string) []string {
 	fwd := fmt.Sprintf("%s:%s", localSock, remoteSock)
@@ -27,6 +34,22 @@ func tunnelArgs(host, localSock, remoteSock string) []string {
 		"-o", "ServerAliveInterval=5",
 		"-o", "ServerAliveCountMax=3",
 		"-L", fwd, host,
+	}
+}
+
+// tunnelArgsWithReverse 建構同時含 -L 與 -R 的 SSH 命令列參數。
+// reverseRemoteSock 為遠端主機上的 socket 路徑，reverseLocalSock 為本地 hub daemon socket 路徑。
+func tunnelArgsWithReverse(host, localSock, remoteSock, reverseRemoteSock, reverseLocalSock string) []string {
+	fwdL := fmt.Sprintf("%s:%s", localSock, remoteSock)
+	fwdR := fmt.Sprintf("%s:%s", reverseRemoteSock, reverseLocalSock)
+	return []string{
+		"ssh", "-N",
+		"-o", "ExitOnForwardFailure=yes",
+		"-o", "ServerAliveInterval=5",
+		"-o", "ServerAliveCountMax=3",
+		"-L", fwdL,
+		"-R", fwdR,
+		host,
 	}
 }
 
@@ -55,6 +78,10 @@ type Tunnel struct {
 	proc      Process
 	cmdRun    CmdRunFunc
 	cmdStart  CmdStartFunc
+
+	hasReverse        bool   // 是否啟用 reverse tunnel (-R)
+	reverseLocalSock  string // 本地 hub daemon socket 路徑
+	reverseRemoteSock string // 遠端主機的 reverse socket 路徑
 }
 
 // TunnelOption 用於設定 Tunnel 的選項函式。
@@ -68,6 +95,15 @@ func WithCmdRun(fn CmdRunFunc) TunnelOption {
 // WithCmdStart 注入自訂的命令啟動函式。
 func WithCmdStart(fn CmdStartFunc) TunnelOption {
 	return func(t *Tunnel) { t.cmdStart = fn }
+}
+
+// WithReverse 啟用 SSH reverse tunnel，將遠端主機的 hub socket 轉發到本地 hubSocketPath。
+func WithReverse(hubSocketPath string) TunnelOption {
+	return func(t *Tunnel) {
+		t.hasReverse = true
+		t.reverseLocalSock = hubSocketPath
+		t.reverseRemoteSock = ReverseSocketPath(t.host)
+	}
 }
 
 // defaultCmdRun 使用 os/exec 執行命令並回傳輸出。
@@ -130,7 +166,12 @@ func (t *Tunnel) Start() error {
 
 	os.Remove(t.localSock)
 
-	args := tunnelArgs(t.host, t.localSock, remoteSock)
+	var args []string
+	if t.hasReverse {
+		args = tunnelArgsWithReverse(t.host, t.localSock, remoteSock, t.reverseRemoteSock, t.reverseLocalSock)
+	} else {
+		args = tunnelArgs(t.host, t.localSock, remoteSock)
+	}
 	proc, err := t.cmdStart(args[0], args[1:]...)
 	if err != nil {
 		return fmt.Errorf("start ssh tunnel: %w", err)
