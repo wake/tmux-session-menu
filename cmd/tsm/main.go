@@ -455,7 +455,9 @@ func runRemote(host string) {
 	}
 	defer tun.Close()
 
-	c, err := client.DialSocket(tun.LocalSocket())
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	c, err := client.DialSocketCtx(dialCtx, tun.LocalSocket())
+	dialCancel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: 遠端 %s 的 tsm-daemon 未回應: %v\n", host, err)
 		fmt.Fprintf(os.Stderr, "請在遠端執行 tsm daemon start\n")
@@ -581,7 +583,7 @@ func doReconnect(host, session string, tun *remote.Tunnel) *client.Client {
 				continue
 			}
 
-			newC, err := client.DialSocket(tun.LocalSocket())
+			newC, err := client.DialSocketCtx(ctx, tun.LocalSocket())
 			if err != nil {
 				select {
 				case <-ctx.Done():
@@ -1528,7 +1530,7 @@ func makeHubDialFn() daemon.HubDialFn {
 		if err := tun.Start(); err != nil {
 			return nil, nil, err
 		}
-		c, err := client.DialSocket(tun.LocalSocket())
+		c, err := client.DialSocketCtx(ctx, tun.LocalSocket())
 		if err != nil {
 			tun.Close()
 			return nil, nil, err

@@ -253,7 +253,7 @@ func (h *Host) connect(ctx context.Context) error {
 		if err = tun.Start(); err != nil {
 			return err
 		}
-		c, err = client.DialSocket(tun.LocalSocket())
+		c, err = client.DialSocketCtx(ctx, tun.LocalSocket())
 		if err != nil {
 			tun.Close()
 			return err
