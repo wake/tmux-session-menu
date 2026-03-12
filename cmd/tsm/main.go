@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -1530,8 +1531,11 @@ func makeHubDialFn(hubSocketPath string) daemon.HubDialFn {
 			return nil, nil, err
 		}
 		// 設定遠端 tmux 的 @tsm_hub_socket，讓 Ctrl+Q 能連回 hub
+		// 透過獨立 SSH 呼叫（非走 tunnel），失敗不影響 forward tunnel 功能
 		reverseSock := remote.ReverseSocketPath(address)
-		_ = remote.SetHubSocket(address, reverseSock)
+		if err := remote.SetHubSocket(address, reverseSock); err != nil {
+			log.Printf("warn: set hub socket on %s failed: %v", address, err)
+		}
 
 		c, err := client.DialSocket(tun.LocalSocket())
 		if err != nil {

@@ -332,6 +332,21 @@ func TestDetectStatus_AiType_NoContentFallbackForPlainShell(t *testing.T) {
 	assert.Equal(t, "", result.AiType)
 }
 
+func TestDetectStatus_AiType_ValidHookEmptyAiType_NoFallback(t *testing.T) {
+	// 有效 hook 且 ai_type 為空 → hook 已明確表示非 AI session，content fallback 不應覆蓋
+	dir := t.TempDir()
+	statusFile := filepath.Join(dir, "non-ai-sess")
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":""}`, time.Now().Unix())
+	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
+
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), dir, hub)
+
+	// pane content 有 Claude Code 提示符，但有效 hook 說不是 AI → 不應 fallback
+	result := sm.detectStatus("non-ai-sess", "", "some output\n> ")
+	assert.Equal(t, "", result.AiType)
+}
+
 func itoa(n int64) string {
 	return fmt.Sprintf("%d", n)
 }

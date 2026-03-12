@@ -262,11 +262,13 @@ type statusResult struct {
 func (sm *StateManager) detectStatus(sessionName, paneTitle, paneContent string) statusResult {
 	var input tmux.StatusInput
 	var aiType string
+	hookFound := false // 是否有找到 hook 狀態檔（區分「無 hook」與「hook 說不是 AI」）
 
 	if sm.statusDir != "" {
 		if hs, err := tmux.ReadHookStatus(sm.statusDir, sessionName); err == nil {
 			input.HookStatus = &hs
 			aiType = hs.AiType
+			hookFound = true
 		}
 	}
 
@@ -282,8 +284,10 @@ func (sm *StateManager) detectStatus(sessionName, paneTitle, paneContent string)
 		}
 	}
 
-	// 降級偵測：無 hook 或 hook 過期且 aiType 仍為空 → 從 pane content 偵測
-	if aiType == "" && paneContent != "" {
+	// 降級偵測：無 hook 時從 pane content 偵測 AI 工具。
+	// 有效 hook 且 ai_type 為空 → hook 已明確表示非 AI session，不降級。
+	hookAuthoritative := hookFound && input.HookStatus != nil && input.HookStatus.IsValid()
+	if aiType == "" && !hookAuthoritative && paneContent != "" {
 		if tool := ai.DetectTool(paneContent); tool != "" {
 			aiType = tool
 		}
