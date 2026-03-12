@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
@@ -3033,4 +3034,22 @@ func TestModel_ModeUpgrade_AlreadyLatestNotChecked(t *testing.T) {
 	// 兩台都已是最新，不應預設勾選
 	assert.False(t, items[0].Checked, "local 已是最新不應勾選")
 	assert.False(t, items[1].Checked, "remote 已是最新不應勾選")
+}
+
+func TestDetectSessionStatus_AiType(t *testing.T) {
+	statusDir := t.TempDir()
+	statusFile := filepath.Join(statusDir, "cc-sess")
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, time.Now().Unix())
+	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
+
+	deps := ui.Deps{StatusDir: statusDir}
+	result := ui.ExportDetectSessionStatus(deps, "cc-sess", "", "")
+	assert.Equal(t, tmux.StatusIdle, result.Status)
+	assert.Equal(t, "claude", result.AiType)
+}
+
+func TestDetectSessionStatus_AiType_NoHook(t *testing.T) {
+	deps := ui.Deps{StatusDir: ""}
+	result := ui.ExportDetectSessionStatus(deps, "shell-sess", "", "")
+	assert.Equal(t, "", result.AiType)
 }

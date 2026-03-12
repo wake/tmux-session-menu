@@ -419,7 +419,9 @@ func loadSessionsCmd(deps Deps) tea.Cmd {
 				}
 			}
 			paneTitle := paneTitles[sessions[i].Name]
-			sessions[i].Status = detectSessionStatus(deps, sessions[i].Name, paneTitle, paneContent)
+			result := detectSessionStatus(deps, sessions[i].Name, paneTitle, paneContent)
+			sessions[i].Status = result.Status
+			sessions[i].AiType = result.AiType
 			sessions[i].AIModel = ai.DetectModel(paneContent)
 		}
 
@@ -622,14 +624,22 @@ func (m Model) SelectedItem() ListItem {
 	return ListItem{}
 }
 
-// detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態。
-func detectSessionStatus(deps Deps, sessionName, paneTitle, paneContent string) tmux.SessionStatus {
+// DetectSessionStatusResult 封裝直接模式的狀態偵測結果。
+type DetectSessionStatusResult struct {
+	Status tmux.SessionStatus
+	AiType string
+}
+
+// detectSessionStatus 整合三層狀態偵測，回傳 session 的實際狀態和 AI presence。
+func detectSessionStatus(deps Deps, sessionName, paneTitle, paneContent string) DetectSessionStatusResult {
 	var input tmux.StatusInput
+	var aiType string
 
 	// 第一層：Hook 狀態檔案
 	if deps.StatusDir != "" {
 		if hs, err := tmux.ReadHookStatus(deps.StatusDir, sessionName); err == nil {
 			input.HookStatus = &hs
+			aiType = hs.AiType
 		}
 	}
 
@@ -639,7 +649,17 @@ func detectSessionStatus(deps Deps, sessionName, paneTitle, paneContent string) 
 		input.PaneContent = paneContent
 	}
 
-	return tmux.ResolveStatus(input)
+	// ai_type 過期驗證
+	if aiType != "" && (input.HookStatus == nil || !input.HookStatus.IsValid()) {
+		if !ai.HasStrongAiPresence(paneContent) {
+			aiType = ""
+		}
+	}
+
+	return DetectSessionStatusResult{
+		Status: tmux.ResolveStatus(input),
+		AiType: aiType,
+	}
 }
 
 // pollInterval 回傳設定的輪詢間隔，若未設定則預設 2 秒。
