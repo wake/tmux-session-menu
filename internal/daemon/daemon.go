@@ -68,6 +68,7 @@ func (d *Daemon) Run() error {
 
 	// socket 不可用（殘留或不存在），安全清理
 	os.Remove(sockPath)
+	os.Remove(VersionPath(d.cfg))
 
 	// 寫入 PID 檔案
 	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {

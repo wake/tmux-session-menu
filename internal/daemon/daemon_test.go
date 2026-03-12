@@ -125,20 +125,27 @@ func TestRun_WritesVersionFile(t *testing.T) {
 	sockPath := SocketPath(cfg)
 	verPath := VersionPath(cfg)
 
+	existedCh := make(chan bool, 1)
 	d := NewDaemon(cfg)
 	go func() {
 		for i := 0; i < 50; i++ {
 			time.Sleep(50 * time.Millisecond)
 			if socketAlive(sockPath) {
+				// 確認 daemon 運行中 version file 存在
+				_, statErr := os.Stat(verPath)
+				existedCh <- statErr == nil
 				d.Shutdown()
 				return
 			}
 		}
+		existedCh <- false
 		d.Shutdown()
 	}()
 
 	err := d.Run()
 	require.NoError(t, err)
+
+	assert.True(t, <-existedCh, "version file 應在 daemon 運行中存在")
 
 	// Run 結束後 version file 應已被清理
 	_, err = os.Stat(verPath)
@@ -151,7 +158,7 @@ func TestRun_VersionFileContent(t *testing.T) {
 	verPath := VersionPath(cfg)
 
 	d := NewDaemon(cfg)
-	var verContent string
+	verCh := make(chan string, 1)
 	go func() {
 		for i := 0; i < 50; i++ {
 			time.Sleep(50 * time.Millisecond)
@@ -159,17 +166,21 @@ func TestRun_VersionFileContent(t *testing.T) {
 				// daemon 運行中讀取 version file
 				data, err := os.ReadFile(verPath)
 				if err == nil {
-					verContent = strings.TrimSpace(string(data))
+					verCh <- strings.TrimSpace(string(data))
+				} else {
+					verCh <- ""
 				}
 				d.Shutdown()
 				return
 			}
 		}
+		verCh <- ""
 		d.Shutdown()
 	}()
 
 	err := d.Run()
 	require.NoError(t, err)
+	verContent := <-verCh
 	assert.Equal(t, version.String(), verContent, "version file 應包含目前版本")
 }
 
