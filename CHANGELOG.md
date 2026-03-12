@@ -2,6 +2,11 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.29.4] - 2026-03-12
+
+### Fixed
+- Hub 模式 TUI 在 daemon 重啟後不再陷入無限重連迴圈：偵測到 `not in hub mode` 永久性錯誤時自動降級到 HostManager 路徑
+
 ## [0.29.2] - 2026-03-12
 
 ### Fixed

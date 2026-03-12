@@ -22,6 +22,8 @@ import (
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/upgrade"
 	"github.com/wake/tmux-session-menu/internal/version"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Deps 封裝 Model 的外部依賴。
@@ -86,7 +88,8 @@ type Model struct {
 	readOnly_      bool   // R 鍵：唯讀進入 session
 	exitTmux_      bool   // ctrl+e：退出 tmux
 	openConfig_    bool   // c 鍵：開啟 config TUI
-	watchFailed    bool   // remote 模式 Watch stream 失敗
+	watchFailed    bool // remote 模式 Watch stream 失敗
+	hubDegraded    bool // hub 模式 daemon 不再支援 → 降級到 HostManager
 	err            error
 
 	// 動畫
@@ -348,6 +351,9 @@ func (m Model) SearchQuery() string {
 	return m.searchQuery
 }
 
+// HubDegraded 回傳 hub 模式是否因 daemon 不支援而需要降級到 HostManager。
+func (m Model) HubDegraded() bool { return m.hubDegraded }
+
 // UpgradeReady 回傳是否有已下載完成可安裝的升級。
 func (m Model) UpgradeReady() bool { return m.upgradeReady }
 
@@ -558,6 +564,14 @@ type HubSnapshotMsg struct {
 	Err      error
 }
 
+// isHubUnavailable 判斷錯誤是否為 daemon 不支援 hub 模式的永久性錯誤。
+func isHubUnavailable(err error) bool {
+	if st, ok := status.FromError(err); ok {
+		return st.Code() == codes.Unavailable && st.Message() == "not in hub mode"
+	}
+	return false
+}
+
 // watchHubCmd 從已建立的 WatchMultiHost stream 接收第一個快照。
 // 呼叫前必須已在 main.go 中呼叫 c.WatchMultiHost() 建立 stream。
 func watchHubCmd(c *client.Client) tea.Cmd {
@@ -709,6 +723,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	case HubSnapshotMsg:
 		if msg.Err != nil {
+			// daemon 不再支援 hub 模式（永久性錯誤）→ 降級到 HostManager
+			if isHubUnavailable(msg.Err) {
+				m.hubDegraded = true
+				return m, tea.Quit
+			}
 			m.err = msg.Err
 			if m.deps.RemoteMode {
 				return m, tea.Quit
