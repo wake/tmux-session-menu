@@ -198,6 +198,45 @@ func TestHubManager_ProxyMutation_NotConnected(t *testing.T) {
 	assert.Contains(t, resp.Error, "not connected")
 }
 
+func TestHubManager_ProxyMutation_InvalidGroupId(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	mockClient := &mockMutationClient{}
+	mgr.setHostClient("mlab", mockClient)
+
+	resp, err := mgr.ProxyMutation(context.Background(), &tsmv1.ProxyMutationRequest{
+		HostId:      "mlab",
+		Type:        tsmv1.MutationType_MUTATION_MOVE_SESSION,
+		SessionName: "dev",
+		GroupId:     "not-a-number",
+	})
+
+	require.NoError(t, err)
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.Error, "invalid group_id")
+}
+
+func TestHubManager_ProxyMutation_LocalNotConfigured(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+
+	mgr.AddHost(config.HostEntry{Name: "air", Enabled: true})
+	// 不設定 localMutationFn
+
+	resp, err := mgr.ProxyMutation(context.Background(), &tsmv1.ProxyMutationRequest{
+		HostId:      "air",
+		Type:        tsmv1.MutationType_MUTATION_KILL_SESSION,
+		SessionName: "main",
+	})
+
+	require.NoError(t, err)
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.Error, "local mutation handler not configured")
+}
+
 func TestHubManager_ProxyMutation_RemoteError(t *testing.T) {
 	mhub := NewMultiHostHub()
 	mgr := NewHubManager(mhub)

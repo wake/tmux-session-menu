@@ -189,7 +189,10 @@ func (m *HubManager) dispatchRemoteMutation(
 		return c.CreateSession(ctx, req.SessionName, "", "")
 	case tsmv1.MutationType_MUTATION_MOVE_SESSION:
 		// GroupId 為 proto string，MoveSession 需要 int64，需解析
-		gid, _ := strconv.ParseInt(req.GroupId, 10, 64)
+		gid, err := strconv.ParseInt(req.GroupId, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid group_id %q: %w", req.GroupId, err)
+		}
 		return c.MoveSession(ctx, req.SessionName, gid, 0)
 	default:
 		return fmt.Errorf("unsupported mutation type: %v", req.Type)

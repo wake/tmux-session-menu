@@ -307,9 +307,10 @@ func runTUI() {
 			hubCtx, hubCancel := context.WithCancel(context.Background())
 			if wErr := c.WatchMultiHost(hubCtx); wErr == nil {
 				deps := ui.Deps{
-					Client:  c,
-					Cfg:     cfg,
-					HubMode: true,
+					Client:   c,
+					Cfg:      cfg,
+					HubMode:  true,
+					Upgrader: upgrade.DefaultUpgrader(),
 				}
 				p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
 				if _, runErr := p.Run(); runErr != nil {
@@ -338,9 +339,10 @@ func runTUI() {
 			hubCtx, hubCancel := context.WithCancel(context.Background())
 			if wErr := c.WatchMultiHost(hubCtx); wErr == nil {
 				deps := ui.Deps{
-					Client:  c,
-					Cfg:     cfg,
-					HubMode: true,
+					Client:   c,
+					Cfg:      cfg,
+					HubMode:  true,
+					Upgrader: upgrade.DefaultUpgrader(),
 				}
 				p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
 				if _, runErr := p.Run(); runErr != nil {

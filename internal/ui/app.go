@@ -467,6 +467,9 @@ type SnapshotMsg struct {
 // reconnectMsg 觸發 Watch stream 重連。
 type reconnectMsg struct{}
 
+// hubReconnectMsg 觸發 WatchMultiHost stream 重連。
+type hubReconnectMsg struct{}
+
 // errMsg 封裝非同步操作回傳的錯誤。
 type errMsg struct{ err error }
 
@@ -710,6 +713,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.deps.RemoteMode {
 				return m, tea.Quit
 			}
+			// 延遲 2 秒重連 WatchMultiHost stream
+			if m.deps.Client != nil {
+				return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+					return hubReconnectMsg{}
+				})
+			}
 			return m, nil
 		}
 		inputs := ConvertMultiHostSnapshot(msg.Snapshot)
@@ -758,6 +767,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.deps.Client != nil {
 			m.err = nil
 			return m, watchCmd(m.deps.Client)
+		}
+		return m, nil
+	case hubReconnectMsg:
+		if m.deps.Client != nil {
+			m.err = nil
+			return m, func() tea.Msg {
+				if err := m.deps.Client.WatchMultiHost(context.Background()); err != nil {
+					return HubSnapshotMsg{Err: err}
+				}
+				return recvHubSnapshotCmd(m.deps.Client)()
+			}
 		}
 		return m, nil
 	case errMsg:
@@ -1034,11 +1054,19 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				name := item.Session.Name
 				c := m.clientForCursor() // 閉包前取得當前游標的 client
 				deps := m.deps
+				hostID := m.hostForCursor()
 				m.mode = ModeConfirm
 				m.confirmPrompt = fmt.Sprintf("確定要刪除 session %q？", name)
 				m.confirmAction = func() tea.Cmd {
 					if c != nil {
-						if err := c.KillSession(context.Background(), name); err != nil {
+						var err error
+						if deps.HubMode {
+							err = c.ProxyMutation(context.Background(), hostID,
+								tsmv1.MutationType_MUTATION_KILL_SESSION, name, "", "")
+						} else {
+							err = c.KillSession(context.Background(), name)
+						}
+						if err != nil {
 							return func() tea.Msg { return errMsg{err} }
 						}
 						return nil // 變更透過 Watch/MultiHost stream 自動推送
@@ -1205,7 +1233,14 @@ func (m Model) updateDualInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 		if c := m.clientForCursor(); c != nil {
-			if err := c.RenameSession(context.Background(), origName, customName, newSessionName); err != nil {
+			var err error
+			if m.deps.HubMode {
+				err = c.ProxyMutation(context.Background(), m.hostForCursor(),
+					tsmv1.MutationType_MUTATION_RENAME_SESSION, origName, customName, "")
+			} else {
+				err = c.RenameSession(context.Background(), origName, customName, newSessionName)
+			}
+			if err != nil {
 				m.err = err
 				return m, nil
 			}
@@ -1303,7 +1338,15 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.pickerCursor >= 0 && m.pickerCursor < len(m.pickerGroups) {
 			group := m.pickerGroups[m.pickerCursor]
 			if c := m.clientForCursor(); c != nil {
-				if err := c.MoveSession(context.Background(), m.pickerTarget, group.ID, 0); err != nil {
+				var err error
+				if m.deps.HubMode {
+					err = c.ProxyMutation(context.Background(), m.hostForCursor(),
+						tsmv1.MutationType_MUTATION_MOVE_SESSION, m.pickerTarget, "",
+						fmt.Sprintf("%d", group.ID))
+				} else {
+					err = c.MoveSession(context.Background(), m.pickerTarget, group.ID, 0)
+				}
+				if err != nil {
 					m.err = err
 				}
 			} else if m.deps.Store != nil {
