@@ -25,6 +25,7 @@ func TestConvertProtoSessions(t *testing.T) {
 			Status:     tsmv1.SessionStatus_SESSION_STATUS_RUNNING,
 			AiModel:    "claude-opus-4-6",
 			AiSummary:  "重構中",
+			AiType:     "claude",
 			GroupName:  "work",
 			SortOrder:  1,
 			CustomName: "開發",
@@ -42,6 +43,7 @@ func TestConvertProtoSessions(t *testing.T) {
 	assert.Equal(t, tmux.StatusRunning, s.Status)
 	assert.Equal(t, "claude-opus-4-6", s.AIModel)
 	assert.Equal(t, "重構中", s.AISummary)
+	assert.Equal(t, "claude", s.AiType)
 	assert.Equal(t, "work", s.GroupName)
 	assert.Equal(t, 1, s.SortOrder)
 	assert.Equal(t, "開發", s.CustomName)
