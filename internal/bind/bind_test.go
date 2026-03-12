@@ -372,6 +372,14 @@ func TestInstall_BindCommandHasDynamicPopupArgs(t *testing.T) {
 	}
 }
 
+func TestBindBlock_HasInPopupEnv(t *testing.T) {
+	// bindBlock 的 display-popup 命令應設定 TSM_IN_POPUP=1，
+	// 確保 tsm 在 popup 內執行時切換 session 後自動退出。
+	if !strings.Contains(bindBlock, "TSM_IN_POPUP=1") {
+		t.Error("bindBlock 應包含 TSM_IN_POPUP=1 環境變數")
+	}
+}
+
 func TestRemoveBlock(t *testing.T) {
 	input := "line1\n# [tsm] begin\nbind-key stuff\n# [tsm] end\nline2\n"
 	got := removeBlock(input)
