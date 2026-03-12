@@ -226,8 +226,8 @@ func (s *Service) GetUploadTarget(_ context.Context, _ *tsmv1.GetUploadTargetReq
 	for _, sess := range snap.Sessions {
 		if sess.Attached {
 			resp.SessionName = sess.Name
-			resp.IsClaudeActive = sess.Status == tsmv1.SessionStatus_SESSION_STATUS_RUNNING ||
-				sess.Status == tsmv1.SessionStatus_SESSION_STATUS_WAITING
+			// 以 ai_type 判斷 Claude 是否存在（與 status 無關）
+			resp.IsClaudeActive = sess.AiType == "claude"
 			break
 		}
 	}
