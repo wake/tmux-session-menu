@@ -16,9 +16,9 @@ const (
 	bindBlock = `# [tsm] begin
 bind-key -n C-q run-shell 'HUB=$(tmux show-option -gqv @tsm_hub_socket); \
   if [ -S "$HUB" ]; then \
-    tmux display-popup -E -w "80%" -h "80%" "tsm --hub-socket $HUB --inline"; \
+    tmux display-popup -E -w "80%" -h "80%" "TSM_IN_POPUP=1 tsm --hub-socket $HUB --inline"; \
   else \
-    tmux display-popup -E -w "80%" -h "80%" "tsm $(tmux show-option -gqv @tsm_popup_args) --inline"; \
+    tmux display-popup -E -w "80%" -h "80%" "TSM_IN_POPUP=1 tsm $(tmux show-option -gqv @tsm_popup_args) --inline"; \
   fi'
 # [tsm] end`
 )
