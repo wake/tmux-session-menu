@@ -20,6 +20,7 @@ type MutationClient interface {
 }
 
 // HubRemoteClient 定義遠端主機連線需要的介面（Watch + Mutation + Close）。
+// Close 必須是冪等的，可能被 runRemote 和 HubManager.Close 同時呼叫。
 type HubRemoteClient interface {
 	RecvSnapshot() (*tsmv1.StateSnapshot, error)
 	MutationClient
@@ -28,10 +29,6 @@ type HubRemoteClient interface {
 
 // HubDialFn 建立到遠端主機的連線。回傳 client、cleanup 函式、錯誤。
 type HubDialFn func(ctx context.Context, address string) (HubRemoteClient, func(), error)
-
-// 內部別名，簡化使用。
-type hubRemoteClient = HubRemoteClient
-type hubDialFn = HubDialFn
 
 // remoteBackoff 是遠端連線的退避參數。
 const (
@@ -46,7 +43,7 @@ type HubManager struct {
 	order           []string
 	mhub            *MultiHostHub
 	localMutationFn func(req *tsmv1.ProxyMutationRequest) error
-	dialFn          hubDialFn // 可注入，預設為 defaultHubDial
+	dialFn          HubDialFn // 可注入，預設為 defaultHubDial
 
 	// attachLocal 清理用
 	localHub *WatcherHub
@@ -65,7 +62,7 @@ type hubHost struct {
 	lastErr      string
 	isLocal      bool
 	client       MutationClient  // 遠端主機的 mutation client，本機為 nil
-	remoteClient hubRemoteClient // 遠端主機的完整 client（含 Close），用於清理
+	remoteClient HubRemoteClient // 遠端主機的完整 client（含 Close），用於清理
 }
 
 // NewHubManager 建立新的 HubManager。
@@ -252,7 +249,7 @@ func (m *HubManager) StartRemoteHosts(ctx context.Context) {
 }
 
 // runRemote 是單台遠端主機的連線迴圈：dial → watchRemote → 斷線重連。
-func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn hubDialFn) {
+func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn HubDialFn) {
 	defer m.remoteWg.Done()
 	hostID := cfg.Name
 	backoff := remoteInitialBackoff
@@ -286,7 +283,17 @@ func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn
 			continue
 		}
 
-		// 連線成功：設定 client
+		// 連線成功：設定 client，用 sync.Once 確保 close 冪等
+		var closeOnce sync.Once
+		closeRC := func() {
+			closeOnce.Do(func() {
+				rc.Close()
+				if cleanup != nil {
+					cleanup()
+				}
+			})
+		}
+
 		m.mu.Lock()
 		if h, ok := m.hosts[hostID]; ok {
 			h.client = rc
@@ -295,13 +302,11 @@ func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn
 		m.mu.Unlock()
 
 		// 進入 watch 迴圈
+		connectedAt := time.Now()
 		m.watchRemote(ctx, cfg, rc)
 
 		// watch 返回 = 斷線
-		rc.Close()
-		if cleanup != nil {
-			cleanup()
-		}
+		closeRC()
 
 		// 清除 client
 		m.mu.Lock()
@@ -317,7 +322,11 @@ func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn
 
 		m.updateHostSnapshot(hostID, cfg,
 			tsmv1.HostStatus_HOST_STATUS_DISCONNECTED, nil, "connection lost")
-		backoff = remoteInitialBackoff
+
+		// 連線持續超過 30 秒才重置 backoff，避免快速連線-斷線循環以 1s 間隔重試
+		if time.Since(connectedAt) > 30*time.Second {
+			backoff = remoteInitialBackoff
+		}
 
 		select {
 		case <-ctx.Done():
@@ -329,7 +338,7 @@ func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn
 }
 
 // watchRemote 持續接收遠端快照並更新 hub。
-func (m *HubManager) watchRemote(ctx context.Context, cfg config.HostEntry, rc hubRemoteClient) {
+func (m *HubManager) watchRemote(ctx context.Context, cfg config.HostEntry, rc HubRemoteClient) {
 	hostID := cfg.Name
 	for {
 		select {

@@ -1451,7 +1451,7 @@ func makeHubDialFn() daemon.HubDialFn {
 			tun.Close()
 			return nil, nil, err
 		}
-		cleanup := func() { tun.Close() }
+		cleanup := func() { c.Close(); tun.Close() }
 		return c, cleanup, nil
 	}
 }

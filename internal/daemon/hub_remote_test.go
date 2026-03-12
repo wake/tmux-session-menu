@@ -93,7 +93,7 @@ func TestHubManager_StartRemoteHosts_SetsConnecting(t *testing.T) {
 	// 使用永遠阻塞的 dialFn，讓狀態停留在 CONNECTING
 	blockCh := make(chan struct{})
 	defer close(blockCh)
-	mgr.dialFn = func(ctx context.Context, address string) (hubRemoteClient, func(), error) {
+	mgr.dialFn = func(ctx context.Context, address string) (HubRemoteClient, func(), error) {
 		<-ctx.Done()
 		return nil, nil, ctx.Err()
 	}
@@ -120,7 +120,7 @@ func TestHubManager_StartRemoteHosts_SkipsLocalAndDisabled(t *testing.T) {
 	mgr := NewHubManager(mhub)
 
 	var dialCount atomic.Int32
-	mgr.dialFn = func(ctx context.Context, address string) (hubRemoteClient, func(), error) {
+	mgr.dialFn = func(ctx context.Context, address string) (HubRemoteClient, func(), error) {
 		dialCount.Add(1)
 		<-ctx.Done()
 		return nil, nil, ctx.Err()
@@ -152,7 +152,7 @@ func TestHubManager_StartRemoteHosts_ConnectsAndBroadcasts(t *testing.T) {
 	mgr := NewHubManager(mhub)
 
 	fakeClient := newFakeRemoteClient()
-	mgr.dialFn = func(ctx context.Context, address string) (hubRemoteClient, func(), error) {
+	mgr.dialFn = func(ctx context.Context, address string) (HubRemoteClient, func(), error) {
 		return fakeClient, func() {}, nil
 	}
 
@@ -199,7 +199,7 @@ func TestHubManager_StartRemoteHosts_HandleDialFailure(t *testing.T) {
 	defer mhub.Close()
 	mgr := NewHubManager(mhub)
 
-	mgr.dialFn = func(ctx context.Context, address string) (hubRemoteClient, func(), error) {
+	mgr.dialFn = func(ctx context.Context, address string) (HubRemoteClient, func(), error) {
 		return nil, nil, fmt.Errorf("ssh: connection refused")
 	}
 
@@ -241,15 +241,12 @@ func TestHubManager_StartRemoteHosts_ReconnectsAfterStreamError(t *testing.T) {
 	var mu sync.Mutex
 	var clients []*fakeRemoteClient
 
-	mgr.dialFn = func(ctx context.Context, address string) (hubRemoteClient, func(), error) {
-		n := dialCount.Add(1)
+	mgr.dialFn = func(ctx context.Context, address string) (HubRemoteClient, func(), error) {
+		dialCount.Add(1)
 		fc := newFakeRemoteClient()
 		mu.Lock()
 		clients = append(clients, fc)
 		mu.Unlock()
-		if n == 1 {
-			// 第一次連線：立即成功，但之後會被關閉模擬斷線
-		}
 		return fc, func() {}, nil
 	}
 
@@ -289,7 +286,7 @@ func TestHubManager_StartRemoteHosts_SetsMutationClient(t *testing.T) {
 		return nil
 	}
 
-	mgr.dialFn = func(ctx context.Context, address string) (hubRemoteClient, func(), error) {
+	mgr.dialFn = func(ctx context.Context, address string) (HubRemoteClient, func(), error) {
 		return fakeClient, func() {}, nil
 	}
 
@@ -334,7 +331,7 @@ func TestHubManager_Close_StopsRemoteGoroutines(t *testing.T) {
 	mgr := NewHubManager(mhub)
 
 	fakeClient := newFakeRemoteClient()
-	mgr.dialFn = func(ctx context.Context, address string) (hubRemoteClient, func(), error) {
+	mgr.dialFn = func(ctx context.Context, address string) (HubRemoteClient, func(), error) {
 		return fakeClient, func() {}, nil
 	}
 
@@ -361,6 +358,47 @@ func TestHubManager_Close_StopsRemoteGoroutines(t *testing.T) {
 
 	// Close 後 client 應被關閉
 	assert.True(t, fakeClient.closed.Load(), "Close 後 fakeClient 應已被關閉")
+}
+
+// TestHubManager_Close_DuringDial 驗證 Close 在 dial 阻塞時不會死鎖。
+func TestHubManager_Close_DuringDial(t *testing.T) {
+	mhub := NewMultiHostHub()
+	defer mhub.Close()
+	mgr := NewHubManager(mhub)
+
+	dialStarted := make(chan struct{})
+	mgr.dialFn = func(ctx context.Context, address string) (HubRemoteClient, func(), error) {
+		close(dialStarted)
+		<-ctx.Done()
+		return nil, nil, ctx.Err()
+	}
+
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mgr.StartRemoteHosts(ctx)
+
+	// 等待 dial 開始阻塞
+	select {
+	case <-dialStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("dial 未開始")
+	}
+
+	// Close 不應死鎖（限時 3 秒）
+	done := make(chan struct{})
+	go func() {
+		mgr.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// OK
+	case <-time.After(3 * time.Second):
+		t.Fatal("Close 在 dial 阻塞時死鎖")
+	}
 }
 
 // --- 輔助函式 ---

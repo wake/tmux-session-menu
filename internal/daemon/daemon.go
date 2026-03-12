@@ -31,7 +31,7 @@ type Daemon struct {
 	state      *StateManager
 	store      *store.Store
 	cancelRun  context.CancelFunc
-	HubDialFn  hubDialFn // 外部注入的遠端 dial 函式（避免循環依賴）
+	HubDialFn  HubDialFn // 外部注入的遠端 dial 函式（避免循環依賴）
 }
 
 // hasRemoteHosts 回傳設定中是否有已啟用的非本機主機。
