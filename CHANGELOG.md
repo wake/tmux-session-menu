@@ -2,6 +2,14 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.32.1] - 2026-03-13
+
+### Fixed
+- 燈號 content-based 降級偵測：hook 無法提供 `ai_type` 時，從 pane content 偵測 Claude Code 存在 → 實心 ●
+- 有效 hook 且 `ai_type` 為空時不觸發 content fallback（尊重 hook 的明確「非 AI」判斷）
+- Hub mode reverse tunnel 接線：`makeHubDialFn` 使用 `WithReverse` 建立 reverse tunnel，並呼叫 `SetHubSocket`/`ClearHubSocket` 管理遠端 `@tsm_hub_socket`
+- `SetHubSocket` 失敗時記錄 warn 日誌而非靜默忽略
+
 ## [0.32.0] - 2026-03-12
 
 ### Added
