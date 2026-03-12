@@ -281,7 +281,7 @@ func (s *Service) WatchMultiHost(
 	for {
 		select {
 		case <-stream.Context().Done():
-			return nil
+			return stream.Context().Err()
 		case snap, ok := <-ch:
 			if !ok {
 				return nil

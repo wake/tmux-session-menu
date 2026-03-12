@@ -125,6 +125,36 @@ func (d *Daemon) Run() error {
 
 	svc := NewService(mgr, st, d.hub, d.mhub, d.hubMgr, d.state)
 
+	// 設定 localMutationFn：讓 ProxyMutation 能透過 Service 操作本機 session
+	if d.hubMgr != nil {
+		d.hubMgr.localMutationFn = func(req *tsmv1.ProxyMutationRequest) error {
+			ctx := context.Background()
+			switch req.Type {
+			case tsmv1.MutationType_MUTATION_KILL_SESSION:
+				_, err := svc.KillSession(ctx, &tsmv1.KillSessionRequest{Name: req.SessionName})
+				return err
+			case tsmv1.MutationType_MUTATION_RENAME_SESSION:
+				_, err := svc.RenameSession(ctx, &tsmv1.RenameSessionRequest{
+					SessionName: req.SessionName,
+					CustomName:  req.NewName,
+				})
+				return err
+			case tsmv1.MutationType_MUTATION_CREATE_SESSION:
+				_, err := svc.CreateSession(ctx, &tsmv1.CreateSessionRequest{Name: req.SessionName})
+				return err
+			case tsmv1.MutationType_MUTATION_MOVE_SESSION:
+				gid, _ := strconv.ParseInt(req.GroupId, 10, 64)
+				_, err := svc.MoveSession(ctx, &tsmv1.MoveSessionRequest{
+					SessionName: req.SessionName,
+					GroupId:     gid,
+				})
+				return err
+			default:
+				return fmt.Errorf("unsupported local mutation type: %v", req.Type)
+			}
+		}
+	}
+
 	d.server = grpc.NewServer()
 	tsmv1.RegisterSessionManagerServer(d.server, svc)
 
