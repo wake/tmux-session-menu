@@ -313,21 +313,23 @@ func runTUI() {
 					Upgrader: upgrade.DefaultUpgrader(),
 				}
 				p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
-				if _, runErr := p.Run(); runErr != nil {
-					fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
-					hubCancel()
-					c.Close()
-					os.Exit(1)
-				}
+				finalModel, runErr := p.Run()
 				hubCancel()
 				c.Close()
-				return
+				if runErr != nil {
+					fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
+					os.Exit(1)
+				}
+				// hub 模式降級：daemon 重啟後不再支援 hub → 降級到 local 模式
+				if fm, ok := finalModel.(ui.Model); !ok || !fm.HubDegraded() {
+					return
+				}
+			} else {
+				hubCancel()
+				c.Close()
 			}
-			hubCancel()
-			c.Close()
 		}
-		// graceful degradation: hub socket 不可用 → 降級為 local 模式
-		fmt.Fprintf(os.Stderr, "hub socket 連線失敗，降級為 local 模式\n")
+		// graceful degradation: hub socket 不可用或降級 → local 模式
 		// fall through to normal mode
 	}
 
@@ -345,21 +347,23 @@ func runTUI() {
 					Upgrader: upgrade.DefaultUpgrader(),
 				}
 				p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
-				if _, runErr := p.Run(); runErr != nil {
-					fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
-					hubCancel()
-					c.Close()
-					os.Exit(1)
-				}
+				finalModel, runErr := p.Run()
 				hubCancel()
 				c.Close()
-				return
+				if runErr != nil {
+					fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
+					os.Exit(1)
+				}
+				// hub 模式降級：daemon 重啟後不再支援 hub → 降級到 HostManager
+				if fm, ok := finalModel.(ui.Model); !ok || !fm.HubDegraded() {
+					return
+				}
+			} else {
+				hubCancel()
+				c.Close()
 			}
-			// WatchMultiHost 不支援（舊版 daemon 回 Unavailable）→ 降級到 HostManager
-			hubCancel()
-			c.Close()
 		}
-		// client.Dial 失敗或不支援 hub → 繼續原有 HostManager 路徑
+		// client.Dial 失敗、不支援 hub、或降級 → 繼續原有 HostManager 路徑
 	}
 
 	// 防禦性確保 local 永遠存在
