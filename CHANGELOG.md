@@ -2,6 +2,18 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.32.0] - 2026-03-12
+
+### Added
+- AI presence 與 activity 分離：新增 `ai_type` 欄位區分「AI agent 是否存在」與「AI 正在做什麼」
+- Hook status JSON 新增 `ai_type` 欄位，由 `SessionStart`/`SessionEnd` 生命週期控制，不受 2 分鐘 TTL 限制
+- `HasStrongAiPresence()` 降級驗證：hook 過期時透過 pane content 二次確認 AI 是否仍在
+- TUI 燈號改為 `ai_type` 驅動：有 AI → 實心 ●（顏色由 status 決定），無 AI → 空心 ○
+
+### Changed
+- `GetUploadTarget` 改用 `ai_type == "claude"` 判斷上傳觸發，取代原本的 status-based 判斷
+- 解決 Claude Code idle 時 iTerm2 拖放上傳無法觸發的問題
+
 ## [0.31.0] - 2026-03-12
 
 ### Added
