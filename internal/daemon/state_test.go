@@ -305,6 +305,48 @@ func TestDetectStatus_AiType_ExpiredNoPresence(t *testing.T) {
 	assert.Equal(t, "", result.AiType)
 }
 
+func TestDetectStatus_AiType_ContentFallback(t *testing.T) {
+	// 無 hook 狀態檔，但 pane content 有 Claude Code 提示符
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+
+	result := sm.detectStatus("no-hook-sess", "", "some output\n> ")
+	assert.Equal(t, "claude-code", result.AiType)
+}
+
+func TestDetectStatus_AiType_ContentFallbackInterrupt(t *testing.T) {
+	// 無 hook 狀態檔，但 pane content 有 Claude Code 工作中指示
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+
+	result := sm.detectStatus("no-hook-sess", "", "Working on task...\nesc to interrupt")
+	assert.Equal(t, "claude-code", result.AiType)
+}
+
+func TestDetectStatus_AiType_NoContentFallbackForPlainShell(t *testing.T) {
+	// 無 hook 狀態檔，pane content 是一般 shell → aiType 應為空
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+
+	result := sm.detectStatus("plain-sess", "", "user@host:~$ ls\nfile1 file2\nuser@host:~$ ")
+	assert.Equal(t, "", result.AiType)
+}
+
+func TestDetectStatus_AiType_ValidHookEmptyAiType_NoFallback(t *testing.T) {
+	// 有效 hook 且 ai_type 為空 → hook 已明確表示非 AI session，content fallback 不應覆蓋
+	dir := t.TempDir()
+	statusFile := filepath.Join(dir, "non-ai-sess")
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":""}`, time.Now().Unix())
+	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
+
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), dir, hub)
+
+	// pane content 有 Claude Code 提示符，但有效 hook 說不是 AI → 不應 fallback
+	result := sm.detectStatus("non-ai-sess", "", "some output\n> ")
+	assert.Equal(t, "", result.AiType)
+}
+
 func itoa(n int64) string {
 	return fmt.Sprintf("%d", n)
 }
