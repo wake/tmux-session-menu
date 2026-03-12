@@ -2,6 +2,13 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.31.0] - 2026-03-12
+
+### Added
+- `tsm daemon status` 顯示 daemon 版本號：`daemon running (pid=xxx, version=0.31.0, socket=...)`
+- Daemon 啟動時寫入 `tsm.version` 檔案，結束時自動清理
+- 向下相容舊版 daemon（無 version 檔案時正常顯示，不報錯）
+
 ## [0.30.1] - 2026-03-12
 
 ### Fixed
