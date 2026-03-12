@@ -201,6 +201,16 @@ func (d *Daemon) Shutdown() {
 	}
 }
 
+// resolveExe 回傳 daemon 應使用的 binary 路徑。
+// 優先使用 PATH 中的 tsm（已安裝的版本），避免從暫存升級檔案啟動 daemon。
+// 找不到時降級為 os.Executable()（開發環境）。
+func resolveExe() (string, error) {
+	if p, err := exec.LookPath("tsm"); err == nil {
+		return p, nil
+	}
+	return os.Executable()
+}
+
 // Start 以 re-exec 模式在背景啟動 daemon。
 func Start(cfg config.Config) error {
 	sockPath := SocketPath(cfg)
@@ -209,7 +219,7 @@ func Start(cfg config.Config) error {
 		return err
 	}
 
-	exe, err := os.Executable()
+	exe, err := resolveExe()
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)
 	}

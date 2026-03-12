@@ -276,9 +276,18 @@ func tryConnect(sockPath string) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
+// resolveExe 回傳 daemon 應使用的 binary 路徑。
+// 優先使用 PATH 中的 tsm（已安裝的版本），避免從暫存升級檔案啟動 daemon。
+func resolveExe() (string, error) {
+	if p, err := osexec.LookPath("tsm"); err == nil {
+		return p, nil
+	}
+	return os.Executable()
+}
+
 // autoStartDaemon fork 一個背景 daemon 程序，並等待它就緒。
 func autoStartDaemon(sockPath string) error {
-	exe, err := os.Executable()
+	exe, err := resolveExe()
 	if err != nil {
 		return fmt.Errorf("get executable: %w", err)
 	}
