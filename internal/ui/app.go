@@ -792,7 +792,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.deps.Client != nil {
 			m.err = nil
 			return m, func() tea.Msg {
-				if err := m.deps.Client.WatchMultiHost(context.Background()); err != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := m.deps.Client.WatchMultiHost(ctx); err != nil {
 					return HubSnapshotMsg{Err: err}
 				}
 				return recvHubSnapshotCmd(m.deps.Client)()
