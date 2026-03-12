@@ -201,7 +201,9 @@ func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 			paneContent = content
 		}
 		paneTitle := paneTitles[sessions[i].Name]
-		sessions[i].Status = sm.detectStatus(sessions[i].Name, paneTitle, paneContent)
+		result := sm.detectStatus(sessions[i].Name, paneTitle, paneContent)
+		sessions[i].Status = result.Status
+		sessions[i].AiType = result.AiType
 		sessions[i].AIModel = ai.DetectModel(paneContent)
 	}
 
@@ -250,13 +252,21 @@ func (sm *StateManager) BuildSnapshot() *tsmv1.StateSnapshot {
 	return snap
 }
 
-// detectStatus 整合三層狀態偵測。
-func (sm *StateManager) detectStatus(sessionName, paneTitle, paneContent string) tmux.SessionStatus {
+// statusResult 封裝 detectStatus 的回傳值。
+type statusResult struct {
+	Status tmux.SessionStatus
+	AiType string
+}
+
+// detectStatus 整合三層狀態偵測，同時判斷 AI presence。
+func (sm *StateManager) detectStatus(sessionName, paneTitle, paneContent string) statusResult {
 	var input tmux.StatusInput
+	var aiType string
 
 	if sm.statusDir != "" {
 		if hs, err := tmux.ReadHookStatus(sm.statusDir, sessionName); err == nil {
 			input.HookStatus = &hs
+			aiType = hs.AiType
 		}
 	}
 
@@ -265,7 +275,17 @@ func (sm *StateManager) detectStatus(sessionName, paneTitle, paneContent string)
 		input.PaneContent = paneContent
 	}
 
-	return tmux.ResolveStatus(input)
+	// ai_type 過期驗證：hook > 2 分鐘且 ai_type 非空 → 用 content 驗證
+	if aiType != "" && (input.HookStatus == nil || !input.HookStatus.IsValid()) {
+		if !ai.HasStrongAiPresence(paneContent) {
+			aiType = ""
+		}
+	}
+
+	return statusResult{
+		Status: tmux.ResolveStatus(input),
+		AiType: aiType,
+	}
 }
 
 // toProtoSnapshot 將內部型別轉換為 proto StateSnapshot。
@@ -288,6 +308,7 @@ func toProtoSnapshot(sessions []tmux.Session, groups []store.Group) *tsmv1.State
 			GroupName:  s.GroupName,
 			SortOrder:  int32(s.SortOrder),
 			CustomName: s.CustomName,
+			AiType:     s.AiType,
 		}
 	}
 
