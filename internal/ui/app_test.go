@@ -73,6 +73,7 @@ func TestModel_View_RendersSessions(t *testing.T) {
 			Status:   tmux.StatusRunning,
 			Activity: time.Now().Add(-3 * time.Minute),
 			AIModel:  "claude-sonnet-4-6",
+			AiType:   "claude",
 		}},
 		{Type: ui.ItemSession, Session: tmux.Session{
 			Name:     "api-server",
@@ -225,10 +226,12 @@ func TestModel_View_UnifiedStatusIcons(t *testing.T) {
 		{Type: ui.ItemSession, Session: tmux.Session{
 			Name:   "running-session",
 			Status: tmux.StatusRunning,
+			AiType: "claude",
 		}},
 		{Type: ui.ItemSession, Session: tmux.Session{
 			Name:   "waiting-session",
 			Status: tmux.StatusWaiting,
+			AiType: "claude",
 		}},
 		{Type: ui.ItemSession, Session: tmux.Session{
 			Name:   "idle-session",

@@ -28,6 +28,7 @@ type Session struct {
 	GroupName  string // 所屬群組
 	SortOrder  int    // 排序順序
 	CustomName string // 自訂顯示名稱（from SQLite，空字串表示使用 Name）
+	AiType     string // "claude" / "" — 由 hook 生命週期決定
 }
 
 // DisplayName 回傳顯示名稱：有自訂名稱時回傳 CustomName，否則回傳 Name。
@@ -54,19 +55,15 @@ func (s Session) RelativeTime() string {
 }
 
 // StatusIcon 回傳對應狀態的圖示字元。
+// ai_type 非空時用實心燈，空時用空心。
 func (s Session) StatusIcon() string {
-	switch s.Status {
-	case StatusRunning:
+	if s.AiType != "" {
+		if s.Status == StatusError {
+			return "✗"
+		}
 		return "●"
-	case StatusWaiting:
-		return "●"
-	case StatusIdle:
-		return "○"
-	case StatusError:
-		return "✗"
-	default:
-		return "○"
 	}
+	return "○"
 }
 
 // Executor 定義 tmux 指令的執行介面（方便測試 mock）。
