@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -1101,7 +1102,7 @@ func runDaemon(args []string) {
 		if containsFlag(args[1:], "--foreground") {
 			// 前景執行（供 daemonize 的子程序使用）
 			d := daemon.NewDaemon(cfg)
-			d.HubDialFn = makeHubDialFn()
+			d.HubDialFn = makeHubDialFn(daemon.SocketPath(cfg))
 			if err := d.Run(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -1520,25 +1521,39 @@ func runItermCoprocess(args []string) {
 }
 
 // makeHubDialFn 建立 daemon hub 模式的遠端 dial 函式。
-// 使用 SSH tunnel + gRPC DialSocket 連線到遠端 daemon。
+// 使用 SSH tunnel（forward + reverse）+ gRPC DialSocket 連線到遠端 daemon。
+// reverse tunnel 讓遠端主機的 Ctrl+Q 能透過 @tsm_hub_socket 連回 hub daemon。
 // 放在 main.go 以避免 daemon → client 循環依賴。
-func makeHubDialFn() daemon.HubDialFn {
+func makeHubDialFn(hubSocketPath string) daemon.HubDialFn {
 	return func(ctx context.Context, address string) (daemon.HubRemoteClient, func(), error) {
-		tun := remote.NewTunnel(address)
+		tun := remote.NewTunnel(address, remote.WithReverse(hubSocketPath))
 		if err := tun.Start(); err != nil {
 			return nil, nil, err
 		}
+		// 設定遠端 tmux 的 @tsm_hub_socket，讓 Ctrl+Q 能連回 hub
+		// 透過獨立 SSH 呼叫（非走 tunnel），失敗不影響 forward tunnel 功能
+		reverseSock := remote.ReverseSocketPath(address)
+		if err := remote.SetHubSocket(address, reverseSock); err != nil {
+			log.Printf("warn: set hub socket on %s failed: %v", address, err)
+		}
+
 		c, err := client.DialSocket(tun.LocalSocket())
 		if err != nil {
+			_ = remote.ClearHubSocket(address)
 			tun.Close()
 			return nil, nil, err
 		}
 		if err := c.Watch(ctx); err != nil {
 			c.Close()
+			_ = remote.ClearHubSocket(address)
 			tun.Close()
 			return nil, nil, err
 		}
-		cleanup := func() { c.Close(); tun.Close() }
+		cleanup := func() {
+			c.Close()
+			_ = remote.ClearHubSocket(address)
+			tun.Close()
+		}
 		return c, cleanup, nil
 	}
 }
