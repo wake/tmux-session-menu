@@ -1014,6 +1014,7 @@ func runDaemon(args []string) {
 		if containsFlag(args[1:], "--foreground") {
 			// 前景執行（供 daemonize 的子程序使用）
 			d := daemon.NewDaemon(cfg)
+			d.HubDialFn = makeHubDialFn()
 			if err := d.Run(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -1429,4 +1430,28 @@ func runItermCoprocess(args []string) {
 		return
 	}
 	upload.RunCoprocess(filenames)
+}
+
+// makeHubDialFn 建立 daemon hub 模式的遠端 dial 函式。
+// 使用 SSH tunnel + gRPC DialSocket 連線到遠端 daemon。
+// 放在 main.go 以避免 daemon → client 循環依賴。
+func makeHubDialFn() daemon.HubDialFn {
+	return func(ctx context.Context, address string) (daemon.HubRemoteClient, func(), error) {
+		tun := remote.NewTunnel(address)
+		if err := tun.Start(); err != nil {
+			return nil, nil, err
+		}
+		c, err := client.DialSocket(tun.LocalSocket())
+		if err != nil {
+			tun.Close()
+			return nil, nil, err
+		}
+		if err := c.Watch(ctx); err != nil {
+			c.Close()
+			tun.Close()
+			return nil, nil, err
+		}
+		cleanup := func() { tun.Close() }
+		return c, cleanup, nil
+	}
 }

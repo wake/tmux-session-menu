@@ -23,14 +23,15 @@ import (
 
 // Daemon 是 tsm daemon 的主體。
 type Daemon struct {
-	cfg       config.Config
-	server    *grpc.Server
-	hub       *WatcherHub
-	mhub      *MultiHostHub  // nil = 一般模式
-	hubMgr    *HubManager    // nil = 一般模式
-	state     *StateManager
-	store     *store.Store
-	cancelRun context.CancelFunc
+	cfg        config.Config
+	server     *grpc.Server
+	hub        *WatcherHub
+	mhub       *MultiHostHub  // nil = 一般模式
+	hubMgr     *HubManager    // nil = 一般模式
+	state      *StateManager
+	store      *store.Store
+	cancelRun  context.CancelFunc
+	HubDialFn  hubDialFn // 外部注入的遠端 dial 函式（避免循環依賴）
 }
 
 // hasRemoteHosts 回傳設定中是否有已啟用的非本機主機。
@@ -111,6 +112,7 @@ func (d *Daemon) Run() error {
 	if hasRemoteHosts(d.cfg.Hosts) {
 		d.mhub = NewMultiHostHub()
 		d.hubMgr = NewHubManager(d.mhub)
+		d.hubMgr.dialFn = d.HubDialFn // 注入遠端 dial 函式
 		for _, h := range d.cfg.Hosts {
 			d.hubMgr.AddHost(h)
 		}
@@ -162,6 +164,11 @@ func (d *Daemon) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	d.cancelRun = cancel
 	go d.state.Run(ctx)
+
+	// 啟動遠端主機連線（hub 模式）
+	if d.hubMgr != nil {
+		d.hubMgr.StartRemoteHosts(ctx)
+	}
 
 	// 監聽系統信號
 	sigCh := make(chan os.Signal, 1)

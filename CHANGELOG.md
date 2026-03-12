@@ -2,6 +2,15 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.30.0] - 2026-03-12
+
+### Added
+- Daemon Hub 模式遠端主機連線：HubManager 現在會透過 SSH tunnel + gRPC 主動連線到遠端 daemon，接收即時快照並廣播給 TUI 客戶端
+- `HubRemoteClient` / `HubDialFn` 介面，支援依賴注入與測試
+
+### Fixed
+- `tsm --host mlab` 從遠端機器執行時不再顯示空白畫面：daemon hub 模式之前缺少遠端連線邏輯，所有遠端主機永遠停在 DISABLED 狀態
+
 ## [0.29.4] - 2026-03-12
 
 ### Fixed
