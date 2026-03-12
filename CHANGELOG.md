@@ -2,6 +2,18 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.29.0] - 2026-03-12
+
+### Added
+- Daemon Hub 模式：多主機聚合邏輯從 TUI HostManager 移入 daemon 層，所有主機按 Ctrl+Q 看到一致的多主機視圖
+- `WatchMultiHost` gRPC streaming RPC，daemon 聚合所有主機快照後推送 `MultiHostSnapshot`
+- `ProxyMutation` RPC，遠端 TUI 的操作（kill/create/rename/move session）路由到正確的目標 daemon
+- SSH reverse tunnel (`-R`) 支援，讓遠端主機的 Ctrl+Q 能連回 hub daemon
+- `--hub-socket` CLI flag，遠端 TUI 透過 reverse tunnel socket 連線到 hub
+- Ctrl+Q 自動偵測 `@tsm_hub_socket` tmux user option，存在時走 hub 模式
+- `HubManager` 聚合引擎 + `MultiHostHub` 廣播器
+- 不支援 hub 的舊版 daemon 自動降級到 HostManager 路徑
+
 ## [0.28.3] - 2026-03-12
 
 ### Fixed
