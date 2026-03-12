@@ -302,31 +302,10 @@ func runTUI() {
 	// 連線失敗時 graceful degradation 到 local 模式
 	hubSocket := parseHubSocket(args)
 	if hubSocket != "" {
-		c, err := client.DialSocket(hubSocket)
-		if err == nil {
-			hubCtx, hubCancel := context.WithCancel(context.Background())
-			if wErr := c.WatchMultiHost(hubCtx); wErr == nil {
-				deps := ui.Deps{
-					Client:   c,
-					Cfg:      cfg,
-					HubMode:  true,
-					Upgrader: upgrade.DefaultUpgrader(),
-				}
-				p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
-				finalModel, runErr := p.Run()
-				hubCancel()
-				c.Close()
-				if runErr != nil {
-					fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
-					os.Exit(1)
-				}
-				// hub 模式降級：daemon 重啟後不再支援 hub → 降級到 local 模式
-				if fm, ok := finalModel.(ui.Model); !ok || !fm.HubDegraded() {
-					return
-				}
-			} else {
-				hubCancel()
-				c.Close()
+		if c, err := client.DialSocket(hubSocket); err == nil {
+			result := runHubTUI(c, cfg, cfgPath)
+			if result != hubResultDegraded {
+				return
 			}
 		}
 		// graceful degradation: hub socket 不可用或降級 → local 模式
@@ -338,29 +317,9 @@ func runTUI() {
 	// 若 daemon 不支援（舊版或未啟用 remote hosts）→ 降級到 HostManager
 	if hostMode {
 		if c, err := client.Dial(cfg); err == nil {
-			hubCtx, hubCancel := context.WithCancel(context.Background())
-			if wErr := c.WatchMultiHost(hubCtx); wErr == nil {
-				deps := ui.Deps{
-					Client:   c,
-					Cfg:      cfg,
-					HubMode:  true,
-					Upgrader: upgrade.DefaultUpgrader(),
-				}
-				p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
-				finalModel, runErr := p.Run()
-				hubCancel()
-				c.Close()
-				if runErr != nil {
-					fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
-					os.Exit(1)
-				}
-				// hub 模式降級：daemon 重啟後不再支援 hub → 降級到 HostManager
-				if fm, ok := finalModel.(ui.Model); !ok || !fm.HubDegraded() {
-					return
-				}
-			} else {
-				hubCancel()
-				c.Close()
+			result := runHubTUI(c, cfg, cfgPath)
+			if result != hubResultDegraded {
+				return
 			}
 		}
 		// client.Dial 失敗、不支援 hub、或降級 → 繼續原有 HostManager 路徑
@@ -819,6 +778,134 @@ func loadConfig() config.Config {
 	return cfg
 }
 
+// hubResult 表示 runHubTUI 的結果。
+type hubResult int
+
+const (
+	hubResultExit     hubResult = iota // 正常退出（使用者按 q / ctrl+e）
+	hubResultDegraded                  // daemon 不再支援 hub → 降級到 HostManager
+	hubResultError                     // 無法建立 watch stream
+)
+
+// runHubTUI 執行 hub 模式的 TUI 迴圈：顯示 sessions → 選取 → attach → 回到 TUI。
+// 處理 session 選取、config 開啟、升級、及遠端 attach 重連。
+func runHubTUI(c *client.Client, cfg config.Config, cfgPath string) hubResult {
+	hubCtx, hubCancel := context.WithCancel(context.Background())
+	if wErr := c.WatchMultiHost(hubCtx); wErr != nil {
+		hubCancel()
+		c.Close()
+		return hubResultError
+	}
+
+	exec := tmux.NewRealExecutor()
+	upgrader := upgrade.DefaultUpgrader()
+
+	defer func() {
+		hubCancel()
+		c.Close()
+	}()
+
+	for {
+		deps := ui.Deps{
+			Client:     c,
+			Cfg:        cfg,
+			ConfigPath: cfgPath,
+			HubMode:    true,
+			Upgrader:   upgrader,
+		}
+		p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
+		finalModel, runErr := p.Run()
+		if runErr != nil {
+			fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
+			os.Exit(1)
+		}
+
+		fm, ok := finalModel.(ui.Model)
+		if !ok {
+			return hubResultExit
+		}
+
+		// hub 模式降級：daemon 重啟後不再支援 hub
+		if fm.HubDegraded() {
+			return hubResultDegraded
+		}
+
+		if fm.UpgradeReady() {
+			hubCancel()
+			c.Close()
+			runPostUpgrade(fm, cfg)
+			os.Exit(0) // runPostUpgrade 後不回到此函式
+		}
+		if fm.OpenConfig() {
+			runConfig()
+			cfg = loadConfig()
+			cfg.InTmux = os.Getenv("TMUX") != ""
+			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+			continue
+		}
+
+		selected := fm.Selected()
+		if selected == "" {
+			if fm.ExitTmux() && os.Getenv("TMUX") != "" {
+				_ = remote.WriteExitMarker()
+				_ = osexec.Command("tmux", "detach-client").Run()
+			}
+			return hubResultExit
+		}
+
+		// 判斷選取的 session 屬於哪台主機
+		item := fm.SelectedItem()
+		hostEntry := findHostEntry(cfg.Hosts, item.HostID)
+
+		if hostEntry == nil || hostEntry.IsLocal() {
+			// 本機 session
+			switchToSession(selected, fm.ReadOnly())
+			if cfg.InPopup {
+				return hubResultExit
+			}
+			continue
+		}
+
+		// 遠端 session — attach
+		applyHostBar := func() {
+			if hostEntry.Color != "" {
+				barCfg := config.ColorConfig{
+					BarBG:   hostEntry.Color,
+					BadgeBG: hostEntry.Color,
+					BadgeFG: cfg.Remote.BadgeFG,
+				}
+				_ = tmux.ApplyStatusBar(exec, barCfg)
+			} else {
+				_ = tmux.ApplyStatusBar(exec, cfg.Remote)
+			}
+		}
+
+		applyHostBar()
+		result := remote.Attach(hostEntry.Address, selected)
+		_ = tmux.ApplyStatusBar(exec, cfg.Local)
+
+		if result == remote.AttachDetached {
+			if remote.CheckAndClearExitRequested(hostEntry.Address) {
+				return hubResultExit
+			}
+			continue
+		}
+
+		// 斷線 → hub daemon 會自動重連遠端主機，回到 TUI 讓使用者重選
+		continue
+	}
+}
+
+// findHostEntry 從 host 清單中依名稱查找 HostEntry。
+func findHostEntry(hosts []config.HostEntry, hostID string) *config.HostEntry {
+	for i := range hosts {
+		if hosts[i].Name == hostID {
+			return &hosts[i]
+		}
+	}
+	return nil
+}
+
 func switchToSession(name string, readOnly bool) {
 	var err error
 	if os.Getenv("TMUX") != "" {
@@ -1014,6 +1101,7 @@ func runDaemon(args []string) {
 		if containsFlag(args[1:], "--foreground") {
 			// 前景執行（供 daemonize 的子程序使用）
 			d := daemon.NewDaemon(cfg)
+			d.HubDialFn = makeHubDialFn()
 			if err := d.Run(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -1429,4 +1517,28 @@ func runItermCoprocess(args []string) {
 		return
 	}
 	upload.RunCoprocess(filenames)
+}
+
+// makeHubDialFn 建立 daemon hub 模式的遠端 dial 函式。
+// 使用 SSH tunnel + gRPC DialSocket 連線到遠端 daemon。
+// 放在 main.go 以避免 daemon → client 循環依賴。
+func makeHubDialFn() daemon.HubDialFn {
+	return func(ctx context.Context, address string) (daemon.HubRemoteClient, func(), error) {
+		tun := remote.NewTunnel(address)
+		if err := tun.Start(); err != nil {
+			return nil, nil, err
+		}
+		c, err := client.DialSocket(tun.LocalSocket())
+		if err != nil {
+			tun.Close()
+			return nil, nil, err
+		}
+		if err := c.Watch(ctx); err != nil {
+			c.Close()
+			tun.Close()
+			return nil, nil, err
+		}
+		cleanup := func() { c.Close(); tun.Close() }
+		return c, cleanup, nil
+	}
 }

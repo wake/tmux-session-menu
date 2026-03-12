@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
@@ -18,6 +19,23 @@ type MutationClient interface {
 	MoveSession(ctx context.Context, sessionName string, groupID int64, sortOrder int) error
 }
 
+// HubRemoteClient 定義遠端主機連線需要的介面（Watch + Mutation + Close）。
+// Close 必須是冪等的，可能被 runRemote 和 HubManager.Close 同時呼叫。
+type HubRemoteClient interface {
+	RecvSnapshot() (*tsmv1.StateSnapshot, error)
+	MutationClient
+	Close() error
+}
+
+// HubDialFn 建立到遠端主機的連線。回傳 client、cleanup 函式、錯誤。
+type HubDialFn func(ctx context.Context, address string) (HubRemoteClient, func(), error)
+
+// remoteBackoff 是遠端連線的退避參數。
+const (
+	remoteInitialBackoff = 1 * time.Second
+	remoteMaxBackoff     = 30 * time.Second
+)
+
 // HubManager 管理多主機連線並聚合快照。
 type HubManager struct {
 	mu              sync.RWMutex
@@ -25,20 +43,26 @@ type HubManager struct {
 	order           []string
 	mhub            *MultiHostHub
 	localMutationFn func(req *tsmv1.ProxyMutationRequest) error
+	dialFn          HubDialFn // 可注入，預設為 defaultHubDial
 
 	// attachLocal 清理用
 	localHub *WatcherHub
 	localCh  <-chan *tsmv1.StateSnapshot
+
+	// remote 清理用
+	remoteCancel context.CancelFunc
+	remoteWg     sync.WaitGroup
 }
 
 // hubHost 記錄單台主機的設定、狀態與最新快照。
 type hubHost struct {
-	config   config.HostEntry
-	status   tsmv1.HostStatus
-	snapshot *tsmv1.StateSnapshot
-	lastErr  string
-	isLocal  bool
-	client   MutationClient // 遠端主機的 gRPC client，本機為 nil
+	config       config.HostEntry
+	status       tsmv1.HostStatus
+	snapshot     *tsmv1.StateSnapshot
+	lastErr      string
+	isLocal      bool
+	client       MutationClient  // 遠端主機的 mutation client，本機為 nil
+	remoteClient HubRemoteClient // 遠端主機的完整 client（含 Close），用於清理
 }
 
 // NewHubManager 建立新的 HubManager。
@@ -199,8 +223,168 @@ func (m *HubManager) dispatchRemoteMutation(
 	}
 }
 
+// StartRemoteHosts 為每台已啟用的非 local 主機啟動連線 goroutine。
+func (m *HubManager) StartRemoteHosts(ctx context.Context) {
+	m.mu.Lock()
+	rctx, cancel := context.WithCancel(ctx)
+	m.remoteCancel = cancel
+	dialFn := m.dialFn
+	m.mu.Unlock()
+
+	if dialFn == nil {
+		return // 無 dialFn 則不啟動遠端連線（測試中應注入）
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, id := range m.order {
+		h := m.hosts[id]
+		if h.isLocal || !h.config.Enabled {
+			continue
+		}
+		cfg := h.config
+		m.remoteWg.Add(1)
+		go m.runRemote(rctx, cfg, dialFn)
+	}
+}
+
+// runRemote 是單台遠端主機的連線迴圈：dial → watchRemote → 斷線重連。
+func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn HubDialFn) {
+	defer m.remoteWg.Done()
+	hostID := cfg.Name
+	backoff := remoteInitialBackoff
+
+	// 設為 CONNECTING
+	m.updateHostSnapshot(hostID, cfg,
+		tsmv1.HostStatus_HOST_STATUS_CONNECTING, nil, "")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		rc, cleanup, err := dialFn(ctx, cfg.Address)
+		if err != nil {
+			// dial 失敗：可能是 context 取消
+			if ctx.Err() != nil {
+				return
+			}
+			m.updateHostSnapshot(hostID, cfg,
+				tsmv1.HostStatus_HOST_STATUS_DISCONNECTED, nil, err.Error())
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			backoff = remoteNextBackoff(backoff)
+			continue
+		}
+
+		// 連線成功：設定 client，用 sync.Once 確保 close 冪等
+		var closeOnce sync.Once
+		closeRC := func() {
+			closeOnce.Do(func() {
+				rc.Close()
+				if cleanup != nil {
+					cleanup()
+				}
+			})
+		}
+
+		m.mu.Lock()
+		if h, ok := m.hosts[hostID]; ok {
+			h.client = rc
+			h.remoteClient = rc
+		}
+		m.mu.Unlock()
+
+		// 進入 watch 迴圈
+		connectedAt := time.Now()
+		m.watchRemote(ctx, cfg, rc)
+
+		// watch 返回 = 斷線
+		closeRC()
+
+		// 清除 client
+		m.mu.Lock()
+		if h, ok := m.hosts[hostID]; ok {
+			h.client = nil
+			h.remoteClient = nil
+		}
+		m.mu.Unlock()
+
+		if ctx.Err() != nil {
+			return
+		}
+
+		m.updateHostSnapshot(hostID, cfg,
+			tsmv1.HostStatus_HOST_STATUS_DISCONNECTED, nil, "connection lost")
+
+		// 連線持續超過 30 秒才重置 backoff，避免快速連線-斷線循環以 1s 間隔重試
+		if time.Since(connectedAt) > 30*time.Second {
+			backoff = remoteInitialBackoff
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff = remoteNextBackoff(backoff)
+	}
+}
+
+// watchRemote 持續接收遠端快照並更新 hub。
+func (m *HubManager) watchRemote(ctx context.Context, cfg config.HostEntry, rc HubRemoteClient) {
+	hostID := cfg.Name
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		snap, err := rc.RecvSnapshot()
+		if err != nil {
+			return
+		}
+
+		m.updateHostSnapshot(hostID, cfg,
+			tsmv1.HostStatus_HOST_STATUS_CONNECTED, snap, "")
+	}
+}
+
+// remoteNextBackoff 回傳下一個退避間隔（倍增至上限）。
+func remoteNextBackoff(current time.Duration) time.Duration {
+	next := current * 2
+	if next > remoteMaxBackoff {
+		return remoteMaxBackoff
+	}
+	return next
+}
+
 // Close 關閉所有連線並清理 goroutine。
 func (m *HubManager) Close() {
+	// 停止遠端連線 goroutine
+	if m.remoteCancel != nil {
+		m.remoteCancel()
+	}
+
+	// 關閉所有遠端 client（讓阻塞中的 RecvSnapshot 立即返回）
+	m.mu.RLock()
+	for _, h := range m.hosts {
+		if !h.isLocal && h.remoteClient != nil {
+			h.remoteClient.Close()
+		}
+	}
+	m.mu.RUnlock()
+
+	m.remoteWg.Wait()
+
+	// 清理 local
 	if m.localHub != nil && m.localCh != nil {
 		m.localHub.Unregister(m.localCh)
 	}

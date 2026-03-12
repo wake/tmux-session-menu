@@ -19,18 +19,20 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
+	"github.com/wake/tmux-session-menu/internal/version"
 )
 
 // Daemon 是 tsm daemon 的主體。
 type Daemon struct {
-	cfg       config.Config
-	server    *grpc.Server
-	hub       *WatcherHub
-	mhub      *MultiHostHub  // nil = 一般模式
-	hubMgr    *HubManager    // nil = 一般模式
-	state     *StateManager
-	store     *store.Store
-	cancelRun context.CancelFunc
+	cfg        config.Config
+	server     *grpc.Server
+	hub        *WatcherHub
+	mhub       *MultiHostHub  // nil = 一般模式
+	hubMgr     *HubManager    // nil = 一般模式
+	state      *StateManager
+	store      *store.Store
+	cancelRun  context.CancelFunc
+	HubDialFn  HubDialFn // 外部注入的遠端 dial 函式（避免循環依賴）
 }
 
 // hasRemoteHosts 回傳設定中是否有已啟用的非本機主機。
@@ -66,12 +68,20 @@ func (d *Daemon) Run() error {
 
 	// socket 不可用（殘留或不存在），安全清理
 	os.Remove(sockPath)
+	os.Remove(VersionPath(d.cfg))
 
 	// 寫入 PID 檔案
 	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 		return fmt.Errorf("write pid file: %w", err)
 	}
 	defer os.Remove(pidPath)
+
+	// 寫入版本檔案
+	verPath := VersionPath(d.cfg)
+	if err := os.WriteFile(verPath, []byte(version.String()), 0o600); err != nil {
+		return fmt.Errorf("write version file: %w", err)
+	}
+	defer os.Remove(verPath)
 
 	// 建立 unix socket listener
 	lis, err := net.Listen("unix", sockPath)
@@ -111,6 +121,7 @@ func (d *Daemon) Run() error {
 	if hasRemoteHosts(d.cfg.Hosts) {
 		d.mhub = NewMultiHostHub()
 		d.hubMgr = NewHubManager(d.mhub)
+		d.hubMgr.dialFn = d.HubDialFn // 注入遠端 dial 函式
 		for _, h := range d.cfg.Hosts {
 			d.hubMgr.AddHost(h)
 		}
@@ -162,6 +173,11 @@ func (d *Daemon) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	d.cancelRun = cancel
 	go d.state.Run(ctx)
+
+	// 啟動遠端主機連線（hub 模式）
+	if d.hubMgr != nil {
+		d.hubMgr.StartRemoteHosts(ctx)
+	}
 
 	// 監聽系統信號
 	sigCh := make(chan os.Signal, 1)
@@ -331,6 +347,17 @@ func Status(cfg config.Config) (string, error) {
 	}
 
 	sockPath := SocketPath(cfg)
+
+	// 讀取版本檔案（舊版 daemon 可能沒有）
+	verPath := VersionPath(cfg)
+	ver := ""
+	if vdata, verErr := os.ReadFile(verPath); verErr == nil {
+		ver = strings.TrimSpace(string(vdata))
+	}
+
+	if ver != "" {
+		return fmt.Sprintf("daemon running (pid=%d, version=%s, socket=%s)", pid, ver, sockPath), nil
+	}
 	return fmt.Sprintf("daemon running (pid=%d, socket=%s)", pid, sockPath), nil
 }
 
