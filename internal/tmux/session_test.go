@@ -31,19 +31,25 @@ func TestSession_RelativeTime(t *testing.T) {
 
 func TestSession_StatusIcon(t *testing.T) {
 	tests := []struct {
-		status   tmux.SessionStatus
+		name     string
+		sess     tmux.Session
 		expected string
 	}{
-		{tmux.StatusRunning, "●"},
-		{tmux.StatusWaiting, "●"},
-		{tmux.StatusIdle, "○"},
-		{tmux.StatusError, "✗"},
+		// 有 AiType：running/waiting/idle 用 ●，error 用 ✗
+		{"ai running", tmux.Session{AiType: "claude", Status: tmux.StatusRunning}, "●"},
+		{"ai waiting", tmux.Session{AiType: "claude", Status: tmux.StatusWaiting}, "●"},
+		{"ai idle", tmux.Session{AiType: "claude", Status: tmux.StatusIdle}, "●"},
+		{"ai error", tmux.Session{AiType: "claude", Status: tmux.StatusError}, "✗"},
+		// 無 AiType：一律用 ○
+		{"no ai running", tmux.Session{Status: tmux.StatusRunning}, "○"},
+		{"no ai waiting", tmux.Session{Status: tmux.StatusWaiting}, "○"},
+		{"no ai idle", tmux.Session{Status: tmux.StatusIdle}, "○"},
+		{"no ai error", tmux.Session{Status: tmux.StatusError}, "○"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			s := tmux.Session{Status: tt.status}
-			assert.Equal(t, tt.expected, s.StatusIcon())
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.sess.StatusIcon())
 		})
 	}
 }

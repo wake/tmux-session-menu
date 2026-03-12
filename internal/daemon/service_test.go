@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -372,4 +374,52 @@ func TestService_ReportUploadResult_Error(t *testing.T) {
 	if snap.UploadEvents[0].Error != "scp timeout" {
 		t.Errorf("got error %q, want scp timeout", snap.UploadEvents[0].Error)
 	}
+}
+
+// TestService_GetUploadTarget_AiType 驗證：hook 狀態含 ai_type=claude 時，
+// 即使 status=idle，IsClaudeActive 仍應為 true。
+func TestService_GetUploadTarget_AiType(t *testing.T) {
+	now := time.Now().Unix()
+	exec := &fakeExecutor{
+		listOutput: fmt.Sprintf("dev:$1:1:/home:1:%d", now),
+	}
+
+	hub := NewWatcherHub()
+	mgr := tmux.NewManager(exec)
+	statusDir := t.TempDir()
+
+	// 寫入 hook 狀態：ai_type=claude，status=idle
+	statusFile := filepath.Join(statusDir, "dev")
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, now)
+	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
+
+	sm := NewStateManager(mgr, nil, config.Default(), statusDir, hub)
+	sm.Scan()
+
+	svc := NewService(mgr, nil, hub, nil, nil, sm)
+	resp, err := svc.GetUploadTarget(context.Background(), &tsmv1.GetUploadTargetRequest{})
+	require.NoError(t, err)
+
+	assert.True(t, resp.IsClaudeActive, "ai_type=claude 應讓 IsClaudeActive=true，即使 status=idle")
+	assert.Equal(t, "dev", resp.SessionName)
+}
+
+// TestService_GetUploadTarget_NoAiType 驗證：無 hook 狀態時，IsClaudeActive 應為 false。
+func TestService_GetUploadTarget_NoAiType(t *testing.T) {
+	now := time.Now().Unix()
+	exec := &fakeExecutor{
+		listOutput: fmt.Sprintf("dev:$1:1:/home:1:%d", now),
+	}
+
+	hub := NewWatcherHub()
+	mgr := tmux.NewManager(exec)
+
+	sm := NewStateManager(mgr, nil, config.Default(), "", hub)
+	sm.Scan()
+
+	svc := NewService(mgr, nil, hub, nil, nil, sm)
+	resp, err := svc.GetUploadTarget(context.Background(), &tsmv1.GetUploadTargetRequest{})
+	require.NoError(t, err)
+
+	assert.False(t, resp.IsClaudeActive, "無 ai_type 時 IsClaudeActive 應為 false")
 }

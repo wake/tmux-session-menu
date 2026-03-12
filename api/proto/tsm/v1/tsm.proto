@@ -28,6 +28,7 @@ message Session {
   string group_name = 9;
   int32 sort_order = 10;
   string custom_name = 11;
+  string ai_type = 12;     // "claude" / "" — AI agent presence
 }
 
 // Group 對應 store.Group。

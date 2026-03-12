@@ -28,6 +28,7 @@ func ConvertProtoSessions(pbSessions []*tsmv1.Session) []tmux.Session {
 			GroupName:  pb.GroupName,
 			SortOrder:  int(pb.SortOrder),
 			CustomName: pb.CustomName,
+			AiType:     pb.AiType,
 		}
 	}
 	return sessions

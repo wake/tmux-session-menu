@@ -45,3 +45,23 @@ func TestDetectTool(t *testing.T) {
 		})
 	}
 }
+
+func TestHasStrongAiPresence(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		expect  bool
+	}{
+		{"model string", "output\nclaude-sonnet-4-20250514\n> ", true},
+		{"busy indicator ctrl+c", "working...\nctrl+c to interrupt\n", true},
+		{"busy indicator esc", "working...\nesc to interrupt\n", true},
+		{"plain shell", "user@host:~$ ls\nfile1 file2\nuser@host:~$ ", false},
+		{"empty", "", false},
+		{"just prompt", "> ", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expect, ai.HasStrongAiPresence(tt.content))
+		})
+	}
+}

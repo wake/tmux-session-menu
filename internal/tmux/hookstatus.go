@@ -17,11 +17,17 @@ type HookStatus struct {
 	RawStatus string        `json:"status"`
 	Timestamp int64         `json:"timestamp"`
 	Event     string        `json:"event"`
+	AiType    string        `json:"ai_type"`
 }
 
 // IsValid 檢查 hook 狀態是否仍在有效期限內。
 func (h HookStatus) IsValid() bool {
 	return time.Since(time.Unix(h.Timestamp, 0)) < hookStatusTTL
+}
+
+// IsAiPresent 檢查 AI agent 是否在運行（不受 TTL 限制）。
+func (h HookStatus) IsAiPresent() bool {
+	return h.AiType != ""
 }
 
 // ReadHookStatus 從狀態目錄讀取指定 session 的 hook 狀態檔案。

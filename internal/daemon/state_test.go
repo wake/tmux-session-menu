@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -261,6 +263,46 @@ func TestSyncUserOptions_UnsetsRemovedCustomName(t *testing.T) {
 
 	require.Len(t, unsetCalls, 1, "應有一次 unset 呼叫")
 	assert.Equal(t, []string{"set-option", "-t", "$3", "-u", "@tsm_name"}, unsetCalls[0])
+}
+
+func TestDetectStatus_AiType_FromHook(t *testing.T) {
+	dir := t.TempDir()
+	statusFile := filepath.Join(dir, "cc-sess")
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, time.Now().Unix())
+	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
+
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), dir, hub)
+
+	result := sm.detectStatus("cc-sess", "", "")
+	assert.Equal(t, tmux.StatusIdle, result.Status)
+	assert.Equal(t, "claude", result.AiType)
+}
+
+func TestDetectStatus_AiType_ExpiredWithPresence(t *testing.T) {
+	dir := t.TempDir()
+	statusFile := filepath.Join(dir, "cc-sess")
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, time.Now().Add(-3*time.Minute).Unix())
+	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
+
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), dir, hub)
+
+	result := sm.detectStatus("cc-sess", "", "some output\nclaude-sonnet-4-20250514\n> ")
+	assert.Equal(t, "claude", result.AiType)
+}
+
+func TestDetectStatus_AiType_ExpiredNoPresence(t *testing.T) {
+	dir := t.TempDir()
+	statusFile := filepath.Join(dir, "cc-sess")
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, time.Now().Add(-3*time.Minute).Unix())
+	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
+
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), dir, hub)
+
+	result := sm.detectStatus("cc-sess", "", "user@host:~$ ls\nfile1 file2\nuser@host:~$ ")
+	assert.Equal(t, "", result.AiType)
 }
 
 func itoa(n int64) string {
