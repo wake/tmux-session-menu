@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/ui"
@@ -263,4 +264,120 @@ func TestHostPicker_PersistHosts_NoConfigPath(t *testing.T) {
 	m, _ = hpApplyKey(m, "h")
 	m, _ = hpApplyKey(m, " ")
 	// 測試通過即代表沒有 panic
+}
+
+// --- Hub 模式 host picker 測試 ---
+
+func TestHubMode_HostPickerToolbarVisible(t *testing.T) {
+	// Hub 模式（HubMode=true, HostMgr=nil）也應在 toolbar 顯示 [h] 主機管理
+	m := ui.NewModel(ui.Deps{HubMode: true})
+	// 先餵一個 HubSnapshotMsg 使 items 非空（否則 View 可能沒渲染完整 toolbar）
+	snap := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+			{HostId: "mlab", Name: "mlab", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		},
+	}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	view := m.View()
+	assert.Contains(t, view, "主機管理", "hub 模式 toolbar 應顯示 [h] 主機管理")
+}
+
+func TestHubMode_HKeyEntersHostPicker(t *testing.T) {
+	// Hub 模式下按 h 應進入 ModeHostPicker
+	m := ui.NewModel(ui.Deps{HubMode: true})
+	snap := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+			{HostId: "mlab", Name: "mlab", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTING},
+		},
+	}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode(), "hub 模式按 h 應進入 ModeHostPicker")
+}
+
+func TestHubMode_HostPickerRendersHostStatus(t *testing.T) {
+	// Hub 模式 host picker 應顯示從 HubSnapshotMsg 取得的主機狀態
+	m := ui.NewModel(ui.Deps{HubMode: true})
+	snap := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+			{HostId: "mlab", Name: "mlab", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTING},
+		},
+	}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	m, _ = hpApplyKey(m, "h")
+	view := m.View()
+	assert.Contains(t, view, "主機管理", "應顯示面板標題")
+	assert.Contains(t, view, "local", "應顯示 local 主機")
+	assert.Contains(t, view, "mlab", "應顯示 mlab 主機")
+	assert.Contains(t, view, "連線中", "應顯示 mlab 的 CONNECTING 狀態")
+}
+
+func TestHubMode_HostPickerNavigation(t *testing.T) {
+	// Hub 模式 host picker 應支援 j/k 導航
+	m := ui.NewModel(ui.Deps{HubMode: true})
+	snap := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+			{HostId: "mlab", Name: "mlab", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		},
+	}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, 0, m.HostPickerCursor())
+
+	m, _ = hpApplyKey(m, "j")
+	assert.Equal(t, 1, m.HostPickerCursor())
+
+	m, _ = hpApplyKey(m, "k")
+	assert.Equal(t, 0, m.HostPickerCursor())
+
+	// esc 關閉
+	m, _ = hpApplyKey(m, "esc")
+	assert.Equal(t, ui.ModeNormal, m.Mode())
+}
+
+func TestHubMode_SelectedItem_HasHostID(t *testing.T) {
+	// Hub 模式下選取 session 應回傳包含 HostID 的 ListItem
+	m := ui.NewModel(ui.Deps{HubMode: true})
+	snap := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{
+				HostId: "mlab", Name: "mlab",
+				Status:   tsmv1.HostStatus_HOST_STATUS_CONNECTED,
+				Snapshot: &tsmv1.StateSnapshot{Sessions: []*tsmv1.Session{{Name: "dev", Id: "$1"}}},
+			},
+		},
+	}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	// 模擬 Enter 選取第一個 session
+	items := m.Items()
+	// 找到第一個 session item
+	for i, item := range items {
+		if item.Type == ui.ItemSession {
+			// 設定 cursor 到該位置
+			for j := 0; j < i; j++ {
+				m, _ = hpApplyKey(m, "j")
+			}
+			break
+		}
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	assert.Equal(t, "dev", m.Selected(), "應選取 dev session")
+	item := m.SelectedItem()
+	assert.Equal(t, "mlab", item.HostID, "SelectedItem 的 HostID 應為 mlab")
 }

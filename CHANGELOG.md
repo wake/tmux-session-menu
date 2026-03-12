@@ -2,6 +2,13 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.30.1] - 2026-03-12
+
+### Fixed
+- Hub 模式下按 `h` 鍵可開啟主機狀態面板（唯讀），顯示各主機連線狀態
+- Hub 模式下選取 session 不再無聲退出：正確執行 local switch 或 remote SSH attach
+- Hub 模式 toolbar 現在顯示 `[h] 主機管理` 快捷鍵提示
+
 ## [0.30.0] - 2026-03-12
 
 ### Added

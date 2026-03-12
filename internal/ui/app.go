@@ -120,6 +120,7 @@ type Model struct {
 
 	// HostPicker mode（主機管理面板）
 	hostPickerCursor int
+	hubHostSnap      *tsmv1.MultiHostSnapshot // hub 模式：最新的主機快照（供 host picker 使用）
 
 	// NewSession 表單
 	newSession newSessionForm
@@ -740,6 +741,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		m.hubHostSnap = msg.Snapshot
 		inputs := ConvertMultiHostSnapshot(msg.Snapshot)
 		m.items = FlattenMultiHost(inputs)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
@@ -1019,8 +1021,8 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "h":
-		// 主機管理面板：僅多主機模式有效
-		if m.deps.HostMgr != nil {
+		// 主機管理面板：多主機模式或 hub 模式有效
+		if m.deps.HostMgr != nil || (m.deps.HubMode && m.hubHostSnap != nil) {
 			m.mode = ModeHostPicker
 			m.hostPickerCursor = 0
 			return m, nil
@@ -2044,7 +2046,7 @@ func (m Model) renderToolbar() string {
 	line2Parts := []string{
 		render("[m]", "搬移"), render("[⇧+↑/⇧+k]", "上移"), render("[⇧+↓/⇧+j]", "下移"), render("[c]", "設定"), render("[ctrl+e]", "退出"),
 	}
-	if m.deps.HostMgr != nil {
+	if m.deps.HostMgr != nil || m.deps.HubMode {
 		line2Parts = append(line2Parts, render("[h]", "主機管理"))
 	}
 	if m.deps.HostMgr != nil || m.deps.Client != nil {
