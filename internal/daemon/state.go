@@ -282,6 +282,13 @@ func (sm *StateManager) detectStatus(sessionName, paneTitle, paneContent string)
 		}
 	}
 
+	// 降級偵測：無 hook 或 hook 過期且 aiType 仍為空 → 從 pane content 偵測
+	if aiType == "" && paneContent != "" {
+		if tool := ai.DetectTool(paneContent); tool != "" {
+			aiType = tool
+		}
+	}
+
 	return statusResult{
 		Status: tmux.ResolveStatus(input),
 		AiType: aiType,

@@ -305,6 +305,33 @@ func TestDetectStatus_AiType_ExpiredNoPresence(t *testing.T) {
 	assert.Equal(t, "", result.AiType)
 }
 
+func TestDetectStatus_AiType_ContentFallback(t *testing.T) {
+	// 無 hook 狀態檔，但 pane content 有 Claude Code 提示符
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+
+	result := sm.detectStatus("no-hook-sess", "", "some output\n> ")
+	assert.Equal(t, "claude-code", result.AiType)
+}
+
+func TestDetectStatus_AiType_ContentFallbackInterrupt(t *testing.T) {
+	// 無 hook 狀態檔，但 pane content 有 Claude Code 工作中指示
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+
+	result := sm.detectStatus("no-hook-sess", "", "Working on task...\nesc to interrupt")
+	assert.Equal(t, "claude-code", result.AiType)
+}
+
+func TestDetectStatus_AiType_NoContentFallbackForPlainShell(t *testing.T) {
+	// 無 hook 狀態檔，pane content 是一般 shell → aiType 應為空
+	hub := NewWatcherHub()
+	sm := NewStateManager(nil, nil, config.Default(), "", hub)
+
+	result := sm.detectStatus("plain-sess", "", "user@host:~$ ls\nfile1 file2\nuser@host:~$ ")
+	assert.Equal(t, "", result.AiType)
+}
+
 func itoa(n int64) string {
 	return fmt.Sprintf("%d", n)
 }
