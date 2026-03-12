@@ -2,6 +2,16 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.29.1] - 2026-03-12
+
+### Fixed
+- Hub 模式 `localMutationFn` 設定：`ProxyMutation` 現在能正確操作本機 session
+- Hub 模式 TUI 的 kill/rename/move 操作改走 `ProxyMutation` 路由到正確的目標主機
+- `dispatchRemoteMutation` 的 `GroupId` 解析錯誤改為回傳明確錯誤
+- `WatchMultiHost` context done 改回傳 context error（與 `Watch` 一致）
+- Hub 模式 stream 斷線加入 2 秒延遲重連（避免 TUI 凍結）
+- Hub 模式 `Deps` 加入 `Upgrader`（恢復 Ctrl+U 升級功能）
+
 ## [0.29.0] - 2026-03-12
 
 ### Added
