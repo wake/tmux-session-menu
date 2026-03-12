@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	osexec "os/exec"
 	"time"
 
@@ -278,7 +277,7 @@ func tryConnect(sockPath string) (*grpc.ClientConn, error) {
 
 // autoStartDaemon fork 一個背景 daemon 程序，並等待它就緒。
 func autoStartDaemon(sockPath string) error {
-	exe, err := os.Executable()
+	exe, err := daemon.ResolveExe()
 	if err != nil {
 		return fmt.Errorf("get executable: %w", err)
 	}
