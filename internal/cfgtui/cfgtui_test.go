@@ -18,8 +18,10 @@ func TestNewModel_DefaultTab(t *testing.T) {
 func TestNewModel_FieldCount(t *testing.T) {
 	cfg := config.Default()
 	m := cfgtui.NewModel(cfg)
-	assert.Equal(t, 6, m.FieldCount(cfgtui.TabClient))
-	assert.Equal(t, 8, m.FieldCount(cfgtui.TabServer))
+	// 客戶端：4 個 local 顏色欄位（bar_bg, bar_fg, badge_bg, badge_fg）
+	assert.Equal(t, 4, m.FieldCount(cfgtui.TabClient))
+	// 伺服器：2 個 server 欄位 + 4 個 local 顏色欄位
+	assert.Equal(t, 6, m.FieldCount(cfgtui.TabServer))
 }
 
 func TestModel_SwitchTab(t *testing.T) {
@@ -61,13 +63,13 @@ func TestModel_CursorNoOverflow(t *testing.T) {
 func TestModel_CursorNoOverflowBottom(t *testing.T) {
 	cfg := config.Default()
 	m := cfgtui.NewModel(cfg)
-	// TabClient 有 6 個欄位，cursor 最大應為 5
+	// TabClient 有 4 個欄位，cursor 最大應為 3
 	var current tea.Model = m
 	for i := 0; i < 10; i++ {
 		current, _ = current.Update(tea.KeyMsg{Type: tea.KeyDown})
 	}
 	model := current.(cfgtui.Model)
-	assert.Equal(t, 5, model.Cursor())
+	assert.Equal(t, 3, model.Cursor())
 }
 
 func TestModel_CursorJK(t *testing.T) {
@@ -119,10 +121,11 @@ func TestModel_BackspaceResetsToDefault(t *testing.T) {
 	cfg := config.Default()
 	cfg.Local.BadgeBG = "#changed"
 	m := cfgtui.NewModel(cfg)
-	// 移動到第二個欄位 (local.badge_bg)
+	// 移動到第三個欄位 (local.badge_bg，index 2)
 	m1, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m2, _ := m1.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	model := m2.(cfgtui.Model)
+	m2, _ := m1.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m3, _ := m2.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	model := m3.(cfgtui.Model)
 	result := model.ResultConfig()
 	assert.Equal(t, "#5f8787", result.Local.BadgeBG) // Default 的 badge_bg
 }
@@ -132,6 +135,7 @@ func TestModel_ResultConfig(t *testing.T) {
 	m := cfgtui.NewModel(cfg)
 	result := m.ResultConfig()
 	assert.Equal(t, cfg.Local.BadgeBG, result.Local.BadgeBG)
+	// Remote 欄位已從 TUI 移除，但 cfg 原值應被保留（不被清空）
 	assert.Equal(t, cfg.Remote.BarBG, result.Remote.BarBG)
 	assert.Equal(t, cfg.PreviewLines, result.PreviewLines)
 }
@@ -228,8 +232,11 @@ func TestModel_ViewContainsFieldLabels(t *testing.T) {
 	view := m.View()
 	// 客戶端分頁欄位標籤
 	assert.Contains(t, view, "local.bar_bg")
+	assert.Contains(t, view, "local.bar_fg")
 	assert.Contains(t, view, "local.badge_bg")
-	assert.Contains(t, view, "remote.badge_fg")
+	assert.Contains(t, view, "local.badge_fg")
+	// remote.* 欄位已移除
+	assert.NotContains(t, view, "remote.badge_fg")
 }
 
 func TestModel_ServerTabContainsExtraFields(t *testing.T) {
@@ -295,4 +302,69 @@ func TestModel_DeleteInEditModeIgnored(t *testing.T) {
 	// 在編輯模式下 Del 不應重置欄位（由 textinput 處理）
 	result := model1.ResultConfig()
 	assert.Equal(t, "#changed", result.Local.BarBG)
+}
+
+// ---- 新增測試：移除 remote.*、加 local.bar_fg ----
+
+// TestClientFields_NoRemote 確認客戶端分頁不含 remote.* 欄位，且包含 local.bar_fg。
+func TestClientFields_NoRemote(t *testing.T) {
+	cfg := config.Default()
+	m := cfgtui.NewModel(cfg)
+	// 客戶端分頁現在應有 4 個欄位
+	assert.Equal(t, 4, m.FieldCount(cfgtui.TabClient))
+	// View 不應包含 remote.* 標籤
+	view := m.View()
+	assert.NotContains(t, view, "remote.bar_bg")
+	assert.NotContains(t, view, "remote.badge_bg")
+	assert.NotContains(t, view, "remote.badge_fg")
+	// 應包含 local.bar_fg
+	assert.Contains(t, view, "local.bar_fg")
+}
+
+// TestServerFields_NoRemote 確認伺服器分頁不含 remote.* 欄位。
+func TestServerFields_NoRemote(t *testing.T) {
+	cfg := config.Default()
+	m := cfgtui.NewModel(cfg)
+	// 伺服器分頁現在應有 6 個欄位（2 server + 4 local color）
+	assert.Equal(t, 6, m.FieldCount(cfgtui.TabServer))
+	// 切到伺服器分頁
+	m1, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model := m1.(cfgtui.Model)
+	view := model.View()
+	assert.NotContains(t, view, "remote.bar_bg")
+	assert.NotContains(t, view, "remote.badge_bg")
+	assert.NotContains(t, view, "remote.badge_fg")
+}
+
+// TestDefaultFieldValue_BarFG 確認 local.bar_fg 的預設值為空字串。
+func TestDefaultFieldValue_BarFG(t *testing.T) {
+	cfg := config.Default()
+	cfg.Local.BarFG = "#changed"
+	m := cfgtui.NewModel(cfg)
+	// cursor 移到 local.bar_fg（第 1 個欄位）
+	m1, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m2, _ := m1.Update(tea.KeyMsg{Type: tea.KeyDelete})
+	model := m2.(cfgtui.Model)
+	result := model.ResultConfig()
+	// 預設值是空字串
+	assert.Equal(t, "", result.Local.BarFG)
+}
+
+// TestResultConfig_NoRemote 確認 ResultConfig 不寫回 Remote 欄位（依 TUI 輸入為準）。
+func TestResultConfig_NoRemote(t *testing.T) {
+	cfg := config.Default()
+	cfg.Remote.BarBG = "#original-remote"
+	m := cfgtui.NewModel(cfg)
+	result := m.ResultConfig()
+	// Remote.BarBG 應保持原值（TUI 沒有 remote 欄位，不會被修改也不會被清空）
+	assert.Equal(t, "#original-remote", result.Remote.BarBG)
+}
+
+// TestResultConfig_LocalBarFG 確認 local.bar_fg 寫回 ResultConfig。
+func TestResultConfig_LocalBarFG(t *testing.T) {
+	cfg := config.Default()
+	cfg.Local.BarFG = "#abc123"
+	m := cfgtui.NewModel(cfg)
+	result := m.ResultConfig()
+	assert.Equal(t, "#abc123", result.Local.BarFG)
 }
