@@ -117,20 +117,19 @@ func (d *Daemon) Run() error {
 
 	d.state = NewStateManager(mgr, st, d.cfg, statusDir, d.hub)
 
-	// Hub 模式：若 config 中有非 local 且 enabled 的 host，啟動 HubManager
-	if hasRemoteHosts(d.cfg.Hosts) {
-		d.mhub = NewMultiHostHub()
-		d.hubMgr = NewHubManager(d.mhub)
-		d.hubMgr.dialFn = d.HubDialFn // 注入遠端 dial 函式
-		for _, h := range d.cfg.Hosts {
-			d.hubMgr.AddHost(h)
-		}
-		// 將 local WatcherHub 接入 hub
-		for _, h := range d.cfg.Hosts {
-			if h.IsLocal() && h.Enabled {
-				d.hubMgr.attachLocal(d.hub, d.state, h)
-				break
-			}
+	// Hub 模式：永遠啟動 HubManager，統一由 Hub 管理所有主機快照聚合。
+	// 即使只有 local，也透過 Hub 提供 WatchMultiHost stream。
+	d.mhub = NewMultiHostHub()
+	d.hubMgr = NewHubManager(d.mhub)
+	d.hubMgr.dialFn = d.HubDialFn // 注入遠端 dial 函式
+	for _, h := range d.cfg.Hosts {
+		d.hubMgr.AddHost(h)
+	}
+	// 將 local WatcherHub 接入 hub
+	for _, h := range d.cfg.Hosts {
+		if h.IsLocal() && h.Enabled {
+			d.hubMgr.attachLocal(d.hub, d.state, h)
+			break
 		}
 	}
 

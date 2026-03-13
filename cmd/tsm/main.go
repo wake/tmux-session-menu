@@ -313,9 +313,9 @@ func runTUI() {
 		// fall through to normal mode
 	}
 
-	// 嘗試 daemon hub 模式（控制器端 tsm --host）
-	// 若 daemon 支援 WatchMultiHost → 直接進入 hub TUI，跳過 HostManager
-	// 若 daemon 不支援（舊版或未啟用 remote hosts）→ 降級到 HostManager
+	// 多主機模式：統一走 Hub（daemon 永遠提供 WatchMultiHost）。
+	// tsm 無參數 → 跳過，走 Daemon 模式即可。
+	// 若 daemon 不可用或降級 → 繼續原有 HostManager 路徑
 	if hostMode {
 		if c, err := client.Dial(cfg); err == nil {
 			result := runHubTUI(c, cfg, cfgPath)
@@ -323,9 +323,15 @@ func runTUI() {
 				return
 			}
 		}
-		// client.Dial 失敗、不支援 hub、或降級 → 繼續原有 HostManager 路徑
 	}
 
+	// tsm 無參數 → Daemon 模式（只看本機，不經過多主機架構）
+	if !hostMode {
+		runDaemonTUI(cfg, cfgPath)
+		return
+	}
+
+	// 多主機降級路徑（Hub 不可用時走 HostManager）
 	// 防禦性確保 local 永遠存在
 	cfg.Hosts = config.EnsureLocal(cfg.Hosts)
 
@@ -770,6 +776,66 @@ func loadConfig() config.Config {
 
 // hubResult 表示 runHubTUI 的結果。
 type hubResult int
+
+// runDaemonTUI 執行 Daemon 模式的 TUI 迴圈（tsm 無參數，只看本機）。
+// 透過 gRPC Watch stream 接收本機快照，不經過多主機架構。
+func runDaemonTUI(cfg config.Config, cfgPath string) {
+	c, err := client.Dial(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 無法連線到 daemon: %v\n", err)
+		os.Exit(1)
+	}
+
+	upgrader := upgrade.DefaultUpgrader()
+	defer c.Close()
+
+	for {
+		deps := ui.Deps{
+			Client:     c,
+			Cfg:        cfg,
+			ConfigPath: cfgPath,
+			Upgrader:   upgrader,
+		}
+		p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
+		finalModel, runErr := p.Run()
+		if runErr != nil {
+			fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
+			os.Exit(1)
+		}
+
+		fm, ok := finalModel.(ui.Model)
+		if !ok {
+			return
+		}
+
+		if fm.UpgradeReady() {
+			c.Close()
+			runPostUpgrade(fm, cfg)
+			return
+		}
+		if fm.OpenConfig() {
+			runConfig()
+			cfg = loadConfig()
+			cfg.InTmux = os.Getenv("TMUX") != ""
+			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+			continue
+		}
+
+		selected := fm.Selected()
+		if selected == "" {
+			if fm.ExitTmux() && os.Getenv("TMUX") != "" {
+				_ = remote.WriteExitMarker()
+				_ = osexec.Command("tmux", "detach-client").Run()
+			}
+			return
+		}
+
+		switchToSession(selected, fm.ReadOnly())
+		if cfg.InPopup {
+			return
+		}
+	}
+}
 
 const (
 	hubResultExit     hubResult = iota // 正常退出（使用者按 q / ctrl+e）
