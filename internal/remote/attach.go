@@ -4,9 +4,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 )
+
+// shellEscape 跳脫字串中的單引號，使其可安全嵌入 shell 單引號包裹的字串。
+func shellEscape(s string) string {
+	return strings.ReplaceAll(s, "'", "'\\''")
+}
 
 // sshRunFn 執行 SSH 命令，可在測試中替換。
 var sshRunFn = func(name string, args ...string) error {
@@ -77,7 +83,7 @@ func ClearHubSocket(host string) error {
 // SetHubHost 在遠端主機的 tmux 設定 hub 的 SSH 地址。
 // spoke 端據此得知如何 SSH 回到 hub。
 func SetHubHost(host, hubHost string) error {
-	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_host %s", hubHost)
+	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_host '%s'", shellEscape(hubHost))
 	return sshRunFn("ssh", host, "bash", "-lc", cmd)
 }
 
@@ -89,7 +95,7 @@ func ClearHubHost(host string) error {
 // SetHubSelf 在遠端主機的 tmux 設定其在 hub 中的 host ID。
 // spoke 端據此判斷 MultiHostSnapshot 中哪些 session 是自己的。
 func SetHubSelf(host, selfID string) error {
-	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_self %s", selfID)
+	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_self '%s'", shellEscape(selfID))
 	return sshRunFn("ssh", host, "bash", "-lc", cmd)
 }
 

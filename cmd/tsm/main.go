@@ -326,11 +326,11 @@ func runTUI() {
 		if c, err := client.DialSocket(hubSocket); err == nil {
 			hctx := readHubContext()
 			result := runHubTUI(c, cfg, cfgPath, hctx)
-			if result == hubResultExit {
+			if result == hubResultExit || result == hubResultDegraded || result == hubResultError {
 				return
 			}
 		}
-		// graceful degradation: hub socket 不可用或降級 → local 模式
+		// graceful degradation: hub socket 不可用 → local 模式
 		// fall through to normal mode
 	}
 
@@ -997,15 +997,18 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubCon
 // 若 hostID 等於 hubSelf → 本機（回傳 nil 讓呼叫端走 switchToSession）。
 // 否則 → 遠端，使用 hubHost 作為 SSH 地址。
 func resolveHubHost(hctx *hubContext, item ui.ListItem) *config.HostEntry {
-	if hctx.HubSelf != "" && item.HostID == hctx.HubSelf {
+	// HubSelf 未知時無法可靠判斷 local vs remote，保守處理為本機
+	if hctx.HubSelf == "" {
+		return &config.HostEntry{Name: item.HostID, Address: ""}
+	}
+	if item.HostID == hctx.HubSelf {
 		// 這是 spoke 自己的 session → 本機
 		return &config.HostEntry{Name: item.HostID, Address: ""}
 	}
-	// 遠端 session：使用 hub host 地址（或 snapshot 中的 address）
-	addr := hctx.HubHost
+	// 遠端 session：使用 hub host 地址
 	return &config.HostEntry{
 		Name:    item.HostID,
-		Address: addr,
+		Address: hctx.HubHost,
 		Color:   item.HostColor,
 	}
 }
