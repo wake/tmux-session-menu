@@ -122,6 +122,7 @@ func (m *HubManager) Snapshot() *tsmv1.MultiHostSnapshot {
 			Status:   h.status,
 			Error:    h.lastErr,
 			Snapshot: h.snapshot,
+			Address:  h.config.Address,
 		}
 		snap.Hosts = append(snap.Hosts, hs)
 	}

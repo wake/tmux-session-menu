@@ -113,6 +113,23 @@ func parseHubSocket(args []string) string {
 	return ""
 }
 
+// readHubContext 從 tmux 選項讀取 hub-socket 模式的額外資訊。
+// hub daemon 在建立 reverse tunnel 時會設定 @tsm_hub_host 和 @tsm_hub_self。
+func readHubContext() *hubContext {
+	hubHost := strings.TrimSpace(string(mustOutput(osexec.Command("tmux", "show-option", "-gqv", "@tsm_hub_host"))))
+	hubSelf := strings.TrimSpace(string(mustOutput(osexec.Command("tmux", "show-option", "-gqv", "@tsm_hub_self"))))
+	if hubHost == "" && hubSelf == "" {
+		return nil
+	}
+	return &hubContext{HubHost: hubHost, HubSelf: hubSelf}
+}
+
+// mustOutput 執行命令並回傳 stdout，忽略錯誤（tmux 選項不存在時回傳空字串）。
+func mustOutput(cmd *osexec.Cmd) []byte {
+	out, _ := cmd.Output()
+	return out
+}
+
 func main() {
 	args := os.Args[1:]
 
@@ -131,8 +148,8 @@ func main() {
 		return // exit 0
 	}
 
-	// --host / --local / --inline / --popup 都可能混合出現
-	if hasHostMode(args) || args[0] == "--inline" || args[0] == "--popup" {
+	// --host / --local / --inline / --popup / --hub-socket 都可能混合出現
+	if hasHostMode(args) || args[0] == "--inline" || args[0] == "--popup" || args[0] == "--hub-socket" {
 		runWithMode(parseRunMode(args))
 		return
 	}
@@ -268,6 +285,7 @@ func runTUI() {
 	cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
 
 	ensureLocalStatusBar(cfg)
+	ensureBindBlockUpToDate()
 
 	args := os.Args[1:]
 	hostFlags := parseHostFlags(args)
@@ -306,12 +324,13 @@ func runTUI() {
 	hubSocket := parseHubSocket(args)
 	if hubSocket != "" {
 		if c, err := client.DialSocket(hubSocket); err == nil {
-			result := runHubTUI(c, cfg, cfgPath)
-			if result == hubResultExit {
+			hctx := readHubContext()
+			result := runHubTUI(c, cfg, cfgPath, hctx)
+			if result == hubResultExit || result == hubResultDegraded || result == hubResultError {
 				return
 			}
 		}
-		// graceful degradation: hub socket 不可用或降級 → local 模式
+		// graceful degradation: hub socket 不可用 → local 模式
 		// fall through to normal mode
 	}
 
@@ -323,7 +342,7 @@ func runTUI() {
 
 	// 多主機模式：嘗試 Hub（WatchMultiHost），降級時走 HostManager
 	if c, err := client.Dial(cfg); err == nil {
-		result := runHubTUI(c, cfg, cfgPath)
+		result := runHubTUI(c, cfg, cfgPath, nil)
 		if result == hubResultExit {
 			return
 		}
@@ -763,6 +782,15 @@ func ensureLocalStatusBar(cfg config.Config) {
 	}
 }
 
+// ensureBindBlockUpToDate 若 bind block 已安裝但版本過舊，自動升級。
+// 無需重新安裝不存在的 bind block，僅升級已安裝的。
+func ensureBindBlockUpToDate() {
+	r := bind.Detect()
+	if r.Status == bind.BindInstalled {
+		_, _ = bind.Install(false)
+	}
+}
+
 func loadConfig() config.Config {
 	cfg := config.Default()
 	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
@@ -782,6 +810,13 @@ const (
 	hubResultDegraded                  // daemon 不再支援 hub → 降級到 HostManager
 	hubResultError                     // 無法建立 watch stream
 )
+
+// hubContext 攜帶 hub-socket 模式的額外資訊。
+// 當透過 reverse tunnel 連線時，spoke 需要知道自己的 host ID 和 hub 的 SSH 地址。
+type hubContext struct {
+	HubHost string // hub 的 SSH 地址（用於 SSH attach 到 hub 上的 session）
+	HubSelf string // spoke 在 hub 中的 host ID（用於判斷哪些 session 是本機的）
+}
 
 // runDaemonTUI 執行 Daemon 模式的 TUI 迴圈（tsm 無參數，只看本機）。
 // 透過 gRPC Watch stream 接收本機快照，不經過多主機架構。
@@ -845,7 +880,8 @@ func runDaemonTUI(cfg config.Config, cfgPath string) {
 
 // runHubTUI 執行 hub 模式的 TUI 迴圈：顯示 sessions → 選取 → attach → 回到 TUI。
 // 處理 session 選取、config 開啟、升級、及遠端 attach 重連。
-func runHubTUI(c *client.Client, cfg config.Config, cfgPath string) hubResult {
+// hctx 為 hub-socket 模式的額外資訊，非 hub-socket 模式傳入 nil。
+func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubContext) hubResult {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	if wErr := c.WatchMultiHost(hubCtx); wErr != nil {
 		hubCancel()
@@ -913,6 +949,11 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string) hubResult {
 		item := fm.SelectedItem()
 		hostEntry := findHostEntry(cfg.Hosts, item.HostID)
 
+		// hub-socket 模式：從 hubContext 判斷 local vs remote
+		if hctx != nil && hostEntry == nil {
+			hostEntry = resolveHubHost(hctx, item)
+		}
+
 		if hostEntry == nil || hostEntry.IsLocal() {
 			// 本機 session
 			switchToSession(selected, fm.ReadOnly())
@@ -949,6 +990,26 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string) hubResult {
 
 		// 斷線 → hub daemon 會自動重連遠端主機，回到 TUI 讓使用者重選
 		continue
+	}
+}
+
+// resolveHubHost 在 hub-socket 模式下，根據 hubContext 判斷 host 是本機還是遠端。
+// 若 hostID 等於 hubSelf → 本機（回傳 nil 讓呼叫端走 switchToSession）。
+// 否則 → 遠端，使用 hubHost 作為 SSH 地址。
+func resolveHubHost(hctx *hubContext, item ui.ListItem) *config.HostEntry {
+	// HubSelf 未知時無法可靠判斷 local vs remote，保守處理為本機
+	if hctx.HubSelf == "" {
+		return &config.HostEntry{Name: item.HostID, Address: ""}
+	}
+	if item.HostID == hctx.HubSelf {
+		// 這是 spoke 自己的 session → 本機
+		return &config.HostEntry{Name: item.HostID, Address: ""}
+	}
+	// 遠端 session：使用 hub host 地址
+	return &config.HostEntry{
+		Name:    item.HostID,
+		Address: hctx.HubHost,
+		Color:   item.HostColor,
 	}
 }
 
@@ -1157,7 +1218,7 @@ func runDaemon(args []string) {
 		if containsFlag(args[1:], "--foreground") {
 			// 前景執行（供 daemonize 的子程序使用）
 			d := daemon.NewDaemon(cfg)
-			d.HubDialFn = makeHubDialFn(daemon.SocketPath(cfg))
+			d.HubDialFn = makeHubDialFn(daemon.SocketPath(cfg), cfg.Hosts)
 			if err := d.Run(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -1579,7 +1640,16 @@ func runItermCoprocess(args []string) {
 // 使用 SSH tunnel（forward + reverse）+ gRPC DialSocket 連線到遠端 daemon。
 // reverse tunnel 讓遠端主機的 Ctrl+Q 能透過 @tsm_hub_socket 連回 hub daemon。
 // 放在 main.go 以避免 daemon → client 循環依賴。
-func makeHubDialFn(hubSocketPath string) daemon.HubDialFn {
+func makeHubDialFn(hubSocketPath string, hosts []config.HostEntry) daemon.HubDialFn {
+	// 建立 address → name 對照表，供設定 @tsm_hub_self 使用
+	nameByAddr := make(map[string]string)
+	for _, h := range hosts {
+		if h.Address != "" {
+			nameByAddr[h.Address] = h.Name
+		}
+	}
+	hostname, _ := os.Hostname()
+
 	return func(ctx context.Context, address string) (daemon.HubRemoteClient, func(), error) {
 		tun := remote.NewTunnel(address, remote.WithReverse(hubSocketPath))
 		if err := tun.Start(); err != nil {
@@ -1591,22 +1661,38 @@ func makeHubDialFn(hubSocketPath string) daemon.HubDialFn {
 		if err := remote.SetHubSocket(address, reverseSock); err != nil {
 			log.Printf("warn: set hub socket on %s failed: %v", address, err)
 		}
+		// 設定 @tsm_hub_host（hub 的 SSH 地址）讓 spoke 端能 SSH 回 hub
+		if err := remote.SetHubHost(address, hostname); err != nil {
+			log.Printf("warn: set hub host on %s failed: %v", address, err)
+		}
+		// 設定 @tsm_hub_self（spoke 在 hub 中的 host ID）讓 spoke 判斷哪些 session 是自己的
+		if selfName, ok := nameByAddr[address]; ok {
+			if err := remote.SetHubSelf(address, selfName); err != nil {
+				log.Printf("warn: set hub self on %s failed: %v", address, err)
+			}
+		}
 
 		c, err := client.DialSocketCtx(ctx, tun.LocalSocket())
 		if err != nil {
 			_ = remote.ClearHubSocket(address)
+			_ = remote.ClearHubHost(address)
+			_ = remote.ClearHubSelf(address)
 			tun.Close()
 			return nil, nil, err
 		}
 		if err := c.Watch(ctx); err != nil {
 			c.Close()
 			_ = remote.ClearHubSocket(address)
+			_ = remote.ClearHubHost(address)
+			_ = remote.ClearHubSelf(address)
 			tun.Close()
 			return nil, nil, err
 		}
 		cleanup := func() {
 			c.Close()
 			_ = remote.ClearHubSocket(address)
+			_ = remote.ClearHubHost(address)
+			_ = remote.ClearHubSelf(address)
 			tun.Close()
 		}
 		return c, cleanup, nil

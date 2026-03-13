@@ -4,9 +4,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 )
+
+// shellEscape 跳脫字串中的單引號，使其可安全嵌入 shell 單引號包裹的字串。
+func shellEscape(s string) string {
+	return strings.ReplaceAll(s, "'", "'\\''")
+}
 
 // sshRunFn 執行 SSH 命令，可在測試中替換。
 var sshRunFn = func(name string, args ...string) error {
@@ -72,6 +78,30 @@ func SetHubSocket(host, socketPath string) error {
 // 使用 login shell 確保 PATH 包含 Homebrew 等非系統路徑。
 func ClearHubSocket(host string) error {
 	return sshRunFn("ssh", host, "bash", "-lc", "tmux set-option -gu @tsm_hub_socket")
+}
+
+// SetHubHost 在遠端主機的 tmux 設定 hub 的 SSH 地址。
+// spoke 端據此得知如何 SSH 回到 hub。
+func SetHubHost(host, hubHost string) error {
+	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_host '%s'", shellEscape(hubHost))
+	return sshRunFn("ssh", host, "bash", "-lc", cmd)
+}
+
+// ClearHubHost 清除遠端主機的 hub host 設定。
+func ClearHubHost(host string) error {
+	return sshRunFn("ssh", host, "bash", "-lc", "tmux set-option -gu @tsm_hub_host")
+}
+
+// SetHubSelf 在遠端主機的 tmux 設定其在 hub 中的 host ID。
+// spoke 端據此判斷 MultiHostSnapshot 中哪些 session 是自己的。
+func SetHubSelf(host, selfID string) error {
+	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_self '%s'", shellEscape(selfID))
+	return sshRunFn("ssh", host, "bash", "-lc", cmd)
+}
+
+// ClearHubSelf 清除遠端主機的 hub self 設定。
+func ClearHubSelf(host string) error {
+	return sshRunFn("ssh", host, "bash", "-lc", "tmux set-option -gu @tsm_hub_self")
 }
 
 // Attach 啟動 `ssh -t host` 並透過遠端 login shell 執行 tmux attach-session。
