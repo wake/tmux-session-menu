@@ -934,6 +934,9 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubCon
 			continue
 		}
 
+		// 同步 TUI 中的設定變更（如 hub 主機自動同步、顏色編輯等）
+		cfg = fm.DepsCfg()
+
 		selected := fm.Selected()
 		if selected == "" {
 			if fm.ExitTmux() && os.Getenv("TMUX") != "" {
@@ -947,9 +950,17 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubCon
 		item := fm.SelectedItem()
 		hostEntry := findHostEntry(cfg.Hosts, item.HostID)
 
-		// hub-socket 模式：從 hubContext 判斷 local vs remote
-		if hctx != nil && hostEntry == nil {
-			hostEntry = resolveHubHost(hctx, item)
+		// hub-socket 模式：路由由 resolveHubHost 決定，config 只用於顏色合併
+		if hctx != nil {
+			routed := resolveHubHost(hctx, item)
+			if hostEntry != nil {
+				routed.Color = hostEntry.Color
+				routed.BarBG = hostEntry.BarBG
+				routed.BarFG = hostEntry.BarFG
+				routed.BadgeBG = hostEntry.BadgeBG
+				routed.BadgeFG = hostEntry.BadgeFG
+			}
+			hostEntry = routed
 		}
 
 		if hostEntry == nil || hostEntry.IsLocal() {
@@ -983,7 +994,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubCon
 }
 
 // resolveHubHost 在 hub-socket 模式下，根據 hubContext 判斷 host 是本機還是遠端。
-// 若 hostID 等於 hubSelf → 本機（回傳 nil 讓呼叫端走 switchToSession）。
+// 若 hostID 等於 hubSelf → 本機（Address 為空，呼叫端走 switchToSession）。
 // 否則 → 遠端，使用 hubHost 作為 SSH 地址。
 func resolveHubHost(hctx *hubContext, item ui.ListItem) *config.HostEntry {
 	// HubSelf 未知時無法可靠判斷 local vs remote，保守處理為本機

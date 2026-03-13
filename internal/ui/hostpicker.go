@@ -602,6 +602,61 @@ func renderColorPreview(name string, draft hostDraftEntry, color string) string 
 	return badge + bar
 }
 
+// syncHubHostsToConfig 將 hubHostSnap 中尚未存在於 deps.Cfg.Hosts 的主機自動加入設定。
+// 這確保 hub 模式下新連線的遠端主機能立即出現在主機管理面板中。
+func (m *Model) syncHubHostsToConfig() {
+	if m.hubHostSnap == nil {
+		return
+	}
+	existing := make(map[string]bool, len(m.deps.Cfg.Hosts))
+	for _, h := range m.deps.Cfg.Hosts {
+		existing[h.Name] = true
+	}
+	changed := false
+	for _, h := range m.hubHostSnap.Hosts {
+		name := h.Name
+		if name == "" {
+			name = h.HostId
+		}
+		if existing[name] {
+			continue
+		}
+		// 自動挑色
+		color := h.Color
+		if color == "" {
+			color = config.PickColorForHosts(m.deps.Cfg.Hosts)
+		}
+		entry := config.HostEntry{
+			Name:      name,
+			Address:   h.Address,
+			Color:     color,
+			Enabled:   true,
+			SortOrder: len(m.deps.Cfg.Hosts),
+		}
+		m.deps.Cfg.Hosts = append(m.deps.Cfg.Hosts, entry)
+		existing[name] = true
+		changed = true
+	}
+	if changed {
+		m.persistHubHosts()
+	}
+}
+
+// rebuildHubItems 從目前的 hubHostSnap 重建 session 列表（套用 host 過濾）。
+func (m *Model) rebuildHubItems() {
+	if m.hubHostSnap == nil {
+		return
+	}
+	inputs := ConvertMultiHostSnapshot(m.hubHostSnap)
+	inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
+	m.items = FlattenMultiHost(inputs)
+	if len(m.items) == 0 {
+		m.cursor = 0
+	} else if m.cursor >= len(m.items) {
+		m.cursor = len(m.items) - 1
+	}
+}
+
 // visibleHubHosts 回傳 hub 模式下非封存的主機列表（來自 deps.Cfg.Hosts）。
 func (m Model) visibleHubHosts() []config.HostEntry {
 	var result []config.HostEntry
@@ -699,6 +754,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "ctrl+s" {
 		m.applyHubHostDrafts()
 		m.persistHubHosts()
+		m.rebuildHubItems()
 		m.hostPanelOpen = false
 		m.hostPanelEditing = false
 		m.hostSavedMsg = "已儲存"
@@ -740,13 +796,14 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.hostPickerCursor--
 		}
 	case " ":
-		// 切換啟用/停用：直接修改 deps.Cfg.Hosts 並持久化
+		// 切換啟用/停用：直接修改 deps.Cfg.Hosts 並持久化，立即重建 session 列表
 		if m.hostPickerCursor < len(hosts) {
 			h := hosts[m.hostPickerCursor]
 			origIdx := m.hubHostOriginalIndex(h.Name)
 			if origIdx >= 0 {
 				m.deps.Cfg.Hosts[origIdx].Enabled = !m.deps.Cfg.Hosts[origIdx].Enabled
 				m.persistHubHosts()
+				m.rebuildHubItems()
 			}
 		}
 	case "J", "shift+down":
@@ -793,6 +850,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.deps.Cfg.Hosts[origIdx].Archived = true
 					m.deps.Cfg.Hosts[origIdx].Enabled = false
 					m.persistHubHosts()
+					m.rebuildHubItems()
 					// 封存後可見列表縮短，收緊游標
 					newVisible := m.visibleHubHosts()
 					if m.hostPickerCursor >= len(newVisible) && len(newVisible) > 0 {

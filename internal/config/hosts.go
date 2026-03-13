@@ -168,6 +168,17 @@ func FindArchivedHost(hosts []HostEntry, name string) (bool, int) {
 	return false, -1
 }
 
+// PickColorForHosts 從現有主機列表中收集已使用的顏色，回傳第一個未使用的 DefaultColors。
+func PickColorForHosts(hosts []HostEntry) string {
+	used := make(map[string]bool, len(hosts))
+	for _, h := range hosts {
+		if h.Color != "" {
+			used[h.Color] = true
+		}
+	}
+	return pickColor(used)
+}
+
 // pickColor 從 DefaultColors 色池中選取第一個未使用的顏色。
 // 若色池耗盡，回傳第一個顏色（循環使用）。
 func pickColor(used map[string]bool) string {
