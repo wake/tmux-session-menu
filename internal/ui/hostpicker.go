@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,6 +32,14 @@ var hostPanelFieldLabels = [hostPanelFieldCount]string{
 	"bar_fg",
 	"badge_bg",
 	"badge_fg",
+}
+
+// hexColorRe 驗證 #rrggbb 格式。
+var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// isValidHexColor 回傳 s 是否為空或合法 #rrggbb。
+func isValidHexColor(s string) bool {
+	return s == "" || hexColorRe.MatchString(s)
 }
 
 // HostPanelOpen 回傳右側面板是否開啟（供測試使用）。
@@ -103,6 +112,20 @@ func draftFieldValue(d hostDraftEntry, field int) string {
 	}
 }
 
+// setDraftField 設定 draft 中指定欄位的值。
+func setDraftField(d *hostDraftEntry, field int, val string) {
+	switch field {
+	case 1:
+		d.BarBG = val
+	case 2:
+		d.BarFG = val
+	case 3:
+		d.BadgeBG = val
+	case 4:
+		d.BadgeFG = val
+	}
+}
+
 // updateHostPicker 處理主機管理面板的按鍵。
 func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// hub 模式：唯讀 host picker
@@ -118,6 +141,11 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if len(hosts) == 0 {
 		m.mode = ModeNormal
 		return m, nil
+	}
+
+	// 正在編輯色彩欄位：委派給 textInput
+	if m.hostPanelEditing {
+		return m.updateHostPanelEditing(msg)
 	}
 
 	// 右側面板開啟時
@@ -232,6 +260,15 @@ func (m Model) updateHostPanelOpen(msg tea.KeyMsg, hosts []*hostmgr.Host) (tea.M
 		if m.hostPanelCursor > 0 {
 			m.hostPanelCursor--
 		}
+	case "enter":
+		if m.hostPanelCursor == 0 {
+			// 啟用 toggle
+			m.toggleHostPanelEnabled(hosts)
+		} else {
+			// 進入色彩欄位編輯
+			m.enterHostPanelEdit(hosts)
+		}
+		return m, nil
 	case " ":
 		if m.hostPanelCursor == 0 {
 			m.toggleHostPanelEnabled(hosts)
@@ -251,6 +288,48 @@ func (m *Model) toggleHostPanelEnabled(hosts []*hostmgr.Host) {
 	d := m.hostPanelDraft[h.ID()]
 	d.Enabled = !d.Enabled
 	m.hostPanelDraft[h.ID()] = d
+}
+
+// enterHostPanelEdit 進入色彩欄位編輯模式。
+func (m *Model) enterHostPanelEdit(hosts []*hostmgr.Host) {
+	if m.hostPickerCursor >= len(hosts) {
+		return
+	}
+	h := hosts[m.hostPickerCursor]
+	m.ensureDraft(h.ID())
+	d := m.hostPanelDraft[h.ID()]
+	val := draftFieldValue(d, m.hostPanelCursor)
+	m.textInput.SetValue(val)
+	m.textInput.Focus()
+	m.hostPanelEditing = true
+}
+
+// updateHostPanelEditing 處理色彩欄位編輯中的按鍵。
+func (m Model) updateHostPanelEditing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	hosts := m.visibleHosts()
+	switch msg.Type {
+	case tea.KeyEnter:
+		// 確認編輯
+		if m.hostPickerCursor < len(hosts) {
+			h := hosts[m.hostPickerCursor]
+			d := m.hostPanelDraft[h.ID()]
+			setDraftField(&d, m.hostPanelCursor, m.textInput.Value())
+			m.hostPanelDraft[h.ID()] = d
+		}
+		m.hostPanelEditing = false
+		m.textInput.Blur()
+		return m, nil
+	case tea.KeyEsc:
+		// 取消編輯
+		m.hostPanelEditing = false
+		m.textInput.Blur()
+		return m, nil
+	default:
+		// 委派給 textInput
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
 }
 
 // renderHostPicker 渲染主機管理浮動面板。
@@ -376,24 +455,78 @@ func (m Model) renderHostPickerRight(hosts []*hostmgr.Host) string {
 		} else {
 			// 色彩欄位
 			val := draftFieldValue(draft, i)
-			displayVal := val
-			if displayVal == "" {
-				displayVal = dimStyle.Render("（空）")
-			}
-			line = fmt.Sprintf("  %s%-10s %s", cursor, hostPanelFieldLabels[i], displayVal)
-			// bar_fg 空值提示
-			if i == 2 && val == "" {
-				line += " " + dimStyle.Render("（留空由 tmux 自行決定）")
+			if m.hostPanelEditing && i == m.hostPanelCursor {
+				// 編輯中顯示 textInput
+				line = fmt.Sprintf("  %s%-10s %s", cursor, hostPanelFieldLabels[i], m.textInput.View())
+			} else {
+				displayVal := val
+				if displayVal == "" {
+					displayVal = dimStyle.Render("（空）")
+				} else {
+					// 若為合法色碼，顯示一個色塊
+					if isValidHexColor(displayVal) {
+						swatch := lipgloss.NewStyle().
+							Background(lipgloss.Color(displayVal)).
+							Render("  ")
+						displayVal = displayVal + " " + swatch
+					}
+				}
+				line = fmt.Sprintf("  %s%-10s %s", cursor, hostPanelFieldLabels[i], displayVal)
+				// bar_fg 空值提示
+				if i == 2 && val == "" {
+					line += " " + dimStyle.Render("（留空由 tmux 自行決定）")
+				}
 			}
 		}
 
-		if i == m.hostPanelCursor {
+		if i == m.hostPanelCursor && !m.hostPanelEditing {
 			line = m.cursorLine(line)
 		}
 		b.WriteString(line + "\n")
 	}
 
+	// 預覽
+	b.WriteString("\n")
+	cfg := h.Config()
+	preview := renderColorPreview(cfg.Name, draft, cfg.Color)
+	b.WriteString(fmt.Sprintf("  %s\n", lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#505050")).
+		Padding(0, 1).
+		Render(preview)))
+	b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render("  ▲ 預覽")))
+
 	return b.String()
+}
+
+// renderColorPreview 渲染一行模擬 status bar 的預覽。
+func renderColorPreview(name string, draft hostDraftEntry, color string) string {
+	badgeBG := draft.BadgeBG
+	if badgeBG == "" && color != "" {
+		badgeBG = color
+	}
+
+	// 建構 badge：色塊 + 主機名
+	badgeStyle := lipgloss.NewStyle().Bold(true)
+	if isValidHexColor(badgeBG) && badgeBG != "" {
+		badgeStyle = badgeStyle.Background(lipgloss.Color(badgeBG))
+	}
+	if isValidHexColor(draft.BadgeFG) && draft.BadgeFG != "" {
+		badgeStyle = badgeStyle.Foreground(lipgloss.Color(draft.BadgeFG))
+	}
+
+	// 建構 bar：背景 + 範例文字
+	barStyle := lipgloss.NewStyle()
+	if isValidHexColor(draft.BarBG) && draft.BarBG != "" {
+		barStyle = barStyle.Background(lipgloss.Color(draft.BarBG))
+	}
+	if isValidHexColor(draft.BarFG) && draft.BarFG != "" {
+		barStyle = barStyle.Foreground(lipgloss.Color(draft.BarFG))
+	}
+
+	badge := badgeStyle.Render(" " + name + " ")
+	bar := barStyle.Render(" 0:zsh*  1:vim ")
+	return badge + bar
 }
 
 // updateHubHostPicker 處理 hub 模式下唯讀 host picker 的按鍵。

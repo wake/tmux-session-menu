@@ -566,6 +566,49 @@ func TestHostPicker_PanelToggleEnabled(t *testing.T) {
 	assert.Contains(t, view, "[ ]", "切換後啟用欄應為 [ ]")
 }
 
+func TestHostPicker_PanelEditColor(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true, BarBG: "#111111"})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// 移到 bar_bg（index 1）
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostPanelCursor())
+
+	// 按 Enter 進入編輯
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.True(t, m.HostPanelEditing(), "應進入編輯模式")
+
+	// 按 Esc 取消編輯
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(ui.Model)
+	assert.False(t, m.HostPanelEditing(), "Esc 應退出編輯模式")
+}
+
+func TestHostPicker_PreviewRendered(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true, BarBG: "#1a2b2b", BadgeBG: "#e0af68", BadgeFG: "#1a1b26"})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	fm := updated.(ui.Model)
+	view := fm.View()
+	// 預覽應顯示主機名與範例 window
+	assert.Contains(t, view, "mlab1", "預覽應顯示主機名")
+	assert.Contains(t, view, "0:zsh", "預覽應顯示範例 window")
+}
+
 func TestHostPicker_HintForEmptyBarFG(t *testing.T) {
 	mgr := hostmgr.New()
 	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true, BarBG: "#1a2b2b"})
