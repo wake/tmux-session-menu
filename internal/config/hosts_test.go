@@ -290,6 +290,79 @@ func TestEnsureLocal_ExistsButDisabled(t *testing.T) {
 	assert.False(t, result[0].Enabled, "EnsureLocal 不修改已存在 local 的 Enabled 狀態")
 }
 
+// --- Archived 主機測試 ---
+
+func TestMergeHosts_ArchivedNotActivatedByFlag(t *testing.T) {
+	// --host mlab1 不應將已封存的 mlab1 解封存（Archived 仍為 true，Enabled 不應被設為 true）
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "mlab1", Address: "10.0.0.1", Color: "#5B9BD5", Enabled: false, Archived: true, SortOrder: 1},
+		{Name: "dev", Address: "10.0.0.2", Color: "#70AD47", Enabled: false, SortOrder: 2},
+	}
+
+	result := config.MergeHosts(hosts, []string{"mlab1"}, false)
+
+	// mlab1 是封存主機，不應被 --host 旗標重新啟用
+	require.Len(t, result, 3)
+	assert.Equal(t, "mlab1", result[1].Name)
+	assert.False(t, result[1].Enabled, "封存主機不應被 --host 旗標啟用")
+	assert.True(t, result[1].Archived, "Archived 欄位應維持 true")
+}
+
+func TestMergeHosts_ArchivedByAddress_NotActivatedByFlag(t *testing.T) {
+	// 透過 Address 比對時，封存主機同樣不應被旗標啟用
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "mlab1", Address: "mlab1.example.com", Color: "#5B9BD5", Enabled: false, Archived: true, SortOrder: 1},
+	}
+
+	result := config.MergeHosts(hosts, []string{"mlab1.example.com"}, false)
+
+	require.Len(t, result, 2)
+	assert.False(t, result[1].Enabled, "封存主機透過 Address 匹配時不應被旗標啟用")
+	assert.True(t, result[1].Archived, "Archived 欄位應維持 true")
+}
+
+// --- FindArchivedHost 測試 ---
+
+func TestFindArchivedHost(t *testing.T) {
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "mlab1", Address: "10.0.0.1", Color: "#5B9BD5", Enabled: false, Archived: true, SortOrder: 1},
+		{Name: "dev", Address: "10.0.0.2", Color: "#70AD47", Enabled: true, SortOrder: 2},
+	}
+
+	found, idx := config.FindArchivedHost(hosts, "mlab1")
+
+	assert.True(t, found, "應找到封存的 mlab1")
+	assert.Equal(t, 1, idx, "mlab1 位於索引 1")
+}
+
+func TestFindArchivedHost_NotFound(t *testing.T) {
+	// dev 存在但未封存，不應回傳 true
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "dev", Address: "10.0.0.2", Color: "#70AD47", Enabled: true, Archived: false, SortOrder: 1},
+	}
+
+	found, idx := config.FindArchivedHost(hosts, "dev")
+
+	assert.False(t, found, "未封存的主機不應被視為封存")
+	assert.Equal(t, -1, idx)
+}
+
+func TestFindArchivedHost_NonExistent(t *testing.T) {
+	// 完全不存在的主機
+	hosts := []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+	}
+
+	found, idx := config.FindArchivedHost(hosts, "ghost")
+
+	assert.False(t, found, "不存在的主機應回傳 false")
+	assert.Equal(t, -1, idx)
+}
+
 // --- DefaultColors 測試 ---
 
 func TestDefaultColors(t *testing.T) {
