@@ -877,12 +877,13 @@ func TestModel_NewSession_CreatesAndReloads(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(ui.Model)
 
-	// 驗證：mode 回到 Normal
-	assert.Equal(t, ui.ModeNormal, model.Mode())
+	// 驗證：建立後自動掛載（quitting + selected）
+	assert.True(t, model.Quitting(), "建立後應退出 TUI 以掛載")
+	assert.Equal(t, "my-new", model.Selected(), "應選取新建的 session")
 	// 驗證：NewSession 被呼叫
 	assert.Len(t, newSessionCalls, 1, "NewSession 應被呼叫一次")
-	// 驗證：cmd 不為 nil（觸發 reload）
-	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+	// 驗證：cmd 不為 nil（tea.Quit）
+	assert.NotNil(t, cmd, "應回傳 tea.Quit")
 	// 驗證：無錯誤
 	assert.Nil(t, model.Err())
 }

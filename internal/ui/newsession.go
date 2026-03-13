@@ -15,11 +15,20 @@ import (
 type newSessionField int
 
 const (
-	fieldName   newSessionField = iota // Session 名稱
+	fieldHost   newSessionField = iota // 主機選擇（tab 樣式，多主機時才顯示）
+	fieldName                          // 名稱（CustomName，可選）
+	fieldID                            // ID（tmux session name，可選，留空則用名稱）
 	fieldPath                          // 啟動路徑
 	fieldRecent                        // 最近路徑選擇
 	fieldAgent                         // Agent 選擇
 )
+
+// hostTabInfo 描述新建 session 時可選的主機。
+type hostTabInfo struct {
+	ID    string
+	Name  string
+	Color string
+}
 
 // agentGroup 是分群後的 agent 清單。
 type agentGroup struct {
@@ -29,7 +38,8 @@ type agentGroup struct {
 
 // newSessionForm 管理 new session 表單的狀態。
 type newSessionForm struct {
-	nameInput textinput.Model
+	nameInput textinput.Model // 名稱（CustomName，顯示名稱）
+	idInput   textinput.Model // ID（tmux session name）
 	pathInput textinput.Model
 
 	field       newSessionField // 目前焦點區塊
@@ -40,26 +50,52 @@ type newSessionForm struct {
 	agentGroups   []agentGroup        // 分群後的 agent
 	agentCursor   int                 // agent 選項中的全域游標（含 Shell）
 	selectedAgent int                 // 已選取的 agent index（-1 = Shell）
+
+	hosts   []hostTabInfo // 可選主機（多主機模式）
+	hostIdx int           // 選取的主機 index
 }
 
 func (f *newSessionForm) totalAgentOptions() int {
 	return len(f.agents) + 1 // +1 for Shell
 }
 
+// hasHosts 回傳是否有多主機可選。
+func (f *newSessionForm) hasHosts() bool {
+	return len(f.hosts) > 1
+}
+
+// firstField 回傳表單的第一個可用焦點欄位。
+func (f *newSessionForm) firstField() newSessionField {
+	if f.hasHosts() {
+		return fieldHost
+	}
+	return fieldName
+}
+
 // initForm 初始化表單。
-func (f *newSessionForm) initForm(agents []config.AgentEntry, recentPaths []string) {
+func (f *newSessionForm) initForm(agents []config.AgentEntry, recentPaths []string, hosts []hostTabInfo) {
 	f.nameInput = textinput.New()
-	f.nameInput.Placeholder = "session-name"
-	f.nameInput.Focus()
+	f.nameInput.Placeholder = "顯示名稱（可選）"
+
+	f.idInput = textinput.New()
+	f.idInput.Placeholder = "session-name（可選，留空則用名稱）"
 
 	f.pathInput = textinput.New()
 	f.pathInput.Placeholder = "~/Workspace/..."
 
-	f.field = fieldName
+	f.hosts = hosts
+	f.hostIdx = 0
+
 	f.recentPaths = recentPaths
 	f.recentIdx = 0
 	f.selectedAgent = -1 // Shell selected by default
 	f.agentCursor = 0
+
+	// 設定初始焦點
+	f.field = f.firstField()
+	if f.field == fieldName {
+		f.nameInput.Focus()
+	}
 
 	// 過濾已啟用的 agent，按 SortOrder 排列
 	var enabled []config.AgentEntry
@@ -89,6 +125,21 @@ func (f *newSessionForm) initForm(agents []config.AgentEntry, recentPaths []stri
 	}
 }
 
+// blurAllInputs 取消所有文字輸入的焦點。
+func (f *newSessionForm) blurAllInputs() {
+	f.nameInput.Blur()
+	f.idInput.Blur()
+	f.pathInput.Blur()
+}
+
+// selectedHostID 回傳目前選取的主機 ID（無主機時回傳空字串）。
+func (f *newSessionForm) selectedHostID() string {
+	if f.hostIdx >= 0 && f.hostIdx < len(f.hosts) {
+		return f.hosts[f.hostIdx].ID
+	}
+	return ""
+}
+
 // updateNewSession 處理 ModeNewSession 的按鍵。
 func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	f := &m.newSession
@@ -100,37 +151,73 @@ func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "q":
 		// 非文字輸入焦點時才關閉（避免攔截打字）
-		if f.field != fieldName && f.field != fieldPath {
+		if f.field != fieldName && f.field != fieldID && f.field != fieldPath {
 			m.mode = ModeNormal
 			return m, nil
 		}
 
-	case "enter":
-		name := f.nameInput.Value()
-		if name == "" {
+	case "tab":
+		// Tab 鍵：在主機 tab 區域時切換到下一台主機
+		if f.field == fieldHost && f.hasHosts() {
+			f.hostIdx = (f.hostIdx + 1) % len(f.hosts)
 			return m, nil
 		}
+
+	case "enter":
+		displayName := strings.TrimSpace(f.nameInput.Value())
+		sessionID := strings.TrimSpace(f.idInput.Value())
+
+		// 決定 tmux session name：ID 優先，其次名稱
+		sessionName := sessionID
+		if sessionName == "" {
+			sessionName = displayName
+		}
+		if sessionName == "" {
+			return m, nil // 至少需要一個識別名稱
+		}
+
 		path := f.pathInput.Value()
 		command := ""
 		if f.selectedAgent >= 0 && f.selectedAgent < len(f.agents) {
 			command = f.agents[f.selectedAgent].Command
 		}
 
+		// 判斷是否需要設定自訂名稱（名稱不同於 session name 時才設定）
+		customName := ""
+		if displayName != "" && displayName != sessionName {
+			customName = displayName
+		}
+
+		// 取得目標主機的 client
+		hostID := f.selectedHostID()
+		client := m.clientForHost(hostID)
+
 		// 建立 session
-		if c := m.clientForCursor(); c != nil {
-			if err := c.CreateSession(context.Background(), name, path, command); err != nil {
+		if client != nil {
+			if err := client.CreateSession(context.Background(), sessionName, path, command); err != nil {
 				m.err = err
 				m.mode = ModeNormal
 				return m, nil
 			}
+			// 設定自訂名稱
+			if customName != "" {
+				_ = client.RenameSession(context.Background(), sessionName, customName, "")
+			}
 		} else if m.deps.TmuxMgr != nil {
-			if err := m.deps.TmuxMgr.NewSession(name, path); err != nil {
+			if err := m.deps.TmuxMgr.NewSession(sessionName, path); err != nil {
 				m.err = err
 				m.mode = ModeNormal
 				return m, nil
 			}
 			if command != "" {
-				_ = m.deps.TmuxMgr.SendKeys(name, command)
+				_ = m.deps.TmuxMgr.SendKeys(sessionName, command)
+			}
+			// 設定自訂名稱
+			if customName != "" {
+				if m.deps.Store != nil {
+					_ = m.deps.Store.SetCustomName(sessionName, customName)
+				}
+				_ = m.deps.TmuxMgr.SetSessionOption(sessionName, "@tsm_name", customName)
 			}
 		}
 
@@ -139,16 +226,29 @@ func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			_ = m.deps.Store.AddPathHistory(path)
 		}
 
-		m.mode = ModeNormal
-		return m, loadSessionsCmd(m.deps)
+		// 自動掛載：設定選取的 session 並退出 TUI
+		m.selected = sessionName
+		m.selectedHostID = hostID
+		m.quitting = true
+		return m, tea.Quit
 
 	case "up":
 		switch f.field {
-		case fieldName:
+		case fieldHost:
 			// 已在最頂部
-		case fieldPath:
+		case fieldName:
+			if f.hasHosts() {
+				f.blurAllInputs()
+				f.field = fieldHost
+			}
+			// 無主機時已在最頂部
+		case fieldID:
 			f.field = fieldName
 			f.nameInput.Focus()
+			f.idInput.Blur()
+		case fieldPath:
+			f.field = fieldID
+			f.idInput.Focus()
 			f.pathInput.Blur()
 		case fieldRecent:
 			if f.recentIdx > 0 {
@@ -178,9 +278,16 @@ func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "down":
 		switch f.field {
+		case fieldHost:
+			f.field = fieldName
+			f.nameInput.Focus()
 		case fieldName:
-			f.field = fieldPath
+			f.field = fieldID
 			f.nameInput.Blur()
+			f.idInput.Focus()
+		case fieldID:
+			f.field = fieldPath
+			f.idInput.Blur()
 			f.pathInput.Focus()
 		case fieldPath:
 			f.pathInput.Blur()
@@ -208,12 +315,20 @@ func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "left":
+		if f.field == fieldHost && f.hasHosts() && f.hostIdx > 0 {
+			f.hostIdx--
+			return m, nil
+		}
 		if f.field == fieldAgent && f.agentCursor > 0 {
 			f.agentCursor--
 		}
 		return m, nil
 
 	case "right":
+		if f.field == fieldHost && f.hasHosts() && f.hostIdx < len(f.hosts)-1 {
+			f.hostIdx++
+			return m, nil
+		}
 		if f.field == fieldAgent && f.agentCursor < f.totalAgentOptions()-1 {
 			f.agentCursor++
 		}
@@ -238,6 +353,11 @@ func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if f.field == fieldName {
 		var cmd tea.Cmd
 		f.nameInput, cmd = f.nameInput.Update(msg)
+		return m, cmd
+	}
+	if f.field == fieldID {
+		var cmd tea.Cmd
+		f.idInput, cmd = f.idInput.Update(msg)
 		return m, cmd
 	}
 	if f.field == fieldPath {
@@ -293,13 +413,46 @@ func (m Model) renderNewSession() string {
 	f := &m.newSession
 	var b strings.Builder
 
-	// Session 名稱
+	b.WriteString("\n")
+
+	// 主機 tab 列（多主機模式才顯示）
+	if f.hasHosts() {
+		b.WriteString("  ")
+		for i, h := range f.hosts {
+			name := h.Name
+			if i == f.hostIdx {
+				// 選取的主機：使用主機顏色背景
+				tabStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color(h.Color)).
+					Foreground(lipgloss.Color("#ffffff")).
+					Padding(0, 1).
+					Bold(true)
+				b.WriteString(tabStyle.Render(name))
+			} else {
+				b.WriteString(dimStyle.Render("  " + name + "  "))
+			}
+		}
+		if f.field == fieldHost {
+			b.WriteString("  " + dimStyle.Render("◄ ► 切換"))
+		}
+		b.WriteString("\n\n")
+	}
+
+	// 名稱（CustomName）
 	nameMarker := "  "
 	if f.field == fieldName {
 		nameMarker = selectedStyle.Render("► ")
 	}
-	b.WriteString(fmt.Sprintf("\n  %s%s: %s\n",
-		nameMarker, selectedStyle.Render("Session 名稱"), f.nameInput.View()))
+	b.WriteString(fmt.Sprintf("  %s%s: %s\n",
+		nameMarker, selectedStyle.Render("名稱"), f.nameInput.View()))
+
+	// ID（tmux session name）
+	idMarker := "  "
+	if f.field == fieldID {
+		idMarker = selectedStyle.Render("► ")
+	}
+	b.WriteString(fmt.Sprintf("  %s%s: %s\n",
+		idMarker, selectedStyle.Render("ID"), f.idInput.View()))
 
 	// 啟動路徑
 	pathMarker := "  "

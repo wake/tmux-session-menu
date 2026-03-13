@@ -2,6 +2,16 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.35.0] - 2026-03-13
+
+### Added
+- 新建 session 表單欄位與重命名對話框一致：名稱（CustomName）+ ID（tmux session name），ID 留空時自動使用名稱
+- 新建 session 後自動掛載：建立完成後直接 switch-client 進入該 session
+- 多主機模式下新建 session 時，表單頂部顯示主機 tab 選擇器（←→ / Tab 切換）
+
+### Fixed
+- 直接模式 AI 燈號偵測修正：補上與 daemon 一致的 content-based 降級偵測，無 hook 時仍能從 pane content 辨識 AI agent 並顯示實心 ●
+
 ## [0.34.0] - 2026-03-13
 
 ### Added
