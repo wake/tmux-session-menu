@@ -933,6 +933,11 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubCon
 			cfg = loadConfig()
 			cfg.InTmux = os.Getenv("TMUX") != ""
 			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+			// 重建 WatchMultiHost stream（舊 TUI 的 recv goroutine 讀舊 stream 會收到 error）
+			if wErr := c.WatchMultiHost(hubCtx); wErr != nil {
+				fmt.Fprintf(os.Stderr, "reconnect WatchMultiHost: %v\n", wErr)
+				return hubResultError
+			}
 			continue
 		}
 

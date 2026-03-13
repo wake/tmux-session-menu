@@ -8,15 +8,19 @@ import (
 
 // StatusBarArgs 根據顏色設定產生 tmux set-option 參數陣列。
 // 回傳格式為 [][]string，每個子陣列是一組 tmux 指令參數。
-// bar_bg 為空時不設 status-style（保持 tmux 預設）。
+// bar_bg 為空時 unset status-style（清除先前可能由 remote 設定的背景色）。
 func StatusBarArgs(colors config.ColorConfig) [][]string {
 	var cmds [][]string
 
-	// 狀態列背景色（僅在有設定時才套用）
 	if colors.BarBG != "" {
 		cmds = append(cmds, []string{
 			"set-option", "-g", "status-style",
 			fmt.Sprintf("bg=%s", colors.BarBG),
+		})
+	} else {
+		// 清除先前設定的 status-style（例如 remote bar_bg），回到 tmux 預設
+		cmds = append(cmds, []string{
+			"set-option", "-gu", "status-style",
 		})
 	}
 
