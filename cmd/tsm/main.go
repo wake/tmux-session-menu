@@ -305,7 +305,7 @@ func runTUI() {
 	if hubSocket != "" {
 		if c, err := client.DialSocket(hubSocket); err == nil {
 			result := runHubTUI(c, cfg, cfgPath)
-			if result != hubResultDegraded {
+			if result == hubResultExit {
 				return
 			}
 		}
@@ -319,7 +319,7 @@ func runTUI() {
 	if hostMode {
 		if c, err := client.Dial(cfg); err == nil {
 			result := runHubTUI(c, cfg, cfgPath)
-			if result != hubResultDegraded {
+			if result == hubResultExit {
 				return
 			}
 		}
