@@ -257,8 +257,8 @@ func runClientLauncher(dataDir string) {
 }
 
 // runTUI 是所有 TUI 模式的統一入口。
-// 無論是無參數啟動（local only）、--host/--local 多主機模式，或 client launcher 呼叫，
-// 一律建立 HostManager 管理所有主機的連線與快照聚合。
+// tsm 無參數 → runDaemonTUI（純 Daemon Watch stream）。
+// tsm --local / --host → Hub 模式（WatchMultiHost），降級時走 HostManager。
 func runTUI() {
 	// 防禦性清理：移除可能殘留的舊 exit-requested sentinel 檔案
 	remote.RemoveExitMarker()
@@ -313,17 +313,18 @@ func runTUI() {
 		// fall through to normal mode
 	}
 
-	// 嘗試 daemon hub 模式（控制器端 tsm --host）
-	// 若 daemon 支援 WatchMultiHost → 直接進入 hub TUI，跳過 HostManager
-	// 若 daemon 不支援（舊版或未啟用 remote hosts）→ 降級到 HostManager
-	if hostMode {
-		if c, err := client.Dial(cfg); err == nil {
-			result := runHubTUI(c, cfg, cfgPath)
-			if result == hubResultExit {
-				return
-			}
+	// tsm 無參數 → Daemon 模式（純 Watch stream，不經多主機架構）
+	if !hostMode {
+		runDaemonTUI(cfg, cfgPath)
+		return
+	}
+
+	// 多主機模式：嘗試 Hub（WatchMultiHost），降級時走 HostManager
+	if c, err := client.Dial(cfg); err == nil {
+		result := runHubTUI(c, cfg, cfgPath)
+		if result == hubResultExit {
+			return
 		}
-		// client.Dial 失敗、不支援 hub、或降級 → 繼續原有 HostManager 路徑
 	}
 
 	// 防禦性確保 local 永遠存在
@@ -776,6 +777,66 @@ const (
 	hubResultDegraded                  // daemon 不再支援 hub → 降級到 HostManager
 	hubResultError                     // 無法建立 watch stream
 )
+
+// runDaemonTUI 執行 Daemon 模式的 TUI 迴圈（tsm 無參數，只看本機）。
+// 透過 gRPC Watch stream 接收本機快照，不經過多主機架構。
+func runDaemonTUI(cfg config.Config, cfgPath string) {
+	c, err := client.Dial(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: 無法連線到 daemon: %v\n", err)
+		os.Exit(1)
+	}
+
+	upgrader := upgrade.DefaultUpgrader()
+	defer c.Close()
+
+	for {
+		deps := ui.Deps{
+			Client:     c,
+			Cfg:        cfg,
+			ConfigPath: cfgPath,
+			Upgrader:   upgrader,
+		}
+		p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
+		finalModel, runErr := p.Run()
+		if runErr != nil {
+			fmt.Fprintf(os.Stderr, "TUI error: %v\n", runErr)
+			os.Exit(1)
+		}
+
+		fm, ok := finalModel.(ui.Model)
+		if !ok {
+			return
+		}
+
+		if fm.UpgradeReady() {
+			c.Close()
+			runPostUpgrade(fm, cfg)
+			return
+		}
+		if fm.OpenConfig() {
+			runConfig()
+			cfg = loadConfig()
+			cfg.InTmux = os.Getenv("TMUX") != ""
+			cfg.InPopup = os.Getenv("TSM_IN_POPUP") == "1"
+			continue
+		}
+
+		selected := fm.Selected()
+		if selected == "" {
+			if fm.ExitTmux() && os.Getenv("TMUX") != "" {
+				_ = remote.WriteExitMarker()
+				_ = osexec.Command("tmux", "detach-client").Run()
+			}
+			return
+		}
+
+		switchToSession(selected, fm.ReadOnly())
+		if cfg.InPopup {
+			return
+		}
+	}
+}
 
 // runHubTUI 執行 hub 模式的 TUI 迴圈：顯示 sessions → 選取 → attach → 回到 TUI。
 // 處理 session 選取、config 開啟、升級、及遠端 attach 重連。
