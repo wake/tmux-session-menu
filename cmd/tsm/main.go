@@ -282,6 +282,12 @@ func runTUI() {
 		merged := config.MergeHosts(cfg.Hosts, hostFlags, localFlag)
 		cfg.Hosts = merged
 		_ = config.SaveConfig(cfgPath, cfg)
+		// host 配置變更 → 重啟 daemon 讓 HubManager 重新載入
+		if daemon.IsRunning(cfg) {
+			if err := daemon.Stop(cfg); err != nil {
+				fmt.Fprintf(os.Stderr, "daemon 停止失敗: %v\n", err)
+			}
+		}
 	} else if !hostMode {
 		// tsm 無參數 → 強制只啟用 local，不存 config
 		for i := range cfg.Hosts {
@@ -325,6 +331,9 @@ func runTUI() {
 		if result == hubResultExit {
 			return
 		}
+		fmt.Fprintf(os.Stderr, "Hub 模式不可用，降級到 HostManager\n")
+	} else {
+		fmt.Fprintf(os.Stderr, "daemon 連線失敗，使用 HostManager: %v\n", err)
 	}
 
 	// 防禦性確保 local 永遠存在
