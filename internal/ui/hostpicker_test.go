@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
@@ -86,9 +87,9 @@ func TestHostPickerAddHost(t *testing.T) {
 	m, _ = hpApplyKey(m, "h")
 	assert.Equal(t, ui.ModeHostPicker, m.Mode())
 
-	// 按 a 進入新增主機輸入模式
-	m, _ = hpApplyKey(m, "a")
-	assert.Equal(t, ui.ModeInput, m.Mode(), "pressing a should enter ModeInput")
+	// 按 n 進入新增主機輸入模式（原 a 已改為 n）
+	m, _ = hpApplyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode(), "pressing n should enter ModeInput")
 	assert.Equal(t, ui.InputNewHost, m.InputTarget(), "input target should be InputNewHost")
 }
 
@@ -119,9 +120,12 @@ func TestHostPickerDeleteRemote(t *testing.T) {
 	m, _ = hpApplyKey(m, "j")
 	assert.Equal(t, 1, m.HostPickerCursor())
 
-	// 按 d 應進入確認模式
+	// 按 d 應直接封存（不再進入確認模式）
 	m, _ = hpApplyKey(m, "d")
-	assert.Equal(t, ui.ModeConfirm, m.Mode(), "should enter ModeConfirm for remote host delete")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode(), "should stay in ModeHostPicker after archive")
+	// 驗證已封存
+	h := mgr.Host("dev")
+	assert.True(t, h.Config().Archived, "dev should be archived")
 }
 
 func TestHostPickerReorder(t *testing.T) {
@@ -264,6 +268,85 @@ func TestHostPicker_PersistHosts_NoConfigPath(t *testing.T) {
 	m, _ = hpApplyKey(m, "h")
 	m, _ = hpApplyKey(m, " ")
 	// 測試通過即代表沒有 panic
+}
+
+// --- Task 7: 三態操作測試 ---
+
+func TestHostPicker_NewKeyIsN(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5B9BD5", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr})
+
+	// 進入 HostPicker
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode())
+
+	// 按 n 應進入新增主機輸入模式
+	m, _ = hpApplyKey(m, "n")
+	assert.Equal(t, ui.ModeInput, m.Mode(), "按 n 應進入 ModeInput")
+	assert.Equal(t, ui.InputNewHost, m.InputTarget(), "input target 應為 InputNewHost")
+}
+
+func TestHostPicker_OldKeyANoLongerAdds(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5B9BD5", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr})
+
+	// 進入 HostPicker
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode())
+
+	// 按 a 不應再進入新增模式
+	m, _ = hpApplyKey(m, "a")
+	assert.NotEqual(t, ui.ModeInput, m.Mode(), "按 a 不應再進入 ModeInput")
+}
+
+func TestHostPicker_ArchiveHost(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	cfg := config.Default()
+	_ = config.SaveConfig(cfgPath, cfg)
+
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5B9BD5", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "dev", Address: "dev.example.com", Color: "#70AD47", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: cfgPath})
+
+	// 進入 HostPicker，移到第二個主機（遠端）
+	m, _ = hpApplyKey(m, "h")
+	m, _ = hpApplyKey(m, "j")
+	assert.Equal(t, 1, m.HostPickerCursor())
+
+	// 按 d 應直接封存（不進入 ModeConfirm）
+	m, _ = hpApplyKey(m, "d")
+	assert.NotEqual(t, ui.ModeConfirm, m.Mode(), "按 d 不應進入 ModeConfirm，應直接封存")
+
+	// 驗證主機已封存
+	h := mgr.Host("dev")
+	require.NotNil(t, h)
+	devCfg := h.Config()
+	assert.True(t, devCfg.Archived, "dev 應被封存")
+	assert.False(t, devCfg.Enabled, "dev 封存後應停用")
+}
+
+func TestHostPicker_ArchiveLocalProtected(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5B9BD5", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr})
+
+	// 進入 HostPicker，游標在 local
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode())
+
+	// 按 d 不應封存 local
+	m, _ = hpApplyKey(m, "d")
+	h := mgr.Host("local")
+	require.NotNil(t, h)
+	assert.False(t, h.Config().Archived, "local 不應被封存")
 }
 
 // --- Hub 模式 host picker 測試 ---

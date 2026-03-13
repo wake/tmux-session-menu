@@ -75,7 +75,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.hostPickerCursor--
 			m.persistHosts()
 		}
-	case "a":
+	case "n":
 		// 新增主機：進入文字輸入模式
 		m.mode = ModeInput
 		m.inputTarget = InputNewHost
@@ -84,20 +84,13 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textInput.Focus()
 		return m, nil
 	case "d":
-		// 刪除主機（local 不可刪除）
+		// 封存主機（軟刪除）— local 不可封存
 		if m.hostPickerCursor < len(hosts) {
 			h := hosts[m.hostPickerCursor]
 			if !h.IsLocal() {
-				hostID := h.ID()
-				m.mode = ModeConfirm
-				m.confirmReturnMode = ModeHostPicker
-				m.confirmPrompt = fmt.Sprintf("確定要刪除主機 %q？", hostID)
-				m.confirmAction = func() tea.Cmd {
-					_ = m.deps.HostMgr.Disable(hostID)
-					m.deps.HostMgr.Remove(hostID)
-					m.persistHosts()
-					return nil
-				}
+				_ = m.deps.HostMgr.Disable(h.ID())
+				m.deps.HostMgr.SetArchived(h.ID(), true)
+				m.persistHosts()
 			}
 		}
 		return m, nil
@@ -186,7 +179,7 @@ func (m Model) renderHostPicker() string {
 	}
 
 	b.WriteString(fmt.Sprintf("\n  %s\n",
-		dimStyle.Render("[space] 啟用/停用  [a] 新增  [d] 刪除  [⇧+↑/⇧+↓] 排序  [esc/h] 關閉")))
+		dimStyle.Render("[space] 啟用/停用  [n] 新增  [d] 封存  [⇧+↑/⇧+↓] 排序  [esc/h] 關閉")))
 
 	return b.String()
 }

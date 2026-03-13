@@ -1253,6 +1253,14 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case InputNewHost:
 			// 新增主機
 			if m.deps.HostMgr != nil {
+				// 檢查是否有同名封存主機 → 解封存
+				if found, archivedHost := m.deps.HostMgr.FindArchived(value); found {
+					archivedHost.SetArchived(false)
+					_ = m.deps.HostMgr.Enable(context.Background(), archivedHost.ID())
+					m.persistHosts()
+					m.mode = ModeHostPicker
+					return m, nil
+				}
 				hosts := m.deps.HostMgr.Hosts()
 				usedColors := make(map[string]bool, len(hosts))
 				for _, h := range hosts {

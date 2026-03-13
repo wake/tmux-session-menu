@@ -280,6 +280,68 @@ func TestManagerDisableUnknownHost(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// --- Task 7: 封存操作測試 ---
+
+// TestHostManager_SetArchived 驗證設定封存狀態。
+func TestHostManager_SetArchived(t *testing.T) {
+	mgr := New()
+	mgr.AddHost(config.HostEntry{Name: "host-a", Address: "10.0.0.1", Enabled: true})
+
+	// 封存：Archived=true 且 Enabled 應被設為 false
+	mgr.SetArchived("host-a", true)
+	h := mgr.Host("host-a")
+	require.NotNil(t, h)
+	cfg := h.Config()
+	assert.True(t, cfg.Archived, "封存後 Archived 應為 true")
+	assert.False(t, cfg.Enabled, "封存後 Enabled 應為 false")
+
+	// 解封存：Archived=false，Enabled 不自動恢復
+	mgr.SetArchived("host-a", false)
+	cfg = mgr.Host("host-a").Config()
+	assert.False(t, cfg.Archived, "解封存後 Archived 應為 false")
+	assert.False(t, cfg.Enabled, "解封存不自動恢復 Enabled")
+
+	// 對不存在的主機呼叫不應 panic
+	mgr.SetArchived("nonexistent", true)
+}
+
+// TestHostManager_FindArchived 驗證搜尋已封存的同名主機。
+func TestHostManager_FindArchived(t *testing.T) {
+	mgr := New()
+	mgr.AddHost(config.HostEntry{Name: "dev", Address: "10.0.0.1", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "staging", Address: "10.0.0.2", Archived: true})
+
+	// 搜尋已封存的 staging
+	found, h := mgr.FindArchived("staging")
+	assert.True(t, found, "應找到已封存的 staging")
+	require.NotNil(t, h)
+	assert.Equal(t, "staging", h.ID())
+
+	// 搜尋未封存的 dev
+	found, h = mgr.FindArchived("dev")
+	assert.False(t, found, "dev 未封存，不應找到")
+	assert.Nil(t, h)
+
+	// 搜尋不存在的名稱
+	found, h = mgr.FindArchived("nonexistent")
+	assert.False(t, found, "不存在的名稱不應找到")
+	assert.Nil(t, h)
+}
+
+// TestHost_SetArchived 驗證 Host 層級的封存操作。
+func TestHost_SetArchived(t *testing.T) {
+	h := NewHost(config.HostEntry{Name: "test", Address: "10.0.0.1", Enabled: true})
+
+	h.SetArchived(true)
+	cfg := h.Config()
+	assert.True(t, cfg.Archived, "封存後 Archived 應為 true")
+	assert.False(t, cfg.Enabled, "封存後 Enabled 應為 false")
+
+	h.SetArchived(false)
+	cfg = h.Config()
+	assert.False(t, cfg.Archived, "解封存後 Archived 應為 false")
+}
+
 // TestManagerClose 驗證 Close 停止所有主機並關閉通道。
 func TestManagerClose(t *testing.T) {
 	mgr := New()

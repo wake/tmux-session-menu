@@ -210,6 +210,33 @@ func (m *HostManager) Disable(hostID string) error {
 	return nil
 }
 
+// SetArchived 設定主機的封存狀態。
+func (m *HostManager) SetArchived(hostID string, archived bool) {
+	h := m.Host(hostID)
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	h.cfg.Archived = archived
+	if archived {
+		h.cfg.Enabled = false
+	}
+	h.mu.Unlock()
+}
+
+// FindArchived 搜尋已封存的同名主機。
+func (m *HostManager) FindArchived(name string) (bool, *Host) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, h := range m.hosts {
+		cfg := h.Config()
+		if cfg.Name == name && cfg.Archived {
+			return true, h
+		}
+	}
+	return false, nil
+}
+
 // Close 停止所有主機並關閉通知通道。可安全重複呼叫。
 func (m *HostManager) Close() {
 	m.mu.RLock()
