@@ -337,6 +337,16 @@ func (m Model) HostPickerCursor() int {
 	return m.hostPickerCursor
 }
 
+// HostSavedMsg 回傳主機儲存的 flash message（主要用於測試）。
+func (m Model) HostSavedMsg() string {
+	return m.hostSavedMsg
+}
+
+// DepsCfg 回傳 deps.Cfg 的副本（主要用於測試驗證）。
+func (m Model) DepsCfg() config.Config {
+	return m.deps.Cfg
+}
+
 // DualInputValue 回傳雙行輸入指定行的值（主要用於測試）。
 func (m Model) DualInputValue(row int) string {
 	if row < 0 || row > 1 {
@@ -1293,6 +1303,39 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.deps.HostMgr.AddHost(entry)
 				_ = m.deps.HostMgr.Enable(context.Background(), value)
 				m.persistHosts()
+			} else if m.deps.HubMode {
+				// Hub 模式：直接操作 deps.Cfg.Hosts
+				// 檢查是否有同名封存主機 → 解封存
+				if found, idx := config.FindArchivedHost(m.deps.Cfg.Hosts, value); found {
+					m.deps.Cfg.Hosts[idx].Archived = false
+					m.deps.Cfg.Hosts[idx].Enabled = true
+					m.persistHubHosts()
+					m.mode = ModeHostPicker
+					return m, nil
+				}
+				// 新增主機：自動挑色
+				usedColors := make(map[string]bool, len(m.deps.Cfg.Hosts))
+				for _, h := range m.deps.Cfg.Hosts {
+					if h.Color != "" {
+						usedColors[h.Color] = true
+					}
+				}
+				color := config.DefaultColors[len(m.deps.Cfg.Hosts)%len(config.DefaultColors)]
+				for _, c := range config.DefaultColors {
+					if !usedColors[c] {
+						color = c
+						break
+					}
+				}
+				entry := config.HostEntry{
+					Name:      value,
+					Address:   value,
+					Color:     color,
+					Enabled:   true,
+					SortOrder: len(m.deps.Cfg.Hosts),
+				}
+				m.deps.Cfg.Hosts = append(m.deps.Cfg.Hosts, entry)
+				m.persistHubHosts()
 			}
 			m.mode = ModeHostPicker // 回到主機管理面板
 			return m, nil
