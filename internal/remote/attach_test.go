@@ -46,11 +46,12 @@ func TestSetHubSocket_CallsSSHWithCorrectArgs(t *testing.T) {
 	}
 	assert.Equal(t, "ssh", capturedName)
 	assert.Contains(t, capturedArgs, "user@host")
-	assert.Contains(t, capturedArgs, "@tsm_hub_socket")
-	assert.Contains(t, capturedArgs, "/tmp/tsm-hub.sock")
-
-	// 確認有傳遞 set-option 指令
+	// 使用 login shell 確保 tmux 在 PATH 中
+	assert.Contains(t, capturedArgs, "bash")
+	assert.Contains(t, capturedArgs, "-lc")
 	argsStr := strings.Join(capturedArgs, " ")
+	assert.Contains(t, argsStr, "@tsm_hub_socket")
+	assert.Contains(t, argsStr, "/tmp/tsm-hub.sock")
 	assert.Contains(t, argsStr, "set-option")
 }
 
@@ -68,10 +69,11 @@ func TestClearHubSocket_CallsSSHWithUnsetFlag(t *testing.T) {
 		t.Fatalf("ClearHubSocket unexpected error: %v", err)
 	}
 	assert.Contains(t, capturedArgs, "user@host")
-	assert.Contains(t, capturedArgs, "@tsm_hub_socket")
-
+	// 使用 login shell 確保 tmux 在 PATH 中
+	assert.Contains(t, capturedArgs, "bash")
+	assert.Contains(t, capturedArgs, "-lc")
 	argsStr := strings.Join(capturedArgs, " ")
+	assert.Contains(t, argsStr, "@tsm_hub_socket")
 	assert.Contains(t, argsStr, "set-option")
-	// 應帶 -gu 旗標（unset global option）
-	assert.Contains(t, capturedArgs, "-gu")
+	assert.Contains(t, argsStr, "-gu")
 }

@@ -62,13 +62,16 @@ func flushStdin() {
 }
 
 // SetHubSocket 在遠端主機的 tmux 設定 hub socket 路徑。
+// 使用 login shell 確保 PATH 包含 Homebrew 等非系統路徑。
 func SetHubSocket(host, socketPath string) error {
-	return sshRunFn("ssh", host, "tmux", "set-option", "-g", "@tsm_hub_socket", socketPath)
+	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_socket %s", socketPath)
+	return sshRunFn("ssh", host, "bash", "-lc", cmd)
 }
 
 // ClearHubSocket 清除遠端主機的 hub socket 設定。
+// 使用 login shell 確保 PATH 包含 Homebrew 等非系統路徑。
 func ClearHubSocket(host string) error {
-	return sshRunFn("ssh", host, "tmux", "set-option", "-gu", "@tsm_hub_socket")
+	return sshRunFn("ssh", host, "bash", "-lc", "tmux set-option -gu @tsm_hub_socket")
 }
 
 // Attach 啟動 `ssh -t host` 並透過遠端 login shell 執行 tmux attach-session。
