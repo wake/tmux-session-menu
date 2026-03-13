@@ -430,6 +430,21 @@ func TestHubMode_HostPickerNavigation(t *testing.T) {
 	assert.Equal(t, ui.ModeNormal, m.Mode())
 }
 
+func TestHostPicker_ArchivedHostHidden(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: false, Archived: true})
+	mgr.AddHost(config.HostEntry{Name: "mlab2", Address: "mlab2", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = applyKey(m, "h")
+	view := m.View()
+
+	assert.Contains(t, view, "local")
+	assert.NotContains(t, view, "mlab1")
+	assert.Contains(t, view, "mlab2")
+}
+
 func TestHubMode_SelectedItem_HasHostID(t *testing.T) {
 	// Hub 模式下選取 session 應回傳包含 HostID 的 ListItem
 	m := ui.NewModel(ui.Deps{HubMode: true})

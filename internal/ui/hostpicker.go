@@ -9,7 +9,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
+	"github.com/wake/tmux-session-menu/internal/hostmgr"
 )
+
+// visibleHosts 回傳非封存的主機列表（管理畫面用）。
+func (m Model) visibleHosts() []*hostmgr.Host {
+	if m.deps.HostMgr == nil {
+		return nil
+	}
+	var result []*hostmgr.Host
+	for _, h := range m.deps.HostMgr.Hosts() {
+		if !h.Config().Archived {
+			result = append(result, h)
+		}
+	}
+	return result
+}
 
 // updateHostPicker 處理主機管理面板的按鍵。
 func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -22,7 +37,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeNormal
 		return m, nil
 	}
-	hosts := m.deps.HostMgr.Hosts()
+	hosts := m.visibleHosts()
 	if len(hosts) == 0 {
 		m.mode = ModeNormal
 		return m, nil
@@ -91,6 +106,11 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				_ = m.deps.HostMgr.Disable(h.ID())
 				m.deps.HostMgr.SetArchived(h.ID(), true)
 				m.persistHosts()
+				// 封存後可見列表縮短，收緊游標
+				newVisible := m.visibleHosts()
+				if m.hostPickerCursor >= len(newVisible) && len(newVisible) > 0 {
+					m.hostPickerCursor = len(newVisible) - 1
+				}
 			}
 		}
 		return m, nil
@@ -132,7 +152,7 @@ func (m Model) renderHostPicker() string {
 	if m.deps.HostMgr == nil {
 		return ""
 	}
-	hosts := m.deps.HostMgr.Hosts()
+	hosts := m.visibleHosts()
 
 	var b strings.Builder
 	b.WriteString("\n")
