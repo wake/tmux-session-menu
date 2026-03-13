@@ -13,11 +13,12 @@ const hookStatusTTL = 2 * time.Minute
 
 // HookStatus 代表從 hook 狀態檔案讀取的狀態資訊。
 type HookStatus struct {
-	Status    SessionStatus `json:"-"`
-	RawStatus string        `json:"status"`
-	Timestamp int64         `json:"timestamp"`
-	Event     string        `json:"event"`
-	AiType    string        `json:"ai_type"`
+	Status           SessionStatus `json:"-"`
+	RawStatus        string        `json:"status"`
+	Timestamp        int64         `json:"timestamp"`
+	Event            string        `json:"event"`
+	AiType           string        `json:"ai_type"`
+	NotificationType string        `json:"notification_type"`
 }
 
 // IsValid 檢查 hook 狀態是否仍在有效期限內。

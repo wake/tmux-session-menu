@@ -5,7 +5,11 @@ import (
 	"strings"
 )
 
+// claudeModelPattern 匹配 API model ID 格式（如 claude-opus-4-6）。
 var claudeModelPattern = regexp.MustCompile(`claude-(?:sonnet|opus|haiku)-[\w.-]+`)
+
+// claudeStatusPattern 匹配 Claude Code status bar 的顯示格式（如 [Opus 4.6]）。
+var claudeStatusPattern = regexp.MustCompile(`\[(?:Opus|Sonnet|Haiku) \d+(?:\.\d+)*\]`)
 
 func DetectModel(content string) string {
 	return claudeModelPattern.FindString(content)
@@ -16,6 +20,9 @@ func DetectModel(content string) string {
 // 用於 hook status TTL 過期時的降級驗證。
 func HasStrongAiPresence(content string) bool {
 	if DetectModel(content) != "" {
+		return true
+	}
+	if claudeStatusPattern.MatchString(content) {
 		return true
 	}
 	return strings.Contains(content, "ctrl+c to interrupt") ||
@@ -31,6 +38,10 @@ func DetectTool(content string) string {
 		if strings.Contains(content, indicator) {
 			return "claude-code"
 		}
+	}
+	// Claude Code status bar 顯示格式（如 [Opus 4.6]）
+	if claudeStatusPattern.MatchString(content) {
+		return "claude-code"
 	}
 	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
 	if len(lines) > 0 {

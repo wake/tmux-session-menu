@@ -2,6 +2,15 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.35.1] - 2026-03-14
+
+### Fixed
+- Hook 狀態過期後的 AI 偵測增強：新增 `claudeStatusPattern` 匹配 Claude Code status bar 顯示格式（`[Opus 4.6]`、`[Sonnet 4.6]`、`[Haiku 4.5]`），即使 hook TTL 過期也能正確辨識 AI session
+- Hook script 支援 Notification 子類型：從 stdin JSON 提取 `notification_type`，依子類型（permission_prompt → waiting、idle_prompt → idle、auth_success → running）分別對應狀態
+
+### Changed
+- `HookStatus` 新增 `NotificationType` 欄位，status JSON 輸出包含 `notification_type`
+
 ## [0.35.0] - 2026-03-13
 
 ### Added

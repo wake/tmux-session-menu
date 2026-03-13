@@ -63,6 +63,21 @@ func TestReadHookStatus_AiType(t *testing.T) {
 	assert.True(t, hs.IsAiPresent())
 }
 
+func TestReadHookStatus_NotificationType(t *testing.T) {
+	dir := t.TempDir()
+	statusFile := filepath.Join(dir, "notif-session")
+	content := fmt.Sprintf(
+		`{"status":"waiting","timestamp":%d,"event":"Notification","ai_type":"claude","notification_type":"permission_prompt"}`,
+		time.Now().Unix(),
+	)
+	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
+
+	hs, err := tmux.ReadHookStatus(dir, "notif-session")
+	require.NoError(t, err)
+	assert.Equal(t, "permission_prompt", hs.NotificationType)
+	assert.Equal(t, tmux.StatusWaiting, hs.Status)
+}
+
 func TestReadHookStatus_AiType_Empty(t *testing.T) {
 	dir := t.TempDir()
 	statusFile := filepath.Join(dir, "shell-session")

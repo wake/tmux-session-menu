@@ -35,6 +35,9 @@ func TestDetectTool(t *testing.T) {
 	}{
 		{"claude code prompt", "some output\n>", "claude-code"},
 		{"claude code interrupt", "ctrl+c to interrupt", "claude-code"},
+		{"status bar Opus", "summary\n❯\n  proj (main) [Opus 4.6] ██░░ 61% left", "claude-code"},
+		{"status bar Sonnet", "output\n  proj [Sonnet 4.6] ██░░ 80% left", "claude-code"},
+		{"status bar Haiku", "[Haiku 4.5] status", "claude-code"},
 		{"plain shell", "user@host:~$", ""},
 		{"gemini", "gemini>", ""},
 	}
@@ -55,6 +58,8 @@ func TestHasStrongAiPresence(t *testing.T) {
 		{"model string", "output\nclaude-sonnet-4-20250514\n> ", true},
 		{"busy indicator ctrl+c", "working...\nctrl+c to interrupt\n", true},
 		{"busy indicator esc", "working...\nesc to interrupt\n", true},
+		{"status bar Opus", "❯\n  proj (main) [Opus 4.6] ██░░ 61% left", true},
+		{"status bar Sonnet", "  proj [Sonnet 4.6] ██░░ 80% left", true},
 		{"plain shell", "user@host:~$ ls\nfile1 file2\nuser@host:~$ ", false},
 		{"empty", "", false},
 		{"just prompt", "> ", false},
