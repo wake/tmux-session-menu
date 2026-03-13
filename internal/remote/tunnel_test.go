@@ -126,3 +126,33 @@ func TestNewTunnel_WithReverse(t *testing.T) {
 	assert.Equal(t, "/home/air/.config/tsm/tsm.sock", tun.reverseLocalSock)
 	assert.Equal(t, ReverseSocketPath("mlab"), tun.reverseRemoteSock)
 }
+
+func TestTunnel_Start_WithReverse_CleansStaleSocket(t *testing.T) {
+	var cmds []string
+	factory := func(name string, args ...string) CmdResult {
+		cmd := name + " " + strings.Join(args, " ")
+		cmds = append(cmds, cmd)
+		if strings.Contains(cmd, "echo") {
+			return CmdResult{Output: "/home/user/.config/tsm/tsm.sock"}
+		}
+		return CmdResult{}
+	}
+	startFn := func(name string, args ...string) (Process, error) {
+		return nil, fmt.Errorf("intentional stop")
+	}
+	tun := NewTunnel("mlab",
+		WithCmdRun(factory),
+		WithCmdStart(startFn),
+		WithReverse("/home/air/.config/tsm/tsm.sock"),
+	)
+	_ = tun.Start() // 會因 startFn 而失敗，但 rm -f 應已執行
+
+	// 確認在 SSH tunnel 啟動前先清除遠端 stale socket
+	var foundRm bool
+	for _, c := range cmds {
+		if strings.Contains(c, "rm -f") && strings.Contains(c, "tsm-hub-") {
+			foundRm = true
+		}
+	}
+	assert.True(t, foundRm, "should ssh rm -f stale reverse socket before tunnel start")
+}
