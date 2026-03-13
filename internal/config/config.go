@@ -104,11 +104,13 @@ func Default() Config {
 }
 
 // LoadFromString 從 TOML 字串載入設定，未指定欄位使用預設值。
+// 解析完成後自動執行 MigrateRemoteToHosts，將舊版 [remote] 顏色遷移到各主機的獨立設定。
 func LoadFromString(data string) (Config, error) {
 	cfg := Default()
 	if _, err := toml.Decode(data, &cfg); err != nil {
 		return Config{}, err
 	}
+	MigrateRemoteToHosts(&cfg)
 	return cfg, nil
 }
 

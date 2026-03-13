@@ -139,9 +139,10 @@ badge_fg = "#666666"
 	assert.Equal(t, "#222222", cfg.Local.BadgeBG)
 	assert.Equal(t, "#333333", cfg.Local.BadgeFG)
 
-	assert.Equal(t, "#444444", cfg.Remote.BarBG)
-	assert.Equal(t, "#555555", cfg.Remote.BadgeBG)
-	assert.Equal(t, "#666666", cfg.Remote.BadgeFG)
+	// LoadFromString 會自動執行 MigrateRemoteToHosts，[remote] 段落會被清空
+	assert.Equal(t, "", cfg.Remote.BarBG, "自動遷移後 [remote] 應清空")
+	assert.Equal(t, "", cfg.Remote.BadgeBG, "自動遷移後 [remote] 應清空")
+	assert.Equal(t, "", cfg.Remote.BadgeFG, "自動遷移後 [remote] 應清空")
 }
 
 func TestLoadFromTOML_PartialColors_KeepsDefaults(t *testing.T) {
@@ -160,10 +161,10 @@ bar_bg = "#ddeeff"
 	assert.Equal(t, "#aabbcc", cfg.Local.BadgeBG, "已設定的 local badge_bg 為覆蓋值")
 	assert.Equal(t, "#c0caf5", cfg.Local.BadgeFG, "未設定的 local badge_fg 保持預設")
 
-	// Remote: 只覆蓋 bar_bg，其餘為空（無預設值）
-	assert.Equal(t, "#ddeeff", cfg.Remote.BarBG, "已設定的 remote bar_bg 為覆蓋值")
-	assert.Equal(t, "", cfg.Remote.BadgeBG, "未設定的 remote badge_bg 為空（無預設值）")
-	assert.Equal(t, "", cfg.Remote.BadgeFG, "未設定的 remote badge_fg 為空（無預設值）")
+	// LoadFromString 自動執行 MigrateRemoteToHosts，[remote] 段落遷移後清空
+	assert.Equal(t, "", cfg.Remote.BarBG, "自動遷移後 [remote] bar_bg 應清空")
+	assert.Equal(t, "", cfg.Remote.BadgeBG, "自動遷移後 [remote] badge_bg 應清空")
+	assert.Equal(t, "", cfg.Remote.BadgeFG, "自動遷移後 [remote] badge_fg 應清空")
 }
 
 // --- SaveConfig 測試 ---
@@ -374,7 +375,8 @@ archived = true
 	assert.True(t, h2.Archived, "archived=true 應正確解析")
 	assert.Equal(t, "", h2.BarBG, "未設定的 bar_bg 應為空字串")
 	assert.Equal(t, "", h2.BarFG, "未設定的 bar_fg 應為空字串")
-	assert.Equal(t, "", h2.BadgeBG, "未設定的 badge_bg 應為空字串")
+	// LoadFromString 自動遷移：badge_bg 為空但 Color 有值時 fallback 到 host.Color
+	assert.Equal(t, "#ff9e64", h2.BadgeBG, "badge_bg 為空時自動 fallback 到 host.Color")
 	assert.Equal(t, "", h2.BadgeFG, "未設定的 badge_fg 應為空字串")
 }
 
@@ -458,6 +460,45 @@ func TestHostEntry_ToColorConfig_AllEmpty(t *testing.T) {
 	assert.Equal(t, "", cc.BarFG, "全空時 BarFG 應為空")
 	assert.Equal(t, "", cc.BadgeBG, "全空時 BadgeBG 應為空（Color 亦空，不 fallback）")
 	assert.Equal(t, "", cc.BadgeFG, "全空時 BadgeFG 應為空")
+}
+
+// --- LoadFromString 自動遷移整合測試 ---
+
+func TestLoadFromString_AutoMigrate(t *testing.T) {
+	tomlData := `
+[local]
+  badge_bg = "#5f8787"
+  badge_fg = "#c0caf5"
+
+[remote]
+  bar_bg = "#1a2b2b"
+  badge_bg = "#73daca"
+  badge_fg = "#1a1b26"
+
+[[hosts]]
+  name = "local"
+  address = ""
+  color = "#5f8787"
+  enabled = true
+
+[[hosts]]
+  name = "mlab1"
+  address = "mlab1"
+  color = "#e0af68"
+  enabled = true
+`
+	cfg, err := config.LoadFromString(tomlData)
+	require.NoError(t, err)
+
+	// mlab1 應繼承 [remote] 的顏色（四色全空 + [remote] 有值 → 繼承）
+	require.Len(t, cfg.Hosts, 2)
+	assert.Equal(t, "#1a2b2b", cfg.Hosts[1].BarBG)
+	assert.Equal(t, "#73daca", cfg.Hosts[1].BadgeBG) // [remote].badge_bg 繼承（非 color fallback）
+	assert.Equal(t, "#1a1b26", cfg.Hosts[1].BadgeFG)
+
+	// [remote] 應清空
+	assert.Empty(t, cfg.Remote.BarBG)
+	assert.Empty(t, cfg.Remote.BadgeBG)
 }
 
 // --- AgentEntry 測試 ---

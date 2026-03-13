@@ -68,6 +68,7 @@ func (m Model) persistHosts() {
 		}
 	}
 	fileCfg.Hosts = entries
+	config.SyncLocalHostToConfig(&fileCfg)
 	_ = config.SaveConfig(cfgPath, fileCfg)
 }
 
