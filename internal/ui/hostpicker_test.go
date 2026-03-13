@@ -445,7 +445,7 @@ func TestHostPicker_ArchivedHostHidden(t *testing.T) {
 	assert.Contains(t, view, "mlab2")
 }
 
-// --- Task 9: 右側設定面板基本結構測試 ---
+// --- Task 9/10/11: 右側設定面板測試 ---
 
 func TestHostPicker_OpenPanel(t *testing.T) {
 	mgr := hostmgr.New()
@@ -525,6 +525,22 @@ func TestHostPicker_PanelShowsColors(t *testing.T) {
 	assert.Contains(t, view, "badge_bg", "應顯示 badge_bg 標籤")
 }
 
+func TestHostPicker_PreviewRendered(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true, BarBG: "#1a2b2b", BadgeBG: "#e0af68", BadgeFG: "#1a1b26"})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	fm := updated.(ui.Model)
+	view := fm.View()
+	// 預覽應顯示主機名與範例 window
+	assert.Contains(t, view, "mlab1", "預覽應顯示主機名")
+	assert.Contains(t, view, "0:zsh", "預覽應顯示範例 window")
+}
+
 func TestHostPicker_PanelNavigation(t *testing.T) {
 	mgr := hostmgr.New()
 	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true})
@@ -593,20 +609,108 @@ func TestHostPicker_PanelEditColor(t *testing.T) {
 	assert.False(t, m.HostPanelEditing(), "Esc 應退出編輯模式")
 }
 
-func TestHostPicker_PreviewRendered(t *testing.T) {
-	mgr := hostmgr.New()
-	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true, BarBG: "#1a2b2b", BadgeBG: "#e0af68", BadgeFG: "#1a1b26"})
+func TestHostPicker_CtrlS_SaveDrafts(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	cfg := config.Default()
+	_ = config.SaveConfig(cfgPath, cfg)
 
-	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5f8787", Enabled: true, BadgeBG: "#5f8787", BadgeFG: "#c0caf5"})
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Color: "#70AD47", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: cfgPath})
+	m, _ = hpApplyKey(m, "h")
+	m, _ = hpApplyKey(m, "j") // 移到 mlab1
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// 移到 bar_bg 並編輯
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // 進入編輯
+	m = updated.(ui.Model)
+
+	// 輸入色碼
+	for _, r := range "#aabbcc" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(ui.Model)
+	}
+	// 確認
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// Ctrl+S 儲存
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	m = updated.(ui.Model)
+
+	// 面板應關閉
+	assert.False(t, m.HostPanelOpen(), "Ctrl+S 後面板應關閉")
+
+	// 驗證 HostMgr 已更新
+	h := mgr.Host("mlab1")
+	require.NotNil(t, h)
+	assert.Equal(t, "#aabbcc", h.Config().BarBG, "mlab1 的 bar_bg 應更新")
+
+	// 驗證 config 已寫入
+	data, err := os.ReadFile(cfgPath)
+	assert.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	assert.NoError(t, err)
+	// 找 mlab1
+	var found bool
+	for _, entry := range loaded.Hosts {
+		if entry.Name == "mlab1" {
+			assert.Equal(t, "#aabbcc", entry.BarBG)
+			found = true
+		}
+	}
+	assert.True(t, found, "config 應包含 mlab1")
+}
+
+func TestHostPicker_CtrlS_SyncsLocalToConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	cfg := config.Default()
+	_ = config.SaveConfig(cfgPath, cfg)
+
+	mgr := hostmgr.New()
+	// badge_bg 起始為空，方便測試輸入
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5f8787", Enabled: true, BadgeFG: "#c0caf5"})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: cfgPath})
 	m, _ = hpApplyKey(m, "h")
 
 	// 開啟面板
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	fm := updated.(ui.Model)
-	view := fm.View()
-	// 預覽應顯示主機名與範例 window
-	assert.Contains(t, view, "mlab1", "預覽應顯示主機名")
-	assert.Contains(t, view, "0:zsh", "預覽應顯示範例 window")
+	m = updated.(ui.Model)
+
+	// 移到 badge_bg（index 3）並編輯
+	for i := 0; i < 3; i++ {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = updated.(ui.Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	for _, r := range "#ffaa00" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(ui.Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// Ctrl+S 儲存
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	m = updated.(ui.Model)
+
+	// 驗證 Config.Local 已同步
+	data, err := os.ReadFile(cfgPath)
+	assert.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	assert.NoError(t, err)
+	assert.Equal(t, "#ffaa00", loaded.Local.BadgeBG, "Config.Local.BadgeBG 應同步")
 }
 
 func TestHostPicker_HintForEmptyBarFG(t *testing.T) {

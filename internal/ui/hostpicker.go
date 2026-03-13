@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -10,7 +11,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
+	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
+	"github.com/wake/tmux-session-menu/internal/tmux"
 )
 
 // hostDraftEntry 儲存單一主機的暫存編輯資料。
@@ -141,6 +144,16 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if len(hosts) == 0 {
 		m.mode = ModeNormal
 		return m, nil
+	}
+
+	// Ctrl+S 儲存（面板開啟或關閉皆可）
+	if msg.String() == "ctrl+s" {
+		m.applyHostDrafts()
+		m.persistHostsWithSync()
+		m.hostPanelOpen = false
+		m.hostPanelEditing = false
+		m.hostSavedMsg = "已儲存"
+		return m, m.applyCurrentStatusBarCmd()
 	}
 
 	// 正在編輯色彩欄位：委派給 textInput
@@ -332,6 +345,68 @@ func (m Model) updateHostPanelEditing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// applyHostDrafts 將所有 draft 寫回 HostMgr。
+func (m *Model) applyHostDrafts() {
+	if m.deps.HostMgr == nil || m.hostPanelDraft == nil {
+		return
+	}
+	for hostID, draft := range m.hostPanelDraft {
+		h := m.deps.HostMgr.Host(hostID)
+		if h == nil {
+			continue
+		}
+		h.UpdateColors(draft.BarBG, draft.BarFG, draft.BadgeBG, draft.BadgeFG)
+		if draft.Enabled {
+			_ = m.deps.HostMgr.Enable(context.Background(), hostID)
+		} else {
+			_ = m.deps.HostMgr.Disable(hostID)
+		}
+	}
+}
+
+// persistHostsWithSync 在 persistHosts 之前同步 local 主機的顏色到 Config.Local。
+func (m Model) persistHostsWithSync() {
+	if m.deps.HostMgr == nil || m.deps.ConfigPath == "" {
+		return
+	}
+	hosts := m.deps.HostMgr.Hosts()
+	entries := make([]config.HostEntry, len(hosts))
+	for i, h := range hosts {
+		cfg := h.Config()
+		cfg.SortOrder = i
+		entries[i] = cfg
+	}
+
+	fileCfg := config.Default()
+	cfgPath := m.deps.ConfigPath
+	if data, err := os.ReadFile(cfgPath); err == nil {
+		if loaded, err := config.LoadFromString(string(data)); err == nil {
+			fileCfg = loaded
+		}
+	}
+	fileCfg.Hosts = entries
+	config.SyncLocalHostToConfig(&fileCfg)
+	_ = config.SaveConfig(cfgPath, fileCfg)
+}
+
+// applyCurrentStatusBarCmd 回傳套用本機 status bar 的 tea.Cmd。
+func (m Model) applyCurrentStatusBarCmd() tea.Cmd {
+	if m.deps.HostMgr == nil {
+		return nil
+	}
+	for _, h := range m.deps.HostMgr.Hosts() {
+		if h.IsLocal() {
+			cc := h.Config().ToColorConfig()
+			return func() tea.Msg {
+				exec := tmux.NewRealExecutor()
+				_ = tmux.ApplyStatusBar(exec, cc)
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
 // renderHostPicker 渲染主機管理浮動面板。
 func (m Model) renderHostPicker() string {
 	// hub 模式：從 hubHostSnap 渲染
@@ -369,7 +444,11 @@ func (m Model) renderHostPickerLeft(hosts []*hostmgr.Host) string {
 		cfg := h.Config()
 		cursor := "  "
 		if i == m.hostPickerCursor {
-			cursor = selectedStyle.Render("► ")
+			if m.hostPanelOpen {
+				cursor = selectedStyle.Render("► ")
+			} else {
+				cursor = selectedStyle.Render("► ")
+			}
 		}
 
 		// 啟用狀態指示
