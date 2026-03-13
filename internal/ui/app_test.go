@@ -3075,3 +3075,21 @@ func TestDetectSessionStatus_AiType_NoHook(t *testing.T) {
 	result := ui.ExportDetectSessionStatus(deps, "shell-sess", "", "")
 	assert.Equal(t, "", result.AiType)
 }
+
+func TestDetectSessionStatus_ContentFallback_NoHook(t *testing.T) {
+	// 無 hook 但 pane content 含 AI 指示器 → 降級偵測應回傳 claude-code
+	deps := ui.Deps{StatusDir: ""}
+	result := ui.ExportDetectSessionStatus(deps, "ai-sess", "", "some output\nctrl+c to interrupt")
+	assert.Equal(t, "claude-code", result.AiType)
+}
+
+func TestDetectSessionStatus_ValidHookNoAI_NoFallback(t *testing.T) {
+	// 有效 hook 宣告非 AI（ai_type 為空）→ 不應降級偵測
+	statusDir := t.TempDir()
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":""}`, time.Now().Unix())
+	require.NoError(t, os.WriteFile(filepath.Join(statusDir, "shell-sess"), []byte(content), 0644))
+
+	deps := ui.Deps{StatusDir: statusDir}
+	result := ui.ExportDetectSessionStatus(deps, "shell-sess", "", "ctrl+c to interrupt")
+	assert.Equal(t, "", result.AiType, "有效 hook 宣告非 AI，不應降級偵測")
+}

@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/ui"
 )
 
@@ -69,4 +70,59 @@ func TestNewSession_DisabledAgentHidden(t *testing.T) {
 	view := fm.View()
 	assert.Contains(t, view, "Claude Code")
 	assert.NotContains(t, view, "Disabled")
+}
+
+func TestNewSession_IDOnlyCreatesSession(t *testing.T) {
+	// 只填 ID 不填名稱，應以 ID 為 tmux session name
+	m := ui.NewModel(ui.Deps{})
+	m, _ = applyKey(m, "n")
+	assert.Equal(t, ui.ModeNewSession, m.Mode())
+
+	// 按 down 移到 ID 欄位
+	m, _ = applyKey(m, "down")
+	for _, ch := range "my-id" {
+		m, _ = applyKey(m, string(ch))
+	}
+
+	// Enter 應觸發退出（但無 TmuxMgr 也無 Client，所以只驗證 quitting）
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+	assert.True(t, model.Quitting())
+	assert.Equal(t, "my-id", model.Selected())
+}
+
+func TestNewSession_InvalidNameChars(t *testing.T) {
+	// session name 含 '.' 或 ':' 應報錯
+	m := ui.NewModel(ui.Deps{})
+	m, _ = applyKey(m, "n")
+	for _, ch := range "bad.name" {
+		m, _ = applyKey(m, string(ch))
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(ui.Model)
+	assert.NotNil(t, model.Err())
+	assert.Contains(t, model.Err().Error(), "'.' 或 ':'")
+}
+
+func TestNewSession_HostTabsShownForMultiHost(t *testing.T) {
+	// 多主機模式下應顯示主機 tab
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#00ff00", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "remote-1", Color: "#ff0000", Enabled: true})
+	m := ui.NewModel(ui.Deps{HostMgr: mgr})
+	m, _ = applyKey(m, "n")
+	view := m.View()
+	assert.Contains(t, view, "local")
+	assert.Contains(t, view, "remote-1")
+}
+
+func TestNewSession_SingleHostNoTabs(t *testing.T) {
+	// 單主機模式不應顯示 tab
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#00ff00", Enabled: true})
+	m := ui.NewModel(ui.Deps{HostMgr: mgr})
+	m, _ = applyKey(m, "n")
+	view := m.View()
+	// 只有一台主機，不應出現 "◄ ► 切換" 提示
+	assert.NotContains(t, view, "◄ ► 切換")
 }

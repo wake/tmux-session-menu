@@ -176,6 +176,13 @@ func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil // 至少需要一個識別名稱
 		}
 
+		// tmux session name 不允許 '.' 和 ':'
+		if strings.ContainsAny(sessionName, ".:") {
+			m.err = fmt.Errorf("session name 不可包含 '.' 或 ':'")
+			m.mode = ModeNormal
+			return m, nil
+		}
+
 		path := f.pathInput.Value()
 		command := ""
 		if f.selectedAgent >= 0 && f.selectedAgent < len(f.agents) {
