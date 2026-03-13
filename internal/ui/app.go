@@ -358,7 +358,7 @@ func (m Model) HubDegraded() bool { return m.hubDegraded }
 // connectionMode 回傳目前的連線模式名稱，用於標題列顯示。
 func (m Model) connectionMode() string {
 	switch {
-	case m.deps.HubMode && m.deps.Client != nil:
+	case m.deps.HubMode && m.deps.Client != nil && !m.hubDegraded:
 		return "Hub"
 	case m.deps.HostMgr != nil:
 		return "HostManager"
