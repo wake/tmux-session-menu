@@ -62,6 +62,7 @@ message HostState {
   HostStatus status = 4;
   string error = 5;
   StateSnapshot snapshot = 6;
+  string address = 7;  // SSH 地址（空字串 = hub 本機）
 }
 
 // MultiHostSnapshot 聚合所有主機的狀態快照。

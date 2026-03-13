@@ -2,6 +2,18 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.34.0] - 2026-03-13
+
+### Added
+- Hub-socket 模式 session 切換：spoke 端透過 reverse tunnel 連線到 hub 後，可正確切換到 hub 上的遠端 session（SSH attach）或本機 session（tmux switch）
+- `HostState` proto 新增 `address` 欄位，hub daemon 在 MultiHostSnapshot 中傳送各主機的 SSH 地址
+- Hub daemon 建立 reverse tunnel 時自動設定 `@tsm_hub_host`（hub SSH 地址）和 `@tsm_hub_self`（spoke 的 host ID），spoke 端據此判斷 local vs remote session
+- Bind block 自動升級：TUI 啟動時偵測已安裝的 bind block 版本，過舊則自動更新
+- Bind block 改用 `if-shell` 取代 `run-shell`，修正 `display-popup` 無 client context 導致 "returned 9" 錯誤
+
+### Fixed
+- `main()` 路由修正：`--hub-socket` 作為首個參數時不再錯誤退出
+
 ## [0.32.1] - 2026-03-13
 
 ### Fixed

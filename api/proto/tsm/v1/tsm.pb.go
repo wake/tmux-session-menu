@@ -196,6 +196,7 @@ type Session struct {
 	GroupName     string                 `protobuf:"bytes,9,opt,name=group_name,json=groupName,proto3" json:"group_name,omitempty"`
 	SortOrder     int32                  `protobuf:"varint,10,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
 	CustomName    string                 `protobuf:"bytes,11,opt,name=custom_name,json=customName,proto3" json:"custom_name,omitempty"`
+	AiType        string                 `protobuf:"bytes,12,opt,name=ai_type,json=aiType,proto3" json:"ai_type,omitempty"` // "claude" / "" — AI agent presence
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -303,6 +304,13 @@ func (x *Session) GetSortOrder() int32 {
 func (x *Session) GetCustomName() string {
 	if x != nil {
 		return x.CustomName
+	}
+	return ""
+}
+
+func (x *Session) GetAiType() string {
+	if x != nil {
+		return x.AiType
 	}
 	return ""
 }
@@ -446,6 +454,7 @@ type HostState struct {
 	Status        HostStatus             `protobuf:"varint,4,opt,name=status,proto3,enum=tsm.v1.HostStatus" json:"status,omitempty"`
 	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
 	Snapshot      *StateSnapshot         `protobuf:"bytes,6,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	Address       string                 `protobuf:"bytes,7,opt,name=address,proto3" json:"address,omitempty"` // SSH 地址（空字串 = hub 本機）
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -520,6 +529,13 @@ func (x *HostState) GetSnapshot() *StateSnapshot {
 		return x.Snapshot
 	}
 	return nil
+}
+
+func (x *HostState) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
 }
 
 // MultiHostSnapshot 聚合所有主機的狀態快照。
@@ -1966,7 +1982,7 @@ var File_api_proto_tsm_v1_tsm_proto protoreflect.FileDescriptor
 
 const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"\n" +
-	"\x1aapi/proto/tsm/v1/tsm.proto\x12\x06tsm.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\x02\n" +
+	"\x1aapi/proto/tsm/v1/tsm.proto\x12\x06tsm.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf6\x02\n" +
 	"\aSession\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
@@ -1983,7 +1999,8 @@ const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"sort_order\x18\n" +
 	" \x01(\x05R\tsortOrder\x12\x1f\n" +
 	"\vcustom_name\x18\v \x01(\tR\n" +
-	"customName\"h\n" +
+	"customName\x12\x17\n" +
+	"\aai_type\x18\f \x01(\tR\x06aiType\"h\n" +
 	"\x05Group\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -1993,14 +2010,15 @@ const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"\rStateSnapshot\x12+\n" +
 	"\bsessions\x18\x01 \x03(\v2\x0f.tsm.v1.SessionR\bsessions\x12%\n" +
 	"\x06groups\x18\x02 \x03(\v2\r.tsm.v1.GroupR\x06groups\x128\n" +
-	"\rupload_events\x18\x03 \x03(\v2\x13.tsm.v1.UploadEventR\fuploadEvents\"\xc3\x01\n" +
+	"\rupload_events\x18\x03 \x03(\v2\x13.tsm.v1.UploadEventR\fuploadEvents\"\xdd\x01\n" +
 	"\tHostState\x12\x17\n" +
 	"\ahost_id\x18\x01 \x01(\tR\x06hostId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
 	"\x05color\x18\x03 \x01(\tR\x05color\x12*\n" +
 	"\x06status\x18\x04 \x01(\x0e2\x12.tsm.v1.HostStatusR\x06status\x12\x14\n" +
 	"\x05error\x18\x05 \x01(\tR\x05error\x121\n" +
-	"\bsnapshot\x18\x06 \x01(\v2\x15.tsm.v1.StateSnapshotR\bsnapshot\"<\n" +
+	"\bsnapshot\x18\x06 \x01(\v2\x15.tsm.v1.StateSnapshotR\bsnapshot\x12\x18\n" +
+	"\aaddress\x18\a \x01(\tR\aaddress\"<\n" +
 	"\x11MultiHostSnapshot\x12'\n" +
 	"\x05hosts\x18\x01 \x03(\v2\x11.tsm.v1.HostStateR\x05hosts\"\xb2\x01\n" +
 	"\x14ProxyMutationRequest\x12\x17\n" +

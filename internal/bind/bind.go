@@ -14,12 +14,10 @@ const (
 	markerBegin = "# [tsm] begin"
 	markerEnd   = "# [tsm] end"
 	bindBlock = `# [tsm] begin
-bind-key -n C-q run-shell 'HUB=$(tmux show-option -gqv @tsm_hub_socket); \
-  if [ -S "$HUB" ]; then \
-    tmux display-popup -E -w "80%" -h "80%" "TSM_IN_POPUP=1 tsm --hub-socket $HUB --inline"; \
-  else \
-    tmux display-popup -E -w "80%" -h "80%" "TSM_IN_POPUP=1 tsm $(tmux show-option -gqv @tsm_popup_args) --inline"; \
-  fi'
+bind-key -n C-q if-shell \
+  '[ -S "$(tmux show-option -gqv @tsm_hub_socket)" ]' \
+  'display-popup -E -w "80%" -h "80%" "TSM_IN_POPUP=1 tsm --hub-socket $(tmux show-option -gqv @tsm_hub_socket) --inline"' \
+  'display-popup -E -w "80%" -h "80%" "TSM_IN_POPUP=1 tsm $(tmux show-option -gqv @tsm_popup_args) --inline"'
 # [tsm] end`
 )
 
