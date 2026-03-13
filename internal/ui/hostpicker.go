@@ -624,19 +624,7 @@ func (m *Model) syncHubHostsToConfig() {
 		// 自動挑色
 		color := h.Color
 		if color == "" {
-			usedColors := make(map[string]bool)
-			for _, e := range m.deps.Cfg.Hosts {
-				if e.Color != "" {
-					usedColors[e.Color] = true
-				}
-			}
-			color = config.DefaultColors[len(m.deps.Cfg.Hosts)%len(config.DefaultColors)]
-			for _, c := range config.DefaultColors {
-				if !usedColors[c] {
-					color = c
-					break
-				}
-			}
+			color = config.PickColorForHosts(m.deps.Cfg.Hosts)
 		}
 		entry := config.HostEntry{
 			Name:      name,
@@ -662,7 +650,9 @@ func (m *Model) rebuildHubItems() {
 	inputs := ConvertMultiHostSnapshot(m.hubHostSnap)
 	inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
 	m.items = FlattenMultiHost(inputs)
-	if m.cursor >= len(m.items) && len(m.items) > 0 {
+	if len(m.items) == 0 {
+		m.cursor = 0
+	} else if m.cursor >= len(m.items) {
 		m.cursor = len(m.items) - 1
 	}
 }

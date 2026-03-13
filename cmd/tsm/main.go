@@ -994,7 +994,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubCon
 }
 
 // resolveHubHost 在 hub-socket 模式下，根據 hubContext 判斷 host 是本機還是遠端。
-// 若 hostID 等於 hubSelf → 本機（回傳 nil 讓呼叫端走 switchToSession）。
+// 若 hostID 等於 hubSelf → 本機（Address 為空，呼叫端走 switchToSession）。
 // 否則 → 遠端，使用 hubHost 作為 SSH 地址。
 func resolveHubHost(hctx *hubContext, item ui.ListItem) *config.HostEntry {
 	// HubSelf 未知時無法可靠判斷 local vs remote，保守處理為本機

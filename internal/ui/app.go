@@ -1283,21 +1283,14 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				hosts := m.deps.HostMgr.Hosts()
-				usedColors := make(map[string]bool, len(hosts))
-				for _, h := range hosts {
-					usedColors[h.Config().Color] = true
-				}
-				color := config.DefaultColors[len(hosts)%len(config.DefaultColors)]
-				for _, c := range config.DefaultColors {
-					if !usedColors[c] {
-						color = c
-						break
-					}
+				entries := make([]config.HostEntry, len(hosts))
+				for i, h := range hosts {
+					entries[i] = h.Config()
 				}
 				entry := config.HostEntry{
 					Name:      value,
 					Address:   value,
-					Color:     color,
+					Color:     config.PickColorForHosts(entries),
 					Enabled:   true,
 					SortOrder: len(hosts),
 				}
@@ -1327,19 +1320,7 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				// 新增主機：自動挑色
-				usedColors := make(map[string]bool, len(m.deps.Cfg.Hosts))
-				for _, h := range m.deps.Cfg.Hosts {
-					if h.Color != "" {
-						usedColors[h.Color] = true
-					}
-				}
-				color := config.DefaultColors[len(m.deps.Cfg.Hosts)%len(config.DefaultColors)]
-				for _, c := range config.DefaultColors {
-					if !usedColors[c] {
-						color = c
-						break
-					}
-				}
+				color := config.PickColorForHosts(m.deps.Cfg.Hosts)
 				entry := config.HostEntry{
 					Name:      value,
 					Address:   value,
