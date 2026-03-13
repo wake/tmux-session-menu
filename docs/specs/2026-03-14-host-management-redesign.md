@@ -10,19 +10,23 @@
 |------|---------|----------|-------------|---------|--------|
 | 啟用 | true | false | 可見 | 可見 ● | 保留 |
 | 停用 | false | false | 不可見 | 可見 ○ | 保留 |
-| 封存 | — | true | 不可見 | 不可見 | 保留（軟刪除） |
+| 封存 | false | true | 不可見 | 不可見 | 保留（軟刪除） |
 
-- 封存 = 軟刪除，config 中保留 `[[hosts]]` 條目，使用者可手動刪除
+- 封存時 `enabled` 一律設為 `false`，解封存時恢復為 `enabled=true, archived=false`
+- 封存 = 軟刪除，config 中保留 `[[hosts]]` 條目，使用者可手動編輯 TOML 刪除
 - 新增同名主機時自動解封存並進入啟用狀態
 - local 主機可停用、不可封存
+- Daemon 過濾條件統一為 `enabled=true`，無需單獨檢查 `archived`
 
 ### 管理畫面操作
 
 | 按鍵 | 動作 |
 |------|------|
-| `[n]` | 新增主機（同名已封存 → 解封存＋啟用） |
-| `[d]` | 封存主機（軟刪除） |
+| `[n]` | 新增主機（同名已封存 → 解封存＋啟用）。原按鍵為 `[a]`，改為 `[n]` 與 session 列表一致 |
+| `[d]` | 封存主機（軟刪除，local 不可封存）。原為永久刪除，改為軟刪除 |
 | `space` | 啟用/停用切換 |
+| `Shift+↑` / `Shift+↓` | 上移/下移排序（保留既有功能） |
+| `Enter` / `→` | 開啟右側設定面板 |
 | `q` / `Esc` | 離開管理畫面 |
 
 ### Enable/Disable 兩段式
@@ -161,17 +165,34 @@ detach 返回：
 
 ## 向後相容與遷移
 
-### 讀取 config 時
+### 一次性遷移流程
 
-1. 若 `[remote]` 區段存在 → 作為預設色填入尚未設定四色的遠端 host
-2. 若遠端 host 的 `badge_bg` 為空但 `color` 有值 → `badge_bg` fallback 到 `color`
-3. `[local]` 值覆寫 local host entry 四色
+在 `LoadFromString` 中偵測舊格式並自動轉換：
 
-### 儲存 config 時
+1. 讀取 config，若 `[remote]` 區段存在（`Remote.BadgeBG != ""` 或 `Remote.BarBG != ""`）：
+   - 遍歷所有遠端 host（`address != ""`），若四色皆為空，從 `[remote]` 填入預設值
+   - 若 host 的 `badge_bg` 為空但 `color` 有值 → `badge_bg` fallback 到 `color`
+2. `[local]` 值覆寫 local host entry 四色
+3. 清除 `Config.Remote`（記憶體中置空）
 
-1. 不再寫出 `[remote]` 區段
-2. local host entry 四色回寫到 `[local]`
-3. 每個 `[[hosts]]` 寫出四色 + `archived`
+首次 `SaveConfig` 時自動完成遷移：
+- 不再寫出 `[remote]` 區段
+- 每個 `[[hosts]]` 寫出四色 + `archived`
+- local host entry 四色回寫到 `[local]`
+
+後續啟動若 TOML 中無 `[remote]`，遷移邏輯自動跳過，無額外開銷。
+
+### local↔host 同步優先順序
+
+| 時機 | 優先方 |
+|------|--------|
+| 讀取 config | `[local]` 勝出 → 覆寫 local host entry |
+| Host picker 儲存 | host entry 勝出 → 回寫 `[local]` |
+| Config TUI 儲存 | field 值 → 寫入 `[local]` + 同步到 local host entry |
+
+### 色碼格式
+
+支援 `#RRGGBB` 格式（6 位 hex，含 `#` 前綴）。不支援 tmux named colors 或 colour0-255。輸入驗證以 `^#[0-9a-fA-F]{6}$` 為準，不合法的值在預覽中不生效但不阻擋儲存（允許留空）。
 
 ## Config TUI 簡化
 
@@ -191,6 +212,7 @@ detach 返回：
 | 檔案 | 變更 |
 |------|------|
 | `internal/config/config.go` | `HostEntry` 加四色 + `archived`、`ColorConfig` 加 `bar_fg`、移除 `[remote]`、local↔host 同步、遷移邏輯 |
+| `internal/config/hosts.go` | `MergeHosts` 支援 `archived` 欄位：封存主機不被 `--host` 意外啟用、新增同名時解封存 |
 | `internal/ui/hostpicker.go` | 三態操作（n/d/space/enter）、右側面板、顏色編輯、預覽、Ctrl+S 儲存、封存過濾 |
 | `internal/ui/app.go` | session 列表依 enabled/archived 過濾（含 hub 模式）、移除 `cfg.Remote` 引用 |
 | `internal/tmux/statusbar.go` | `StatusBarArgs` 支援 `bar_fg` |
@@ -213,3 +235,6 @@ detach 返回：
 - Hub 模式：client 端過濾 enabled/archived
 - 預覽渲染：合法/不合法色碼
 - 右側面板：開關、編輯、儲存全部主機
+- MergeHosts：archived 主機不被 `--host` 意外啟用、新增同名解封存
+- 排序：三態主機列表中的排序行為
+- 色碼驗證：`#RRGGBB` 格式檢查、空值允許
