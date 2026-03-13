@@ -282,12 +282,8 @@ func runTUI() {
 		merged := config.MergeHosts(cfg.Hosts, hostFlags, localFlag)
 		cfg.Hosts = merged
 		_ = config.SaveConfig(cfgPath, cfg)
-		// host 配置變更 → 重啟 daemon 讓 HubManager 重新載入
-		if daemon.IsRunning(cfg) {
-			if err := daemon.Stop(cfg); err != nil {
-				fmt.Fprintf(os.Stderr, "daemon 停止失敗: %v\n", err)
-			}
-		}
+		// host 配置變更 → 停止 daemon，讓後續 client.Dial 自動啟動新 daemon 載入新 config
+		_ = daemon.Stop(cfg)
 	} else if !hostMode {
 		// tsm 無參數 → 強制只啟用 local，不存 config
 		for i := range cfg.Hosts {
