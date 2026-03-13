@@ -2,6 +2,13 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.39.0] - 2026-03-14
+
+### Fixed
+- Hub 模式主機自動同步：hub 連線的遠端主機自動加入客戶端 config，不再只顯示 local
+- Hub 模式啟用/停用/封存即時反映在 session 列表（不需等待下次 hub 推播）
+- Hub-socket 模式路由修正：config 中有 host entry 時不再跳過 resolveHubHost 判斷
+
 ## [0.38.0] - 2026-03-14
 
 ### Fixed

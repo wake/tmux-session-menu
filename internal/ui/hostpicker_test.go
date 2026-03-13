@@ -995,3 +995,190 @@ func TestHubMode_HostPicker_CtrlS_Save(t *testing.T) {
 	}
 	assert.True(t, found, "config 應包含 mlab")
 }
+
+// --- Hub 模式主機自動同步與即時重建測試 ---
+
+func TestHubMode_SyncHubHostsToConfig(t *testing.T) {
+	// 設定只有 local 的 config（模擬新客戶端）
+	deps := ui.Deps{
+		HubMode:    true,
+		ConfigPath: filepath.Join(t.TempDir(), "config.toml"),
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", Enabled: true, Color: "#5f8787"},
+			},
+		},
+	}
+	_ = config.SaveConfig(deps.ConfigPath, deps.Cfg)
+	m := ui.NewModel(deps)
+
+	// Hub 快照包含 local + mlab + air（config 只有 local）
+	snap := &tsmv1.MultiHostSnapshot{Hosts: []*tsmv1.HostState{
+		{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		{HostId: "mlab", Name: "mlab", Address: "mlab.local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED, Color: "#70AD47"},
+		{HostId: "air", Name: "air", Address: "air.local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+	}}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	// 驗證 config 已自動補入 mlab 和 air
+	cfg := m.DepsCfg()
+	assert.Len(t, cfg.Hosts, 3, "應有 3 台主機（local + mlab + air）")
+
+	var mlabEntry, airEntry config.HostEntry
+	for _, h := range cfg.Hosts {
+		switch h.Name {
+		case "mlab":
+			mlabEntry = h
+		case "air":
+			airEntry = h
+		}
+	}
+	assert.Equal(t, "mlab.local", mlabEntry.Address, "mlab 的 Address 應從 hub 同步")
+	assert.Equal(t, "#70AD47", mlabEntry.Color, "mlab 的 Color 應從 hub 同步")
+	assert.True(t, mlabEntry.Enabled, "新同步的主機應預設啟用")
+
+	assert.Equal(t, "air.local", airEntry.Address, "air 的 Address 應從 hub 同步")
+	assert.True(t, airEntry.Enabled, "新同步的主機應預設啟用")
+	assert.NotEmpty(t, airEntry.Color, "新同步的主機應有自動分配的顏色")
+
+	// 驗證持久化到檔案
+	data, err := os.ReadFile(deps.ConfigPath)
+	require.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	require.NoError(t, err)
+	assert.Len(t, loaded.Hosts, 3, "config 檔案應有 3 台主機")
+}
+
+func TestHubMode_SyncSkipsExistingAndArchived(t *testing.T) {
+	deps := ui.Deps{
+		HubMode:    true,
+		ConfigPath: filepath.Join(t.TempDir(), "config.toml"),
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", Enabled: true, Color: "#5f8787"},
+				{Name: "mlab", Address: "mlab", Enabled: true, Color: "#custom"},
+				{Name: "old", Address: "old", Enabled: false, Archived: true},
+			},
+		},
+	}
+	_ = config.SaveConfig(deps.ConfigPath, deps.Cfg)
+	m := ui.NewModel(deps)
+
+	snap := &tsmv1.MultiHostSnapshot{Hosts: []*tsmv1.HostState{
+		{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		{HostId: "mlab", Name: "mlab", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED, Color: "#override"},
+		{HostId: "old", Name: "old", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+	}}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	cfg := m.DepsCfg()
+	// 不應增加（mlab 已存在、old 已封存但仍在 config）
+	assert.Len(t, cfg.Hosts, 3, "不應新增主機")
+
+	for _, h := range cfg.Hosts {
+		if h.Name == "mlab" {
+			assert.Equal(t, "#custom", h.Color, "已存在的主機顏色不應被覆蓋")
+		}
+		if h.Name == "old" {
+			assert.True(t, h.Archived, "已封存的主機不應被解封存")
+		}
+	}
+}
+
+func TestHubMode_SpaceToggle_RebuildsItems(t *testing.T) {
+	deps := ui.Deps{
+		HubMode:    true,
+		ConfigPath: filepath.Join(t.TempDir(), "config.toml"),
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", Enabled: true, Color: "#5f8787"},
+				{Name: "mlab", Address: "mlab", Enabled: true, Color: "#70AD47"},
+			},
+		},
+	}
+	_ = config.SaveConfig(deps.ConfigPath, deps.Cfg)
+	m := ui.NewModel(deps)
+
+	// 餵入 hub 快照（各主機有 session）
+	snap := &tsmv1.MultiHostSnapshot{Hosts: []*tsmv1.HostState{
+		{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED,
+			Snapshot: &tsmv1.StateSnapshot{Sessions: []*tsmv1.Session{{Name: "main"}}}},
+		{HostId: "mlab", Name: "mlab", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED,
+			Snapshot: &tsmv1.StateSnapshot{Sessions: []*tsmv1.Session{{Name: "dev"}}}},
+	}}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	// 確認兩台主機的 session 都在列表中
+	items := m.Items()
+	hasLocal := false
+	hasMlab := false
+	for _, it := range items {
+		if it.HostID == "local" {
+			hasLocal = true
+		}
+		if it.HostID == "mlab" {
+			hasMlab = true
+		}
+	}
+	assert.True(t, hasLocal, "初始應有 local 的 session")
+	assert.True(t, hasMlab, "初始應有 mlab 的 session")
+
+	// 進入 host picker，移到 mlab（index 1），按 space 停用
+	m, _ = hpApplyKey(m, "h")
+	m, _ = hpApplyKey(m, "j")
+	m, _ = hpApplyKey(m, " ")
+
+	// 驗證 session 列表已即時更新：mlab 的 session 應被過濾
+	items = m.Items()
+	hasMlab = false
+	for _, it := range items {
+		if it.HostID == "mlab" {
+			hasMlab = true
+		}
+	}
+	assert.False(t, hasMlab, "停用 mlab 後其 session 應從列表消失")
+
+	// 再按 space 重新啟用
+	m, _ = hpApplyKey(m, " ")
+	items = m.Items()
+	hasMlab = false
+	for _, it := range items {
+		if it.HostID == "mlab" {
+			hasMlab = true
+		}
+	}
+	assert.True(t, hasMlab, "重新啟用 mlab 後其 session 應回到列表")
+}
+
+func TestHubMode_HostPicker_ShowsHubHosts(t *testing.T) {
+	// 模擬新客戶端（config 只有 local），hub 有多台主機
+	deps := ui.Deps{
+		HubMode:    true,
+		ConfigPath: filepath.Join(t.TempDir(), "config.toml"),
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", Enabled: true, Color: "#5f8787"},
+			},
+		},
+	}
+	_ = config.SaveConfig(deps.ConfigPath, deps.Cfg)
+	m := ui.NewModel(deps)
+
+	snap := &tsmv1.MultiHostSnapshot{Hosts: []*tsmv1.HostState{
+		{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		{HostId: "mlab", Name: "mlab", Address: "mlab.local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED, Color: "#70AD47"},
+	}}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+
+	// 進入 host picker
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode())
+
+	// 渲染應包含 mlab（從 hub 同步過來的主機）
+	view := m.View()
+	assert.Contains(t, view, "mlab", "host picker 應顯示從 hub 同步的 mlab")
+}

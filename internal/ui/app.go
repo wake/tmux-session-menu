@@ -823,6 +823,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.hubHostSnap = msg.Snapshot
+		m.syncHubHostsToConfig()
 		inputs := ConvertMultiHostSnapshot(msg.Snapshot)
 		inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
 		m.items = FlattenMultiHost(inputs)
@@ -1348,6 +1349,7 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				m.deps.Cfg.Hosts = append(m.deps.Cfg.Hosts, entry)
 				m.persistHubHosts()
+				m.rebuildHubItems()
 			}
 			m.mode = ModeHostPicker // 回到主機管理面板
 			return m, nil
