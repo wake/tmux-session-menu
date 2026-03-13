@@ -11,6 +11,7 @@ import (
 // ColorConfig 是本地或遠端模式的顏色設定。
 type ColorConfig struct {
 	BarBG   string `toml:"bar_bg"`   // 狀態列背景色（空字串=保持 tmux 預設）
+	BarFG   string `toml:"bar_fg"`   // 狀態列前景色（空字串=保持 tmux 預設）
 	BadgeBG string `toml:"badge_bg"` // 徽章背景色
 	BadgeFG string `toml:"badge_fg"` // 徽章前景色
 }
@@ -22,6 +23,13 @@ type HostEntry struct {
 	Color     string `toml:"color"`   // accent color
 	Enabled   bool   `toml:"enabled"`
 	SortOrder int    `toml:"sort_order"`
+	// 每台主機獨立的顏色設定（覆蓋全域 local/remote）
+	BarBG   string `toml:"bar_bg"`   // 狀態列背景色
+	BarFG   string `toml:"bar_fg"`   // 狀態列前景色
+	BadgeBG string `toml:"badge_bg"` // 徽章背景色
+	BadgeFG string `toml:"badge_fg"` // 徽章前景色
+	// 封存狀態：封存後不顯示於主選單，但資料保留
+	Archived bool `toml:"archived"`
 }
 
 // IsLocal 回傳此主機是否為本機（Address 為空）。
@@ -67,13 +75,9 @@ func Default() Config {
 		PollIntervalSec: 2,
 		Local: ColorConfig{
 			BarBG:   "", // 空值=保持 tmux 預設
+			BarFG:   "", // 空值=保持 tmux 預設
 			BadgeBG: "#5f8787",
 			BadgeFG: "#c0caf5",
-		},
-		Remote: ColorConfig{
-			BarBG:   "#1a2b2b",
-			BadgeBG: "#73daca",
-			BadgeFG: "#1a1b26",
 		},
 		Hosts: []HostEntry{
 			{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
