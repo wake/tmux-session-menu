@@ -168,6 +168,11 @@ func (t *Tunnel) Start() error {
 
 	os.Remove(t.localSock)
 
+	// 清除遠端 stale reverse socket，避免 sshd bind 失敗導致 ExitOnForwardFailure 殺掉整條 tunnel
+	if t.hasReverse {
+		t.cmdRun("ssh", t.host, "rm", "-f", t.reverseRemoteSock)
+	}
+
 	var args []string
 	if t.hasReverse {
 		args = tunnelArgsWithReverse(t.host, t.localSock, remoteSock, t.reverseRemoteSock, t.reverseLocalSock)
