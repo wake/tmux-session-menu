@@ -353,7 +353,13 @@ func TestHostPicker_ArchiveLocalProtected(t *testing.T) {
 
 func TestHubMode_HostPickerToolbarVisible(t *testing.T) {
 	// Hub 模式（HubMode=true, HostMgr=nil）也應在 toolbar 顯示 [h] 主機管理
-	m := ui.NewModel(ui.Deps{HubMode: true})
+	m := ui.NewModel(ui.Deps{
+		HubMode: true,
+		Cfg: config.Config{Hosts: []config.HostEntry{
+			{Name: "local", Enabled: true, Color: "#5f8787"},
+			{Name: "mlab", Address: "mlab", Enabled: true, Color: "#70AD47"},
+		}},
+	})
 	// 先餵一個 HubSnapshotMsg 使 items 非空（否則 View 可能沒渲染完整 toolbar）
 	snap := &tsmv1.MultiHostSnapshot{
 		Hosts: []*tsmv1.HostState{
@@ -370,7 +376,13 @@ func TestHubMode_HostPickerToolbarVisible(t *testing.T) {
 
 func TestHubMode_HKeyEntersHostPicker(t *testing.T) {
 	// Hub 模式下按 h 應進入 ModeHostPicker
-	m := ui.NewModel(ui.Deps{HubMode: true})
+	m := ui.NewModel(ui.Deps{
+		HubMode: true,
+		Cfg: config.Config{Hosts: []config.HostEntry{
+			{Name: "local", Enabled: true, Color: "#5f8787"},
+			{Name: "mlab", Address: "mlab", Enabled: true, Color: "#70AD47"},
+		}},
+	})
 	snap := &tsmv1.MultiHostSnapshot{
 		Hosts: []*tsmv1.HostState{
 			{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
@@ -386,7 +398,13 @@ func TestHubMode_HKeyEntersHostPicker(t *testing.T) {
 
 func TestHubMode_HostPickerRendersHostStatus(t *testing.T) {
 	// Hub 模式 host picker 應顯示從 HubSnapshotMsg 取得的主機狀態
-	m := ui.NewModel(ui.Deps{HubMode: true})
+	m := ui.NewModel(ui.Deps{
+		HubMode: true,
+		Cfg: config.Config{Hosts: []config.HostEntry{
+			{Name: "local", Enabled: true, Color: "#5f8787"},
+			{Name: "mlab", Address: "mlab", Enabled: true, Color: "#70AD47"},
+		}},
+	})
 	snap := &tsmv1.MultiHostSnapshot{
 		Hosts: []*tsmv1.HostState{
 			{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
@@ -406,7 +424,13 @@ func TestHubMode_HostPickerRendersHostStatus(t *testing.T) {
 
 func TestHubMode_HostPickerNavigation(t *testing.T) {
 	// Hub 模式 host picker 應支援 j/k 導航
-	m := ui.NewModel(ui.Deps{HubMode: true})
+	m := ui.NewModel(ui.Deps{
+		HubMode: true,
+		Cfg: config.Config{Hosts: []config.HostEntry{
+			{Name: "local", Enabled: true, Color: "#5f8787"},
+			{Name: "mlab", Address: "mlab", Enabled: true, Color: "#70AD47"},
+		}},
+	})
 	snap := &tsmv1.MultiHostSnapshot{
 		Hosts: []*tsmv1.HostState{
 			{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
@@ -760,4 +784,214 @@ func TestHubMode_SelectedItem_HasHostID(t *testing.T) {
 	assert.Equal(t, "dev", m.Selected(), "應選取 dev session")
 	item := m.SelectedItem()
 	assert.Equal(t, "mlab", item.HostID, "SelectedItem 的 HostID 應為 mlab")
+}
+
+// --- Hub 模式 host picker 編輯功能測試 ---
+
+// newHubTestModel 建立 hub 模式測試用 Model，含預設主機與快照。
+func newHubTestModel(t *testing.T) ui.Model {
+	t.Helper()
+	deps := ui.Deps{
+		HubMode:    true,
+		ConfigPath: filepath.Join(t.TempDir(), "config.toml"),
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", Enabled: true, Color: "#5f8787"},
+				{Name: "mlab", Address: "mlab", Enabled: true, Color: "#70AD47"},
+			},
+		},
+	}
+	// 寫入初始設定檔供 persistHubHosts 讀取
+	_ = config.SaveConfig(deps.ConfigPath, deps.Cfg)
+	m := ui.NewModel(deps)
+	// 餵入 hub snapshot
+	snap := &tsmv1.MultiHostSnapshot{Hosts: []*tsmv1.HostState{
+		{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		{HostId: "mlab", Name: "mlab", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+	}}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+	// 進入 host picker
+	m, _ = hpApplyKey(m, "h")
+	return m
+}
+
+func TestHubMode_HostPicker_SpaceToggle(t *testing.T) {
+	m := newHubTestModel(t)
+	assert.Equal(t, ui.ModeHostPicker, m.Mode())
+
+	// 游標在 local（index 0），按 space 切換停用
+	m, _ = hpApplyKey(m, " ")
+
+	// 驗證 deps.Cfg.Hosts 中 local 已停用
+	cfg := m.DepsCfg()
+	var localEntry config.HostEntry
+	for _, h := range cfg.Hosts {
+		if h.Name == "local" {
+			localEntry = h
+			break
+		}
+	}
+	assert.False(t, localEntry.Enabled, "local 按 space 後應停用")
+
+	// 再按一次 space 重新啟用
+	m, _ = hpApplyKey(m, " ")
+	cfg = m.DepsCfg()
+	for _, h := range cfg.Hosts {
+		if h.Name == "local" {
+			localEntry = h
+			break
+		}
+	}
+	assert.True(t, localEntry.Enabled, "local 再按 space 後應啟用")
+}
+
+func TestHubMode_HostPicker_Archive(t *testing.T) {
+	m := newHubTestModel(t)
+
+	// 移到 mlab（index 1）
+	m, _ = hpApplyKey(m, "j")
+	assert.Equal(t, 1, m.HostPickerCursor())
+
+	// 按 d 封存
+	m, _ = hpApplyKey(m, "d")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode(), "封存後應留在 ModeHostPicker")
+
+	// 驗證 mlab 已封存
+	cfg := m.DepsCfg()
+	for _, h := range cfg.Hosts {
+		if h.Name == "mlab" {
+			assert.True(t, h.Archived, "mlab 應被封存")
+			assert.False(t, h.Enabled, "mlab 封存後應停用")
+		}
+	}
+
+}
+
+func TestHubMode_HostPicker_ArchiveLocalProtected(t *testing.T) {
+	m := newHubTestModel(t)
+
+	// 游標在 local（index 0），按 d 不應封存
+	m, _ = hpApplyKey(m, "d")
+	cfg := m.DepsCfg()
+	for _, h := range cfg.Hosts {
+		if h.Name == "local" {
+			assert.False(t, h.Archived, "local 不應被封存")
+		}
+	}
+}
+
+func TestHubMode_HostPicker_OpenPanel(t *testing.T) {
+	m := newHubTestModel(t)
+
+	// 按 Enter 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.True(t, m.HostPanelOpen(), "Enter 應開啟面板")
+	assert.Equal(t, 0, m.HostPanelCursor(), "面板游標應在 0")
+
+	// 面板中顯示設定欄位
+	view := m.View()
+	assert.Contains(t, view, "bar_bg", "面板應顯示 bar_bg 標籤")
+	assert.Contains(t, view, "badge_bg", "面板應顯示 badge_bg 標籤")
+}
+
+func TestHubMode_HostPicker_PanelEditColor(t *testing.T) {
+	m := newHubTestModel(t)
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// 移到 bar_bg（index 1）
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostPanelCursor())
+
+	// 按 Enter 進入編輯
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.True(t, m.HostPanelEditing(), "應進入編輯模式")
+
+	// 輸入色碼
+	for _, r := range "#aabbcc" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(ui.Model)
+	}
+
+	// 確認
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.False(t, m.HostPanelEditing(), "Enter 應退出編輯模式")
+}
+
+func TestHubMode_HostPicker_CtrlS_Save(t *testing.T) {
+	deps := ui.Deps{
+		HubMode:    true,
+		ConfigPath: filepath.Join(t.TempDir(), "config.toml"),
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", Enabled: true, Color: "#5f8787"},
+				{Name: "mlab", Address: "mlab", Enabled: true, Color: "#70AD47"},
+			},
+		},
+	}
+	_ = config.SaveConfig(deps.ConfigPath, deps.Cfg)
+	m := ui.NewModel(deps)
+	snap := &tsmv1.MultiHostSnapshot{Hosts: []*tsmv1.HostState{
+		{HostId: "local", Name: "local", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		{HostId: "mlab", Name: "mlab", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+	}}
+	updated, _ := m.Update(ui.HubSnapshotMsg{Snapshot: snap})
+	m = updated.(ui.Model)
+	m, _ = hpApplyKey(m, "h")
+
+	// 移到 mlab 並開啟面板
+	m, _ = hpApplyKey(m, "j")
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// 移到 bar_bg 並編輯
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // 進入編輯
+	m = updated.(ui.Model)
+
+	// 輸入色碼
+	for _, r := range "#aabbcc" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(ui.Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // 確認
+	m = updated.(ui.Model)
+
+	// Ctrl+S 儲存
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	m = updated.(ui.Model)
+
+	// 面板應關閉
+	assert.False(t, m.HostPanelOpen(), "Ctrl+S 後面板應關閉")
+	assert.Equal(t, "已儲存", m.HostSavedMsg(), "應顯示已儲存")
+
+	// 驗證 deps.Cfg.Hosts 已更新
+	cfg := m.DepsCfg()
+	for _, h := range cfg.Hosts {
+		if h.Name == "mlab" {
+			assert.Equal(t, "#aabbcc", h.BarBG, "mlab 的 bar_bg 應更新為 #aabbcc")
+		}
+	}
+
+	// 驗證 config 已寫入檔案
+	data, err := os.ReadFile(deps.ConfigPath)
+	assert.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	assert.NoError(t, err)
+	var found bool
+	for _, entry := range loaded.Hosts {
+		if entry.Name == "mlab" {
+			assert.Equal(t, "#aabbcc", entry.BarBG)
+			found = true
+		}
+	}
+	assert.True(t, found, "config 應包含 mlab")
 }

@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.38.0] - 2026-03-14
+
+### Fixed
+- Hub 模式 `[h]` 主機管理面板從唯讀改為完整編輯：支援顏色設定、啟用/停用、封存/解封存、排序、新增主機
+- Hub 模式主機管理操作全部在 client 端 config 完成，不依賴 HostManager
+
 ## [0.37.0] - 2026-03-14
 
 ### Added
