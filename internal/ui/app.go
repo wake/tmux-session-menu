@@ -1037,6 +1037,9 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		} else if m.deps.HubMode && m.hubHostSnap != nil {
 			for _, h := range m.hubHostSnap.Hosts {
+				if h.Status != tsmv1.HostStatus_HOST_STATUS_CONNECTED {
+					continue // 只顯示已連線的主機，避免使用者選到不可用的目標
+				}
 				hosts = append(hosts, hostTabInfo{
 					ID: h.HostId, Name: h.Name, Color: h.Color,
 				})
