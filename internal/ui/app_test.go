@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
+	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/store"
@@ -31,6 +32,26 @@ func TestModel_View_ShowsHeader(t *testing.T) {
 	m := ui.NewModel(ui.Deps{})
 	view := m.View()
 	assert.Contains(t, view, "tmux session menu")
+}
+
+func TestModel_View_ConnectionMode(t *testing.T) {
+	tests := []struct {
+		name string
+		deps ui.Deps
+		want string
+	}{
+		{"Direct", ui.Deps{}, "[Direct]"},
+		{"Daemon", ui.Deps{Client: &client.Client{}}, "[Daemon]"},
+		{"HostManager", ui.Deps{HostMgr: hostmgr.New()}, "[HostManager]"},
+		{"Hub", ui.Deps{Client: &client.Client{}, HubMode: true}, "[Hub]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := ui.NewModel(tt.deps)
+			view := m.View()
+			assert.Contains(t, view, tt.want)
+		})
+	}
 }
 
 func TestModel_Quit(t *testing.T) {
