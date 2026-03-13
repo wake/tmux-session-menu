@@ -419,6 +419,47 @@ func TestHostEntry_ArchivedRoundTrip(t *testing.T) {
 	assert.True(t, s.Archived, "archived 應 round-trip 正確")
 }
 
+// --- HostEntry.ToColorConfig 測試 ---
+
+func TestHostEntry_ToColorConfig(t *testing.T) {
+	h := config.HostEntry{
+		Color:   "#accent",
+		BarBG:   "#1a2b2b",
+		BarFG:   "#e0e0e0",
+		BadgeBG: "#73daca",
+		BadgeFG: "#1a1b26",
+	}
+	cc := h.ToColorConfig()
+	assert.Equal(t, "#1a2b2b", cc.BarBG, "BarBG 應與 host bar_bg 一致")
+	assert.Equal(t, "#e0e0e0", cc.BarFG, "BarFG 應與 host bar_fg 一致")
+	assert.Equal(t, "#73daca", cc.BadgeBG, "BadgeBG 有值時不應 fallback")
+	assert.Equal(t, "#1a1b26", cc.BadgeFG, "BadgeFG 應與 host badge_fg 一致")
+}
+
+func TestHostEntry_ToColorConfig_BadgeFallback(t *testing.T) {
+	h := config.HostEntry{
+		Color:   "#5f8787",
+		BarBG:   "#111111",
+		BarFG:   "#ffffff",
+		BadgeBG: "", // 空值 → fallback 到 Color
+		BadgeFG: "#cccccc",
+	}
+	cc := h.ToColorConfig()
+	assert.Equal(t, "#5f8787", cc.BadgeBG, "BadgeBG 為空時應 fallback 到 Color")
+	assert.Equal(t, "#111111", cc.BarBG, "BarBG 應保持不變")
+	assert.Equal(t, "#ffffff", cc.BarFG, "BarFG 應保持不變")
+	assert.Equal(t, "#cccccc", cc.BadgeFG, "BadgeFG 應保持不變")
+}
+
+func TestHostEntry_ToColorConfig_AllEmpty(t *testing.T) {
+	h := config.HostEntry{}
+	cc := h.ToColorConfig()
+	assert.Equal(t, "", cc.BarBG, "全空時 BarBG 應為空")
+	assert.Equal(t, "", cc.BarFG, "全空時 BarFG 應為空")
+	assert.Equal(t, "", cc.BadgeBG, "全空時 BadgeBG 應為空（Color 亦空，不 fallback）")
+	assert.Equal(t, "", cc.BadgeFG, "全空時 BadgeFG 應為空")
+}
+
 // --- AgentEntry 測試 ---
 
 func TestLoadFromString_WithAgents(t *testing.T) {

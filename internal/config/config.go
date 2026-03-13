@@ -37,6 +37,21 @@ func (h HostEntry) IsLocal() bool {
 	return h.Address == ""
 }
 
+// ToColorConfig 將 HostEntry 的四色轉為 ColorConfig。
+// BadgeBG 為空時 fallback 到 Color。
+func (h HostEntry) ToColorConfig() ColorConfig {
+	badgeBG := h.BadgeBG
+	if badgeBG == "" && h.Color != "" {
+		badgeBG = h.Color
+	}
+	return ColorConfig{
+		BarBG:   h.BarBG,
+		BarFG:   h.BarFG,
+		BadgeBG: badgeBG,
+		BadgeFG: h.BadgeFG,
+	}
+}
+
 // AgentEntry 代表一個 agent 預設。
 type AgentEntry struct {
 	Name      string `toml:"name"`
