@@ -877,12 +877,13 @@ func TestModel_NewSession_CreatesAndReloads(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(ui.Model)
 
-	// 驗證：mode 回到 Normal
-	assert.Equal(t, ui.ModeNormal, model.Mode())
+	// 驗證：建立後自動掛載（quitting + selected）
+	assert.True(t, model.Quitting(), "建立後應退出 TUI 以掛載")
+	assert.Equal(t, "my-new", model.Selected(), "應選取新建的 session")
 	// 驗證：NewSession 被呼叫
 	assert.Len(t, newSessionCalls, 1, "NewSession 應被呼叫一次")
-	// 驗證：cmd 不為 nil（觸發 reload）
-	assert.NotNil(t, cmd, "應回傳 loadSessionsCmd 以重新載入")
+	// 驗證：cmd 不為 nil（tea.Quit）
+	assert.NotNil(t, cmd, "應回傳 tea.Quit")
 	// 驗證：無錯誤
 	assert.Nil(t, model.Err())
 }
@@ -3073,4 +3074,22 @@ func TestDetectSessionStatus_AiType_NoHook(t *testing.T) {
 	deps := ui.Deps{StatusDir: ""}
 	result := ui.ExportDetectSessionStatus(deps, "shell-sess", "", "")
 	assert.Equal(t, "", result.AiType)
+}
+
+func TestDetectSessionStatus_ContentFallback_NoHook(t *testing.T) {
+	// 無 hook 但 pane content 含 AI 指示器 → 降級偵測應回傳 claude-code
+	deps := ui.Deps{StatusDir: ""}
+	result := ui.ExportDetectSessionStatus(deps, "ai-sess", "", "some output\nctrl+c to interrupt")
+	assert.Equal(t, "claude-code", result.AiType)
+}
+
+func TestDetectSessionStatus_ValidHookNoAI_NoFallback(t *testing.T) {
+	// 有效 hook 宣告非 AI（ai_type 為空）→ 不應降級偵測
+	statusDir := t.TempDir()
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":""}`, time.Now().Unix())
+	require.NoError(t, os.WriteFile(filepath.Join(statusDir, "shell-sess"), []byte(content), 0644))
+
+	deps := ui.Deps{StatusDir: statusDir}
+	result := ui.ExportDetectSessionStatus(deps, "shell-sess", "", "ctrl+c to interrupt")
+	assert.Equal(t, "", result.AiType, "有效 hook 宣告非 AI，不應降級偵測")
 }

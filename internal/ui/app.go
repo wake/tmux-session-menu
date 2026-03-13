@@ -615,6 +615,15 @@ func (m Model) clientForCursor() *client.Client {
 	return m.deps.Client
 }
 
+// clientForHost 回傳指定主機的 gRPC 客戶端。
+// hostID 為空時回傳 Deps.Client（本機或單一 daemon）。
+func (m Model) clientForHost(hostID string) *client.Client {
+	if hostID != "" && m.deps.HostMgr != nil {
+		return m.deps.HostMgr.ClientFor(hostID)
+	}
+	return m.deps.Client
+}
+
 // hostForCursor 回傳目前游標所在項目的主機 ID（用於 attach 路由）。
 func (m Model) hostForCursor() string {
 	if m.cursor >= 0 && m.cursor < len(m.items) {
@@ -625,6 +634,7 @@ func (m Model) hostForCursor() string {
 
 // SelectedItem 回傳被選取的 ListItem（供 main.go 判斷 attach 目標主機）。
 // 多主機模式下會同時比對 HostID，避免跨主機同名 session 誤判。
+// 若 session 不在 items 中（例如剛建立），依 selectedHostID 建立 fallback。
 func (m Model) SelectedItem() ListItem {
 	for _, item := range m.items {
 		if item.Type != ItemSession || item.Session.Name != m.selected {
@@ -635,6 +645,14 @@ func (m Model) SelectedItem() ListItem {
 			continue
 		}
 		return item
+	}
+	// Fallback：session 尚未出現在 items 中（剛建立的 session）
+	if m.selected != "" && m.selectedHostID != "" {
+		return ListItem{
+			Type:   ItemSession,
+			HostID: m.selectedHostID,
+			Session: tmux.Session{Name: m.selected},
+		}
 	}
 	return ListItem{}
 }
@@ -649,12 +667,14 @@ type DetectSessionStatusResult struct {
 func detectSessionStatus(deps Deps, sessionName, paneTitle, paneContent string) DetectSessionStatusResult {
 	var input tmux.StatusInput
 	var aiType string
+	hookFound := false // 是否有找到 hook 狀態檔（區分「無 hook」與「hook 說不是 AI」）
 
 	// 第一層：Hook 狀態檔案
 	if deps.StatusDir != "" {
 		if hs, err := tmux.ReadHookStatus(deps.StatusDir, sessionName); err == nil {
 			input.HookStatus = &hs
 			aiType = hs.AiType
+			hookFound = true
 		}
 	}
 
@@ -668,6 +688,15 @@ func detectSessionStatus(deps Deps, sessionName, paneTitle, paneContent string) 
 	if aiType != "" && (input.HookStatus == nil || !input.HookStatus.IsValid()) {
 		if !ai.HasStrongAiPresence(paneContent) {
 			aiType = ""
+		}
+	}
+
+	// 降級偵測：無 hook 時從 pane content 偵測 AI 工具。
+	// 有效 hook 且 ai_type 為空 → hook 已明確表示非 AI session，不降級。
+	hookAuthoritative := hookFound && input.HookStatus != nil && input.HookStatus.IsValid()
+	if aiType == "" && !hookAuthoritative && paneContent != "" {
+		if tool := ai.DetectTool(paneContent); tool != "" {
+			aiType = tool
 		}
 	}
 
@@ -997,7 +1026,17 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.deps.Store != nil {
 			recentPaths, _ = m.deps.Store.RecentPaths(3)
 		}
-		m.newSession.initForm(m.deps.Cfg.Agents, recentPaths)
+		// 建立可選主機清單（多主機模式）
+		var hosts []hostTabInfo
+		if m.deps.HostMgr != nil {
+			for _, h := range m.deps.HostMgr.Hosts() {
+				cfg := h.Config()
+				if cfg.Enabled {
+					hosts = append(hosts, hostTabInfo{ID: cfg.Name, Name: cfg.Name, Color: cfg.Color})
+				}
+			}
+		}
+		m.newSession.initForm(m.deps.Cfg.Agents, recentPaths, hosts)
 		m.mode = ModeNewSession
 		return m, nil
 	case "r":
