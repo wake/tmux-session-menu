@@ -122,6 +122,13 @@ type Model struct {
 	hostPickerCursor int
 	hubHostSnap      *tsmv1.MultiHostSnapshot // hub 模式：最新的主機快照（供 host picker 使用）
 
+	// host picker 右側面板
+	hostPanelOpen    bool
+	hostPanelCursor  int                      // 0=[x]啟用, 1=bar_bg, 2=bar_fg, 3=badge_bg, 4=badge_fg
+	hostPanelEditing bool                     // 正在編輯某個色彩欄位
+	hostPanelDraft   map[string]hostDraftEntry // hostID → draft copy of color edits
+	hostSavedMsg     string                   // "已儲存" flash message
+
 	// NewSession 表單
 	newSession newSessionForm
 

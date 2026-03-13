@@ -445,6 +445,141 @@ func TestHostPicker_ArchivedHostHidden(t *testing.T) {
 	assert.Contains(t, view, "mlab2")
 }
 
+// --- Task 9: 右側設定面板基本結構測試 ---
+
+func TestHostPicker_OpenPanel(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true, BarBG: "#1a2b2b", BadgeBG: "#e0af68", BadgeFG: "#1a1b26"})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+	m, _ = hpApplyKey(m, "j") // 移到 mlab1
+
+	// 按 Enter 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	fm := updated.(ui.Model)
+	assert.True(t, fm.HostPanelOpen(), "面板應開啟")
+	assert.Equal(t, 0, fm.HostPanelCursor(), "面板游標應在第 0 個欄位")
+}
+
+func TestHostPicker_OpenPanelWithRight(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 按 → 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	fm := updated.(ui.Model)
+	assert.True(t, fm.HostPanelOpen(), "按 → 應開啟面板")
+}
+
+func TestHostPicker_ClosePanel(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true})
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.True(t, m.HostPanelOpen())
+
+	// 按 Esc 關閉
+	updated2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	fm := updated2.(ui.Model)
+	assert.False(t, fm.HostPanelOpen(), "Esc 應關閉面板")
+}
+
+func TestHostPicker_ClosePanelWithLeft(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true})
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// 按 ← 關閉
+	updated2, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	fm := updated2.(ui.Model)
+	assert.False(t, fm.HostPanelOpen(), "← 應關閉面板")
+}
+
+func TestHostPicker_PanelShowsColors(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true, BarBG: "#1a2b2b", BadgeBG: "#e0af68", BadgeFG: "#1a1b26"})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	fm := updated.(ui.Model)
+	view := fm.View()
+	assert.Contains(t, view, "bar_bg", "應顯示 bar_bg 標籤")
+	assert.Contains(t, view, "#1a2b2b", "應顯示 bar_bg 值")
+	assert.Contains(t, view, "badge_bg", "應顯示 badge_bg 標籤")
+}
+
+func TestHostPicker_PanelNavigation(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// 面板內 j 向下
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostPanelCursor(), "面板游標應到 1")
+
+	// 面板內 k 向上
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.HostPanelCursor(), "面板游標應回到 0")
+}
+
+func TestHostPicker_PanelToggleEnabled(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+
+	// 游標在第 0 個（啟用 toggle），按空白鍵切換
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")})
+	m = updated.(ui.Model)
+	view := m.View()
+	// 切換後應顯示 [ ] 而非 [x]
+	assert.Contains(t, view, "[ ]", "切換後啟用欄應為 [ ]")
+}
+
+func TestHostPicker_HintForEmptyBarFG(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "mlab1", Address: "mlab1", Enabled: true, BarBG: "#1a2b2b"})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+	m, _ = hpApplyKey(m, "h")
+
+	// 開啟面板
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	fm := updated.(ui.Model)
+	view := fm.View()
+	assert.Contains(t, view, "留空由 tmux 自行決定", "bar_fg 空值時應顯示提示")
+}
+
 func TestHubMode_SelectedItem_HasHostID(t *testing.T) {
 	// Hub 模式下選取 session 應回傳包含 HostID 的 ListItem
 	m := ui.NewModel(ui.Deps{HubMode: true})
