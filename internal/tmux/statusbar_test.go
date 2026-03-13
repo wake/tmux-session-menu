@@ -125,3 +125,63 @@ func TestApplyStatusBar_Error(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "tmux not running")
 }
+
+// TestStatusBarArgs_WithBarFG 驗證同時設定 BarBG 與 BarFG 時，status-style 包含 bg= 與 fg=。
+func TestStatusBarArgs_WithBarFG(t *testing.T) {
+	colors := config.ColorConfig{
+		BarBG:   "#1a2b2b",
+		BarFG:   "#e0e0e0",
+		BadgeBG: "#73daca",
+		BadgeFG: "#1a1b26",
+	}
+	cmds := tmux.StatusBarArgs(colors)
+
+	found := false
+	for _, cmd := range cmds {
+		if len(cmd) >= 4 && cmd[2] == "status-style" {
+			assert.Contains(t, cmd[3], "bg=#1a2b2b", "應包含 bg 色")
+			assert.Contains(t, cmd[3], "fg=#e0e0e0", "應包含 fg 色")
+			found = true
+		}
+	}
+	assert.True(t, found, "應找到 status-style 指令")
+}
+
+// TestStatusBarArgs_EmptyBarFG 驗證 BarBG 有值、BarFG 為空時，status-style 只含 bg=，不含 fg=。
+func TestStatusBarArgs_EmptyBarFG(t *testing.T) {
+	colors := config.ColorConfig{
+		BarBG:   "#1a2b2b",
+		BarFG:   "",
+		BadgeBG: "#73daca",
+		BadgeFG: "#1a1b26",
+	}
+	cmds := tmux.StatusBarArgs(colors)
+
+	for _, cmd := range cmds {
+		if len(cmd) >= 4 && cmd[2] == "status-style" {
+			assert.Contains(t, cmd[3], "bg=#1a2b2b", "應包含 bg 色")
+			assert.NotContains(t, cmd[3], "fg=", "BarFG 為空時不應設定 fg")
+		}
+	}
+}
+
+// TestStatusBarArgs_OnlyBarFG 驗證 BarBG 為空、BarFG 有值時，status-style 只含 fg=。
+func TestStatusBarArgs_OnlyBarFG(t *testing.T) {
+	colors := config.ColorConfig{
+		BarBG:   "",
+		BarFG:   "#ffffff",
+		BadgeBG: "#73daca",
+		BadgeFG: "#1a1b26",
+	}
+	cmds := tmux.StatusBarArgs(colors)
+
+	found := false
+	for _, cmd := range cmds {
+		if len(cmd) >= 4 && cmd[2] == "status-style" {
+			assert.Equal(t, "fg=#ffffff", cmd[3], "只設定 BarFG 時 style 應為 fg=...")
+			assert.NotContains(t, cmd[3], "bg=", "BarBG 為空時不應設定 bg")
+			found = true
+		}
+	}
+	assert.True(t, found, "應找到 status-style 指令（僅含 fg）")
+}

@@ -13,9 +13,18 @@ func StatusBarArgs(colors config.ColorConfig) [][]string {
 	var cmds [][]string
 
 	if colors.BarBG != "" {
+		style := fmt.Sprintf("bg=%s", colors.BarBG)
+		if colors.BarFG != "" {
+			style += fmt.Sprintf(",fg=%s", colors.BarFG)
+		}
+		cmds = append(cmds, []string{
+			"set-option", "-g", "status-style", style,
+		})
+	} else if colors.BarFG != "" {
+		// 只設定前景色，不設定背景色
 		cmds = append(cmds, []string{
 			"set-option", "-g", "status-style",
-			fmt.Sprintf("bg=%s", colors.BarBG),
+			fmt.Sprintf("fg=%s", colors.BarFG),
 		})
 	} else {
 		// 清除先前設定的 status-style（例如 remote bar_bg），回到 tmux 預設
