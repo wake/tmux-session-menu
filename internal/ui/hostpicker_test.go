@@ -866,10 +866,6 @@ func TestHubMode_HostPicker_Archive(t *testing.T) {
 		}
 	}
 
-	// 驗證 config 已寫入
-	data, err := os.ReadFile(m.DepsCfg().DataDir) // 取 ConfigPath 比較麻煩，改用檔案驗證
-	_ = data
-	_ = err
 }
 
 func TestHubMode_HostPicker_ArchiveLocalProtected(t *testing.T) {

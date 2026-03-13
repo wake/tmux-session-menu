@@ -1313,6 +1313,18 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.mode = ModeHostPicker
 					return m, nil
 				}
+				// 檢查是否有同名非封存主機 → 跳過（避免重複）
+				duplicate := false
+				for _, h := range m.deps.Cfg.Hosts {
+					if h.Name == value && !h.Archived {
+						duplicate = true
+						break
+					}
+				}
+				if duplicate {
+					m.mode = ModeHostPicker
+					return m, nil
+				}
 				// 新增主機：自動挑色
 				usedColors := make(map[string]bool, len(m.deps.Cfg.Hosts))
 				for _, h := range m.deps.Cfg.Hosts {

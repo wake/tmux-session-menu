@@ -122,7 +122,7 @@ func setDraftField(d *hostDraftEntry, field int, val string) {
 
 // updateHostPicker 處理主機管理面板的按鍵。
 func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// hub 模式：唯讀 host picker
+	// hub 模式：委派給 hub 專用 handler（支援完整編輯）
 	if m.deps.HubMode && m.hubHostSnap != nil {
 		return m.updateHubHostPicker(msg)
 	}
