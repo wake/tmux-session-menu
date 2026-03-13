@@ -591,6 +591,8 @@ type ProxyMutationRequest struct {
 	SessionName   string                 `protobuf:"bytes,3,opt,name=session_name,json=sessionName,proto3" json:"session_name,omitempty"`
 	NewName       string                 `protobuf:"bytes,4,opt,name=new_name,json=newName,proto3" json:"new_name,omitempty"`
 	GroupId       string                 `protobuf:"bytes,5,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	Path          string                 `protobuf:"bytes,6,opt,name=path,proto3" json:"path,omitempty"`       // session 啟動路徑
+	Command       string                 `protobuf:"bytes,7,opt,name=command,proto3" json:"command,omitempty"` // agent 啟動指令
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -656,6 +658,20 @@ func (x *ProxyMutationRequest) GetNewName() string {
 func (x *ProxyMutationRequest) GetGroupId() string {
 	if x != nil {
 		return x.GroupId
+	}
+	return ""
+}
+
+func (x *ProxyMutationRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ProxyMutationRequest) GetCommand() string {
+	if x != nil {
+		return x.Command
 	}
 	return ""
 }
@@ -2020,13 +2036,15 @@ const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"\bsnapshot\x18\x06 \x01(\v2\x15.tsm.v1.StateSnapshotR\bsnapshot\x12\x18\n" +
 	"\aaddress\x18\a \x01(\tR\aaddress\"<\n" +
 	"\x11MultiHostSnapshot\x12'\n" +
-	"\x05hosts\x18\x01 \x03(\v2\x11.tsm.v1.HostStateR\x05hosts\"\xb2\x01\n" +
+	"\x05hosts\x18\x01 \x03(\v2\x11.tsm.v1.HostStateR\x05hosts\"\xe0\x01\n" +
 	"\x14ProxyMutationRequest\x12\x17\n" +
 	"\ahost_id\x18\x01 \x01(\tR\x06hostId\x12(\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x14.tsm.v1.MutationTypeR\x04type\x12!\n" +
 	"\fsession_name\x18\x03 \x01(\tR\vsessionName\x12\x19\n" +
 	"\bnew_name\x18\x04 \x01(\tR\anewName\x12\x19\n" +
-	"\bgroup_id\x18\x05 \x01(\tR\agroupId\"G\n" +
+	"\bgroup_id\x18\x05 \x01(\tR\agroupId\x12\x12\n" +
+	"\x04path\x18\x06 \x01(\tR\x04path\x12\x18\n" +
+	"\acommand\x18\a \x01(\tR\acommand\"G\n" +
 	"\x15ProxyMutationResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\"\x0e\n" +

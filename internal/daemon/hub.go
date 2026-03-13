@@ -211,7 +211,7 @@ func (m *HubManager) dispatchRemoteMutation(
 	case tsmv1.MutationType_MUTATION_RENAME_SESSION:
 		return c.RenameSession(ctx, req.SessionName, req.NewName, "")
 	case tsmv1.MutationType_MUTATION_CREATE_SESSION:
-		return c.CreateSession(ctx, req.SessionName, "", "")
+		return c.CreateSession(ctx, req.SessionName, req.Path, req.Command)
 	case tsmv1.MutationType_MUTATION_MOVE_SESSION:
 		// GroupId 為 proto string，MoveSession 需要 int64，需解析
 		gid, err := strconv.ParseInt(req.GroupId, 10, 64)

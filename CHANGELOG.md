@@ -2,6 +2,17 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.36.0] - 2026-03-14
+
+### Added
+- Hub 模式 New Session 完整支援：spoke 端按 [n] 可看到主機 tab（從 WatchMultiHost 快照取得）、選擇目標主機建立 session
+- `ProxyMutationRequest` proto 新增 `path` 與 `command` 欄位，CREATE_SESSION 代理操作可攜帶啟動路徑與 agent 指令
+- Hub 模式建立 session 走 `ProxyMutation` 路由到正確的目標主機，不再誤建在 hub 本機
+
+### Fixed
+- Hub 模式按 [n] 時主機 tab 不顯示的問題（HostMgr 在 hub mode 為 nil，改從 hubHostSnap 提取）
+- Hub 模式 `dispatchRemoteMutation` 與 `localMutationFn` 的 CREATE_SESSION 現在正確傳遞 path/command（原本固定為空字串）
+
 ## [0.35.1] - 2026-03-14
 
 ### Fixed

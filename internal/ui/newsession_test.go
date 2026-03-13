@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/ui"
@@ -102,6 +103,27 @@ func TestNewSession_InvalidNameChars(t *testing.T) {
 	model := updated.(ui.Model)
 	assert.NotNil(t, model.Err())
 	assert.Contains(t, model.Err().Error(), "'.' 或 ':'")
+}
+
+func TestNewSession_HubModeHostTabsFromSnapshot(t *testing.T) {
+	// Hub 模式下應從 hubHostSnap 提取主機 tab
+	tsmv1Snap := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{HostId: "air", Name: "air", Color: "#5f8787", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+			{HostId: "mlab", Name: "mlab", Color: "#73daca", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		},
+	}
+
+	m := ui.NewModel(ui.Deps{HubMode: true})
+	// 透過 HubSnapshotMsg 設定 hubHostSnap
+	m2, _ := m.Update(ui.HubSnapshotMsg{Snapshot: tsmv1Snap})
+	m = m2.(ui.Model)
+
+	m, _ = applyKey(m, "n")
+	view := m.View()
+	assert.Contains(t, view, "air")
+	assert.Contains(t, view, "mlab")
+	assert.Contains(t, view, "◄ ► 切換") // 多主機才有
 }
 
 func TestNewSession_HostTabsShownForMultiHost(t *testing.T) {

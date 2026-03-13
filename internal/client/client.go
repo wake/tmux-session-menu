@@ -141,7 +141,7 @@ func (c *Client) RecvMultiHostSnapshot() (*tsmv1.MultiHostSnapshot, error) {
 // ProxyMutation 透過 hub 代理操作到目標主機。
 func (c *Client) ProxyMutation(
 	ctx context.Context, hostID string, mutType tsmv1.MutationType,
-	sessionName, newName, groupID string,
+	sessionName, newName, groupID, path, command string,
 ) error {
 	resp, err := c.rpc.ProxyMutation(ctx, &tsmv1.ProxyMutationRequest{
 		HostId:      hostID,
@@ -149,6 +149,8 @@ func (c *Client) ProxyMutation(
 		SessionName: sessionName,
 		NewName:     newName,
 		GroupId:     groupID,
+		Path:        path,
+		Command:     command,
 	})
 	if err != nil {
 		return err
