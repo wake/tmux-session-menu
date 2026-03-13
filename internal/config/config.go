@@ -74,8 +74,8 @@ type Config struct {
 	InTmux          bool   `toml:"-"` // 執行時偵測，不寫入設定檔
 	InPopup         bool   `toml:"-"` // popup 模式，不寫入設定檔
 
-	Local  ColorConfig `toml:"local"`  // 本地模式顏色
-	Remote ColorConfig `toml:"remote"` // 遠端模式顏色
+	Local  ColorConfig  `toml:"local"`            // 本地模式顏色
+	Remote *ColorConfig `toml:"remote,omitempty"` // 已棄用：遷移後為 nil，SaveConfig 不再寫出
 
 	Hosts  []HostEntry  `toml:"hosts"`  // 主機清單
 	Agents []AgentEntry `toml:"agents"` // Agent 預設清單

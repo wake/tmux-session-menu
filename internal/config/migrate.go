@@ -11,7 +11,10 @@ package config
 //  3. 遷移完成後清空 cfg.Remote。
 func MigrateRemoteToHosts(cfg *Config) {
 	// 判斷 [remote] 是否有需要遷移的值
-	hasRemote := cfg.Remote.BarBG != "" || cfg.Remote.BadgeBG != "" || cfg.Remote.BadgeFG != ""
+	var hasRemote bool
+	if cfg.Remote != nil {
+		hasRemote = cfg.Remote.BarBG != "" || cfg.Remote.BadgeBG != "" || cfg.Remote.BadgeFG != ""
+	}
 
 	for i := range cfg.Hosts {
 		h := &cfg.Hosts[i]
@@ -40,8 +43,8 @@ func MigrateRemoteToHosts(cfg *Config) {
 		}
 	}
 
-	// 清空 [remote]，遷移完成
-	cfg.Remote = ColorConfig{}
+	// 清空 [remote]，遷移完成；nil 使 SaveConfig 不再寫出 [remote] 區段
+	cfg.Remote = nil
 }
 
 // SyncLocalHostToConfig 將 local 主機的四色設定寫回 Config.Local。

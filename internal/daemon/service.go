@@ -322,11 +322,9 @@ func (s *Service) GetConfig(_ context.Context, _ *tsmv1.GetConfigRequest) (*tsmv
 		{Key: "preview_lines", Value: fmt.Sprintf("%d", cfg.PreviewLines)},
 		{Key: "poll_interval_sec", Value: fmt.Sprintf("%d", cfg.PollIntervalSec)},
 		{Key: "local.bar_bg", Value: cfg.Local.BarBG},
+		{Key: "local.bar_fg", Value: cfg.Local.BarFG},
 		{Key: "local.badge_bg", Value: cfg.Local.BadgeBG},
 		{Key: "local.badge_fg", Value: cfg.Local.BadgeFG},
-		{Key: "remote.bar_bg", Value: cfg.Remote.BarBG},
-		{Key: "remote.badge_bg", Value: cfg.Remote.BadgeBG},
-		{Key: "remote.badge_fg", Value: cfg.Remote.BadgeFG},
 	}
 	return &tsmv1.GetConfigResponse{Values: values}, nil
 }
@@ -346,16 +344,12 @@ func (s *Service) SetConfig(_ context.Context, req *tsmv1.SetConfigRequest) (*em
 			}
 		case "local.bar_bg":
 			cfg.Local.BarBG = kv.Value
+		case "local.bar_fg":
+			cfg.Local.BarFG = kv.Value
 		case "local.badge_bg":
 			cfg.Local.BadgeBG = kv.Value
 		case "local.badge_fg":
 			cfg.Local.BadgeFG = kv.Value
-		case "remote.bar_bg":
-			cfg.Remote.BarBG = kv.Value
-		case "remote.badge_bg":
-			cfg.Remote.BadgeBG = kv.Value
-		case "remote.badge_fg":
-			cfg.Remote.BadgeFG = kv.Value
 		}
 	}
 	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")

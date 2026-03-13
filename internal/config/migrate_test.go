@@ -9,7 +9,7 @@ import (
 // TestMigrateConfig_RemoteToHostColors 驗證 [remote] 的顏色值能遷移到沒有設定顏色的遠端主機。
 func TestMigrateConfig_RemoteToHostColors(t *testing.T) {
 	cfg := &Config{
-		Remote: ColorConfig{
+		Remote: &ColorConfig{
 			BarBG:   "#444444",
 			BarFG:   "#eeeeee",
 			BadgeBG: "#555555",
@@ -36,14 +36,14 @@ func TestMigrateConfig_RemoteToHostColors(t *testing.T) {
 	assert.Equal(t, "#555555", serverA.BadgeBG, "遠端主機 badge_bg 應繼承自 [remote]")
 	assert.Equal(t, "#666666", serverA.BadgeFG, "遠端主機 badge_fg 應繼承自 [remote]")
 
-	// [remote] 應清空
-	assert.Equal(t, ColorConfig{}, cfg.Remote, "遷移後 [remote] 應清空")
+	// [remote] 應清空（nil，SaveConfig 不再寫出）
+	assert.Nil(t, cfg.Remote, "遷移後 [remote] 應為 nil")
 }
 
 // TestMigrateConfig_NoRemote_Noop 驗證已設定顏色的主機不會被 [remote] 覆蓋。
 func TestMigrateConfig_NoRemote_Noop(t *testing.T) {
 	cfg := &Config{
-		Remote: ColorConfig{
+		Remote: &ColorConfig{
 			BarBG:   "#444444",
 			BarFG:   "#eeeeee",
 			BadgeBG: "#555555",
@@ -108,7 +108,7 @@ func TestMigrateConfig_LocalSync(t *testing.T) {
 func TestMigrateConfig_BadgeBGFallbackToColor(t *testing.T) {
 	cfg := &Config{
 		// Remote 只有 BadgeFG，沒有 BadgeBG
-		Remote: ColorConfig{
+		Remote: &ColorConfig{
 			BadgeFG: "#ffffff",
 		},
 		Hosts: []HostEntry{
@@ -132,7 +132,7 @@ func TestMigrateConfig_BadgeBGFallbackToColor(t *testing.T) {
 // TestMigrateConfig_NoRemoteValues_NoChange 驗證 [remote] 完全為空時不做任何遷移。
 func TestMigrateConfig_NoRemoteValues_NoChange(t *testing.T) {
 	cfg := &Config{
-		Remote: ColorConfig{}, // 完全為空
+		Remote: &ColorConfig{}, // 完全為空
 		Local: ColorConfig{
 			BadgeBG: "#222222",
 			BadgeFG: "#333333",

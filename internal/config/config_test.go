@@ -110,10 +110,8 @@ func TestDefaultConfig_HasColorSections(t *testing.T) {
 	assert.Equal(t, "#5f8787", cfg.Local.BadgeBG, "local badge_bg 預設值")
 	assert.Equal(t, "#c0caf5", cfg.Local.BadgeFG, "local badge_fg 預設值")
 
-	// Remote 不設預設值（全為空字串）
-	assert.Equal(t, "", cfg.Remote.BarBG, "remote bar_bg 預設為空（不設預設）")
-	assert.Equal(t, "", cfg.Remote.BadgeBG, "remote badge_bg 預設為空（不設預設）")
-	assert.Equal(t, "", cfg.Remote.BadgeFG, "remote badge_fg 預設為空（不設預設）")
+	// Remote 已棄用，預設為 nil
+	assert.Nil(t, cfg.Remote, "Remote 預設為 nil（已棄用）")
 }
 
 func TestLoadFromTOML_WithColorSections(t *testing.T) {
@@ -139,10 +137,8 @@ badge_fg = "#666666"
 	assert.Equal(t, "#222222", cfg.Local.BadgeBG)
 	assert.Equal(t, "#333333", cfg.Local.BadgeFG)
 
-	// LoadFromString 會自動執行 MigrateRemoteToHosts，[remote] 段落會被清空
-	assert.Equal(t, "", cfg.Remote.BarBG, "自動遷移後 [remote] 應清空")
-	assert.Equal(t, "", cfg.Remote.BadgeBG, "自動遷移後 [remote] 應清空")
-	assert.Equal(t, "", cfg.Remote.BadgeFG, "自動遷移後 [remote] 應清空")
+	// LoadFromString 會自動執行 MigrateRemoteToHosts，[remote] 遷移後為 nil
+	assert.Nil(t, cfg.Remote, "自動遷移後 [remote] 應為 nil")
 }
 
 func TestLoadFromTOML_PartialColors_KeepsDefaults(t *testing.T) {
@@ -161,10 +157,8 @@ bar_bg = "#ddeeff"
 	assert.Equal(t, "#aabbcc", cfg.Local.BadgeBG, "已設定的 local badge_bg 為覆蓋值")
 	assert.Equal(t, "#c0caf5", cfg.Local.BadgeFG, "未設定的 local badge_fg 保持預設")
 
-	// LoadFromString 自動執行 MigrateRemoteToHosts，[remote] 段落遷移後清空
-	assert.Equal(t, "", cfg.Remote.BarBG, "自動遷移後 [remote] bar_bg 應清空")
-	assert.Equal(t, "", cfg.Remote.BadgeBG, "自動遷移後 [remote] badge_bg 應清空")
-	assert.Equal(t, "", cfg.Remote.BadgeFG, "自動遷移後 [remote] badge_fg 應清空")
+	// LoadFromString 自動執行 MigrateRemoteToHosts，[remote] 遷移後為 nil
+	assert.Nil(t, cfg.Remote, "自動遷移後 [remote] 應為 nil")
 }
 
 // --- SaveConfig 測試 ---
@@ -383,11 +377,8 @@ archived = true
 func TestDefaultConfig_NoRemotePreset(t *testing.T) {
 	cfg := config.Default()
 
-	// Remote 不應有預設值（全為零值）
-	assert.Equal(t, "", cfg.Remote.BarBG, "Default() 不應預設 remote bar_bg")
-	assert.Equal(t, "", cfg.Remote.BarFG, "Default() 不應預設 remote bar_fg")
-	assert.Equal(t, "", cfg.Remote.BadgeBG, "Default() 不應預設 remote badge_bg")
-	assert.Equal(t, "", cfg.Remote.BadgeFG, "Default() 不應預設 remote badge_fg")
+	// Remote 已棄用，Default() 不設值（nil）
+	assert.Nil(t, cfg.Remote, "Default() 的 Remote 應為 nil（已棄用）")
 }
 
 func TestHostEntry_ArchivedRoundTrip(t *testing.T) {
@@ -496,9 +487,8 @@ func TestLoadFromString_AutoMigrate(t *testing.T) {
 	assert.Equal(t, "#73daca", cfg.Hosts[1].BadgeBG) // [remote].badge_bg 繼承（非 color fallback）
 	assert.Equal(t, "#1a1b26", cfg.Hosts[1].BadgeFG)
 
-	// [remote] 應清空
-	assert.Empty(t, cfg.Remote.BarBG)
-	assert.Empty(t, cfg.Remote.BadgeBG)
+	// [remote] 遷移後為 nil
+	assert.Nil(t, cfg.Remote)
 }
 
 // --- AgentEntry 測試 ---

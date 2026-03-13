@@ -135,8 +135,8 @@ func TestModel_ResultConfig(t *testing.T) {
 	m := cfgtui.NewModel(cfg)
 	result := m.ResultConfig()
 	assert.Equal(t, cfg.Local.BadgeBG, result.Local.BadgeBG)
-	// Remote 欄位已從 TUI 移除，但 cfg 原值應被保留（不被清空）
-	assert.Equal(t, cfg.Remote.BarBG, result.Remote.BarBG)
+	// Remote 已棄用（nil），ResultConfig 保持 nil
+	assert.Nil(t, result.Remote)
 	assert.Equal(t, cfg.PreviewLines, result.PreviewLines)
 }
 
@@ -350,14 +350,13 @@ func TestDefaultFieldValue_BarFG(t *testing.T) {
 	assert.Equal(t, "", result.Local.BarFG)
 }
 
-// TestResultConfig_NoRemote 確認 ResultConfig 不寫回 Remote 欄位（依 TUI 輸入為準）。
+// TestResultConfig_NoRemote 確認 ResultConfig 的 Remote 保持 nil（已棄用）。
 func TestResultConfig_NoRemote(t *testing.T) {
 	cfg := config.Default()
-	cfg.Remote.BarBG = "#original-remote"
 	m := cfgtui.NewModel(cfg)
 	result := m.ResultConfig()
-	// Remote.BarBG 應保持原值（TUI 沒有 remote 欄位，不會被修改也不會被清空）
-	assert.Equal(t, "#original-remote", result.Remote.BarBG)
+	// Remote 已棄用，始終為 nil
+	assert.Nil(t, result.Remote)
 }
 
 // TestResultConfig_LocalBarFG 確認 local.bar_fg 寫回 ResultConfig。
