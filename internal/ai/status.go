@@ -9,7 +9,7 @@ import (
 var claudeModelPattern = regexp.MustCompile(`claude-(?:sonnet|opus|haiku)-[\w.-]+`)
 
 // claudeStatusPattern 匹配 Claude Code status bar 的顯示格式（如 [Opus 4.6]）。
-var claudeStatusPattern = regexp.MustCompile(`\[(?:Opus|Sonnet|Haiku) [\d.]+\]`)
+var claudeStatusPattern = regexp.MustCompile(`\[(?:Opus|Sonnet|Haiku) \d+(?:\.\d+)*\]`)
 
 func DetectModel(content string) string {
 	return claudeModelPattern.FindString(content)
