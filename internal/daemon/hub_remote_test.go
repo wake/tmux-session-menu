@@ -126,7 +126,7 @@ func TestHubManager_StartRemoteHosts_SkipsLocalAndDisabled(t *testing.T) {
 		return nil, nil, ctx.Err()
 	}
 
-	mgr.AddHost(config.HostEntry{Name: "local", Address: "", Enabled: true})       // local → 跳過
+	mgr.AddHost(config.HostEntry{Name: "local", Address: "", Enabled: true})        // local → 跳過
 	mgr.AddHost(config.HostEntry{Name: "off", Address: "off-host", Enabled: false}) // disabled → 跳過
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -24,15 +24,15 @@ import (
 
 // Daemon 是 tsm daemon 的主體。
 type Daemon struct {
-	cfg        config.Config
-	server     *grpc.Server
-	hub        *WatcherHub
-	mhub       *MultiHostHub  // 聚合所有主機快照（永遠初始化）
-	hubMgr     *HubManager    // 管理多主機連線（永遠初始化）
-	state      *StateManager
-	store      *store.Store
-	cancelRun  context.CancelFunc
-	HubDialFn  HubDialFn // 外部注入的遠端 dial 函式（避免循環依賴）
+	cfg       config.Config
+	server    *grpc.Server
+	hub       *WatcherHub
+	mhub      *MultiHostHub // 聚合所有主機快照（永遠初始化）
+	hubMgr    *HubManager   // 管理多主機連線（永遠初始化）
+	state     *StateManager
+	store     *store.Store
+	cancelRun context.CancelFunc
+	HubDialFn HubDialFn // 外部注入的遠端 dial 函式（避免循環依賴）
 }
 
 // NewDaemon 建立新的 Daemon。

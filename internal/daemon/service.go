@@ -27,7 +27,7 @@ type Service struct {
 	store     *store.Store
 	hub       *WatcherHub
 	mhub      *MultiHostHub // nil = 非 hub 模式
-	hubMgr    *HubManager  // nil = 非 hub 模式
+	hubMgr    *HubManager   // nil = 非 hub 模式
 	state     *StateManager
 	startedAt time.Time
 }

@@ -198,7 +198,6 @@ func ReconstructFilenames(args []string) []string {
 	return result
 }
 
-
 // setupLogger 建立上傳日誌。
 // 檔案不需要顯式關閉，因為 coprocess 是短命程序，OS 會在程序結束時回收。
 func setupLogger() *log.Logger {
