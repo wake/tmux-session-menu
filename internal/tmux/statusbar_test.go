@@ -17,12 +17,15 @@ func TestStatusBarArgs_NoBarBG(t *testing.T) {
 	}
 	cmds := tmux.StatusBarArgs(colors)
 
-	// 不應包含 status-style
+	// bar_bg 為空時應 unset status-style（清除 remote 殘留）
+	foundUnset := false
 	for _, cmd := range cmds {
-		for _, arg := range cmd {
-			assert.NotEqual(t, "status-style", arg)
+		if len(cmd) >= 3 && cmd[0] == "set-option" && cmd[1] == "-gu" && cmd[2] == "status-style" {
+			foundUnset = true
 		}
 	}
+	assert.True(t, foundUnset, "should unset status-style when bar_bg is empty")
+
 	// 應包含 status-left
 	hasStatusLeft := false
 	for _, cmd := range cmds {
@@ -105,8 +108,10 @@ func TestApplyStatusBar_NoBarBG(t *testing.T) {
 
 	err := tmux.ApplyStatusBar(mock, colors)
 	assert.NoError(t, err)
-	// 不含 status-style，只有 status-left + status-left-length
-	assert.Len(t, mock.calls, 2)
+	// unset status-style + status-left + status-left-length = 3 組
+	assert.Len(t, mock.calls, 3)
+	// 第一組應為 unset
+	assert.Equal(t, []string{"set-option", "-gu", "status-style"}, mock.calls[0])
 }
 
 func TestApplyStatusBar_Error(t *testing.T) {
