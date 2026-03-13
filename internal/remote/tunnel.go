@@ -18,11 +18,13 @@ func LocalSocketPath(host string) string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("tsm-%x.sock", h[:8]))
 }
 
-// ReverseSocketPath 根據主機名稱產生確定性的 hub reverse tunnel 本地 socket 路徑。
+// ReverseSocketPath 根據主機名稱產生確定性的 hub reverse tunnel 遠端 socket 路徑。
 // 使用 "hub:" 前綴以確保與 LocalSocketPath 不同。
+// 注意：此路徑用於 SSH -R 的遠端端，必須使用通用路徑（/tmp）而非 os.TempDir()，
+// 因為 os.TempDir() 在 macOS 上回傳的 /var/folders/... 路徑在不同機器上不同。
 func ReverseSocketPath(host string) string {
 	h := sha256.Sum256([]byte("hub:" + host))
-	return filepath.Join(os.TempDir(), fmt.Sprintf("tsm-hub-%x.sock", h[:8]))
+	return filepath.Join("/tmp", fmt.Sprintf("tsm-hub-%x.sock", h[:8]))
 }
 
 // tunnelArgs 建構 SSH 通道轉發所需的命令列參數，含 keepalive 偵測斷線。
