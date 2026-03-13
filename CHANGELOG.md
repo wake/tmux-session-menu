@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.36.1] - 2026-03-14
+
+### Fixed
+- Status bar 顏色殘留：`bar_bg` 為空時改為發出 `set-option -gu status-style`（unset global），清除 remote attach 殘留的背景色
+- Hub 模式 config TUI 返回後 session 消失：重建 `WatchMultiHost` stream，避免舊 recv goroutine 搶讀導致新 TUI 收不到 snapshot
+
 ## [0.36.0] - 2026-03-14
 
 ### Added
