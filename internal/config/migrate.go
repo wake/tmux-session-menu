@@ -13,7 +13,7 @@ func MigrateRemoteToHosts(cfg *Config) {
 	// 判斷 [remote] 是否有需要遷移的值
 	var hasRemote bool
 	if cfg.Remote != nil {
-		hasRemote = cfg.Remote.BarBG != "" || cfg.Remote.BadgeBG != "" || cfg.Remote.BadgeFG != ""
+		hasRemote = cfg.Remote.BarBG != "" || cfg.Remote.BarFG != "" || cfg.Remote.BadgeBG != "" || cfg.Remote.BadgeFG != ""
 	}
 
 	for i := range cfg.Hosts {

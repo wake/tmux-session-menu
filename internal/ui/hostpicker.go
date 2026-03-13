@@ -68,15 +68,6 @@ func (m Model) visibleHosts() []*hostmgr.Host {
 	return result
 }
 
-// selectedHostForPanel 回傳目前游標所在的主機（面板用）。
-func (m Model) selectedHostForPanel() *hostmgr.Host {
-	hosts := m.visibleHosts()
-	if m.hostPickerCursor < len(hosts) {
-		return hosts[m.hostPickerCursor]
-	}
-	return nil
-}
-
 // ensureDraft 確保指定主機的 draft 存在，若不存在則從主機設定初始化。
 func (m *Model) ensureDraft(hostID string) {
 	if m.hostPanelDraft == nil {
@@ -145,6 +136,9 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeNormal
 		return m, nil
 	}
+
+	// 任何按鍵清除「已儲存」提示（Ctrl+S 會重新設定）
+	m.hostSavedMsg = ""
 
 	// Ctrl+S 儲存（面板開啟或關閉皆可）
 	if msg.String() == "ctrl+s" {
@@ -445,7 +439,7 @@ func (m Model) renderHostPickerLeft(hosts []*hostmgr.Host) string {
 		cursor := "  "
 		if i == m.hostPickerCursor {
 			if m.hostPanelOpen {
-				cursor = selectedStyle.Render("► ")
+				cursor = dimStyle.Render("► ")
 			} else {
 				cursor = selectedStyle.Render("► ")
 			}
