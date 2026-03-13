@@ -3,6 +3,7 @@ package ui
 import (
 	"sort"
 
+	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 )
@@ -122,6 +123,27 @@ func FlattenMultiHost(snaps []HostSnapshotInput) []ListItem {
 	}
 
 	return items
+}
+
+// FilterActiveHosts 過濾掉停用（Enabled=false）或封存（Archived=true）的主機快照。
+// 依據 config 中的主機設定，移除不應顯示在 session 列表的主機。
+// 若主機不在 config 中（例如 hub 模式的遠端新增主機），預設保留。
+func FilterActiveHosts(snaps []HostSnapshotInput, hosts []config.HostEntry) []HostSnapshotInput {
+	lookup := make(map[string]config.HostEntry, len(hosts))
+	for _, h := range hosts {
+		lookup[h.Name] = h
+	}
+
+	var result []HostSnapshotInput
+	for _, snap := range snaps {
+		if entry, ok := lookup[snap.HostID]; ok {
+			if !entry.Enabled || entry.Archived {
+				continue
+			}
+		}
+		result = append(result, snap)
+	}
+	return result
 }
 
 // isLocalOnly 判斷 enabled 的主機是否只有 local 一台。

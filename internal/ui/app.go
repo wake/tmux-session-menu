@@ -813,6 +813,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.hubHostSnap = msg.Snapshot
 		inputs := ConvertMultiHostSnapshot(msg.Snapshot)
+		inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
 		m.items = FlattenMultiHost(inputs)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
@@ -826,7 +827,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 	case MultiHostSnapshotMsg:
-		m.items = FlattenMultiHost(msg.Snapshots)
+		filtered := FilterActiveHosts(msg.Snapshots, m.deps.Cfg.Hosts)
+		m.items = FlattenMultiHost(filtered)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
 		}
