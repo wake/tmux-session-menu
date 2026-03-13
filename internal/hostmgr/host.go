@@ -115,6 +115,26 @@ func (h *Host) LastError() string {
 	return h.lastErr
 }
 
+// SetArchived 設定此主機的封存狀態。
+func (h *Host) SetArchived(archived bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.cfg.Archived = archived
+	if archived {
+		h.cfg.Enabled = false
+	}
+}
+
+// UpdateColors 更新主機的四色設定。
+func (h *Host) UpdateColors(barBG, barFG, badgeBG, badgeFG string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.cfg.BarBG = barBG
+	h.cfg.BarFG = barFG
+	h.cfg.BadgeBG = badgeBG
+	h.cfg.BadgeFG = badgeFG
+}
+
 // SetGlobalConfig 設定本機 Dial 所需的全域設定。
 func (h *Host) SetGlobalConfig(cfg config.Config) {
 	h.mu.Lock()

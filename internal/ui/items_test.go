@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/store"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/ui"
@@ -332,4 +333,78 @@ func TestFlattenMultiHostSingleRemoteShowsTitle(t *testing.T) {
 	assert.Equal(t, ui.ItemHostTitle, items[0].Type)
 	assert.Equal(t, "remote-a", items[0].HostID)
 	assert.Equal(t, ui.ItemSession, items[1].Type)
+}
+
+// --- FilterActiveHosts 測試 ---
+
+func TestFilterActiveHosts_RemovesArchivedHost(t *testing.T) {
+	snaps := []ui.HostSnapshotInput{
+		{HostID: "local", Status: ui.HostStateConnected},
+		{HostID: "server-a", Status: ui.HostStateConnected},
+		{HostID: "server-b", Status: ui.HostStateConnected},
+	}
+	hosts := []config.HostEntry{
+		{Name: "local", Enabled: true},
+		{Name: "server-a", Enabled: true, Archived: true}, // 封存
+		{Name: "server-b", Enabled: true},
+	}
+
+	result := ui.FilterActiveHosts(snaps, hosts)
+	require.Len(t, result, 2)
+	assert.Equal(t, "local", result[0].HostID)
+	assert.Equal(t, "server-b", result[1].HostID)
+}
+
+func TestFilterActiveHosts_RemovesDisabledHost(t *testing.T) {
+	snaps := []ui.HostSnapshotInput{
+		{HostID: "local", Status: ui.HostStateConnected},
+		{HostID: "server-a", Status: ui.HostStateConnected},
+	}
+	hosts := []config.HostEntry{
+		{Name: "local", Enabled: true},
+		{Name: "server-a", Enabled: false}, // 停用
+	}
+
+	result := ui.FilterActiveHosts(snaps, hosts)
+	require.Len(t, result, 1)
+	assert.Equal(t, "local", result[0].HostID)
+}
+
+func TestFilterActiveHosts_KeepsUnknownHost(t *testing.T) {
+	// 不在 config 中的主機（例如 hub 遠端新增）應保留
+	snaps := []ui.HostSnapshotInput{
+		{HostID: "local", Status: ui.HostStateConnected},
+		{HostID: "unknown-host", Status: ui.HostStateConnected},
+	}
+	hosts := []config.HostEntry{
+		{Name: "local", Enabled: true},
+	}
+
+	result := ui.FilterActiveHosts(snaps, hosts)
+	require.Len(t, result, 2)
+	assert.Equal(t, "local", result[0].HostID)
+	assert.Equal(t, "unknown-host", result[1].HostID)
+}
+
+func TestFilterActiveHosts_EmptyConfig(t *testing.T) {
+	snaps := []ui.HostSnapshotInput{
+		{HostID: "local", Status: ui.HostStateConnected},
+	}
+
+	result := ui.FilterActiveHosts(snaps, nil)
+	require.Len(t, result, 1)
+	assert.Equal(t, "local", result[0].HostID)
+}
+
+func TestFilterActiveHosts_DisabledAndArchived(t *testing.T) {
+	// 同時停用且封存的主機也應被過濾
+	snaps := []ui.HostSnapshotInput{
+		{HostID: "server-a", Status: ui.HostStateConnected},
+	}
+	hosts := []config.HostEntry{
+		{Name: "server-a", Enabled: false, Archived: true},
+	}
+
+	result := ui.FilterActiveHosts(snaps, hosts)
+	require.Len(t, result, 0)
 }

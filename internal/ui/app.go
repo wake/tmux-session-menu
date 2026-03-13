@@ -68,6 +68,7 @@ func (m Model) persistHosts() {
 		}
 	}
 	fileCfg.Hosts = entries
+	config.SyncLocalHostToConfig(&fileCfg)
 	_ = config.SaveConfig(cfgPath, fileCfg)
 }
 
@@ -88,8 +89,8 @@ type Model struct {
 	readOnly_      bool   // R 鍵：唯讀進入 session
 	exitTmux_      bool   // ctrl+e：退出 tmux
 	openConfig_    bool   // c 鍵：開啟 config TUI
-	watchFailed    bool // remote 模式 Watch stream 失敗
-	hubDegraded    bool // hub 模式 daemon 不再支援 → 降級到 HostManager
+	watchFailed    bool   // remote 模式 Watch stream 失敗
+	hubDegraded    bool   // hub 模式 daemon 不再支援 → 降級到 HostManager
 	err            error
 
 	// 動畫
@@ -121,6 +122,13 @@ type Model struct {
 	// HostPicker mode（主機管理面板）
 	hostPickerCursor int
 	hubHostSnap      *tsmv1.MultiHostSnapshot // hub 模式：最新的主機快照（供 host picker 使用）
+
+	// host picker 右側面板
+	hostPanelOpen    bool
+	hostPanelCursor  int                       // 0=[x]啟用, 1=bar_bg, 2=bar_fg, 3=badge_bg, 4=badge_fg
+	hostPanelEditing bool                      // 正在編輯某個色彩欄位
+	hostPanelDraft   map[string]hostDraftEntry // hostID → draft copy of color edits
+	hostSavedMsg     string                    // "已儲存" flash message
 
 	// NewSession 表單
 	newSession newSessionForm
@@ -536,8 +544,8 @@ func recvSnapshotCmd(c *client.Client) tea.Cmd {
 
 // MultiHostSnapshotMsg 是多主機模式下從 HostManager 接收的聚合快照訊息。
 type MultiHostSnapshotMsg struct {
-	Snapshots    []HostSnapshotInput    // 使用 items.go 定義的 UI 端型別
-	UploadEvents []*tsmv1.UploadEvent   // 聚合所有主機的上傳事件
+	Snapshots    []HostSnapshotInput  // 使用 items.go 定義的 UI 端型別
+	UploadEvents []*tsmv1.UploadEvent // 聚合所有主機的上傳事件
 }
 
 // recvMultiHostCmd 等待 HostManager 快照通知，回傳 MultiHostSnapshotMsg。
@@ -649,8 +657,8 @@ func (m Model) SelectedItem() ListItem {
 	// Fallback：session 尚未出現在 items 中（剛建立的 session）
 	if m.selected != "" && m.selectedHostID != "" {
 		return ListItem{
-			Type:   ItemSession,
-			HostID: m.selectedHostID,
+			Type:    ItemSession,
+			HostID:  m.selectedHostID,
 			Session: tmux.Session{Name: m.selected},
 		}
 	}
@@ -806,6 +814,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.hubHostSnap = msg.Snapshot
 		inputs := ConvertMultiHostSnapshot(msg.Snapshot)
+		inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
 		m.items = FlattenMultiHost(inputs)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
@@ -819,7 +828,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 	case MultiHostSnapshotMsg:
-		m.items = FlattenMultiHost(msg.Snapshots)
+		filtered := FilterActiveHosts(msg.Snapshots, m.deps.Cfg.Hosts)
+		m.items = FlattenMultiHost(filtered)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
 		}
@@ -1253,6 +1263,14 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case InputNewHost:
 			// 新增主機
 			if m.deps.HostMgr != nil {
+				// 檢查是否有同名封存主機 → 解封存
+				if found, archivedHost := m.deps.HostMgr.FindArchived(value); found {
+					archivedHost.SetArchived(false)
+					_ = m.deps.HostMgr.Enable(context.Background(), archivedHost.ID())
+					m.persistHosts()
+					m.mode = ModeHostPicker
+					return m, nil
+				}
 				hosts := m.deps.HostMgr.Hosts()
 				usedColors := make(map[string]bool, len(hosts))
 				for _, h := range hosts {

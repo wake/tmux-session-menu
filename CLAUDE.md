@@ -88,6 +88,25 @@ cmd/tsm/main.go (CLI 入口、子命令路由)
 - **Config**：`~/.config/tsm/config.toml`（TOML），`config.Default()` 提供預設值
 - **Store**：SQLite WAL 模式，管理 groups、session_meta、path_history 表
 
+### 主機管理與三態模型
+
+主機有三種狀態：**啟用**（enabled=true, archived=false）、**停用**（enabled=false, archived=false）、**封存**（enabled=false, archived=true）。
+
+- 封存 = 軟刪除，config 中保留 `[[hosts]]` 條目但不顯示於管理畫面
+- 新增同名主機時自動解封存並啟用
+- local 主機可停用、不可封存
+- Enable/Disable 兩段式：client 端立即過濾 + daemon 重啟後實際斷線/連線
+
+### Per-host 顏色設定
+
+每台主機獨立儲存四色（bar_bg、bar_fg、badge_bg、badge_fg）於 `[[hosts]]` 條目中：
+
+- `[remote]` 區段已棄用（`Config.Remote` 為 `*ColorConfig`，遷移後 nil，SaveConfig 不再寫出）
+- 舊版 config 含 `[remote]` 時，`LoadFromString` 自動遷移到各主機的獨立設定
+- `[local]` 區段與 local host entry 雙向同步：讀取時 `[local]` 勝出，儲存時 host entry 回寫
+- `HostEntry.ToColorConfig()` 將主機四色轉為 `ColorConfig`，BadgeBG 為空時 fallback 到 Color
+- `color` 欄位用於管理畫面圓點、session 列表 host title、badge_bg fallback
+
 ### Protocol Buffers
 
 - 定義在 `api/proto/tsm/v1/tsm.proto`

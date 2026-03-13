@@ -106,13 +106,12 @@ func TestDefaultConfig_HasColorSections(t *testing.T) {
 
 	// Local 預設色值
 	assert.Equal(t, "", cfg.Local.BarBG, "local bar_bg 預設為空（保持 tmux 預設）")
+	assert.Equal(t, "", cfg.Local.BarFG, "local bar_fg 預設為空（保持 tmux 預設）")
 	assert.Equal(t, "#5f8787", cfg.Local.BadgeBG, "local badge_bg 預設值")
 	assert.Equal(t, "#c0caf5", cfg.Local.BadgeFG, "local badge_fg 預設值")
 
-	// Remote 預設色值
-	assert.Equal(t, "#1a2b2b", cfg.Remote.BarBG, "remote bar_bg 預設值")
-	assert.Equal(t, "#73daca", cfg.Remote.BadgeBG, "remote badge_bg 預設值")
-	assert.Equal(t, "#1a1b26", cfg.Remote.BadgeFG, "remote badge_fg 預設值")
+	// Remote 已棄用，預設為 nil
+	assert.Nil(t, cfg.Remote, "Remote 預設為 nil（已棄用）")
 }
 
 func TestLoadFromTOML_WithColorSections(t *testing.T) {
@@ -138,9 +137,8 @@ badge_fg = "#666666"
 	assert.Equal(t, "#222222", cfg.Local.BadgeBG)
 	assert.Equal(t, "#333333", cfg.Local.BadgeFG)
 
-	assert.Equal(t, "#444444", cfg.Remote.BarBG)
-	assert.Equal(t, "#555555", cfg.Remote.BadgeBG)
-	assert.Equal(t, "#666666", cfg.Remote.BadgeFG)
+	// LoadFromString 會自動執行 MigrateRemoteToHosts，[remote] 遷移後為 nil
+	assert.Nil(t, cfg.Remote, "自動遷移後 [remote] 應為 nil")
 }
 
 func TestLoadFromTOML_PartialColors_KeepsDefaults(t *testing.T) {
@@ -159,10 +157,8 @@ bar_bg = "#ddeeff"
 	assert.Equal(t, "#aabbcc", cfg.Local.BadgeBG, "已設定的 local badge_bg 為覆蓋值")
 	assert.Equal(t, "#c0caf5", cfg.Local.BadgeFG, "未設定的 local badge_fg 保持預設")
 
-	// Remote: 只覆蓋 bar_bg，其餘保持預設
-	assert.Equal(t, "#ddeeff", cfg.Remote.BarBG, "已設定的 remote bar_bg 為覆蓋值")
-	assert.Equal(t, "#73daca", cfg.Remote.BadgeBG, "未設定的 remote badge_bg 保持預設")
-	assert.Equal(t, "#1a1b26", cfg.Remote.BadgeFG, "未設定的 remote badge_fg 保持預設")
+	// LoadFromString 自動執行 MigrateRemoteToHosts，[remote] 遷移後為 nil
+	assert.Nil(t, cfg.Remote, "自動遷移後 [remote] 應為 nil")
 }
 
 // --- SaveConfig 測試 ---
@@ -304,6 +300,195 @@ func TestHostEntry_TOML_RoundTrip(t *testing.T) {
 	assert.Equal(t, cfg.Hosts[1].Color, loaded.Hosts[1].Color)
 	assert.Equal(t, cfg.Hosts[1].Enabled, loaded.Hosts[1].Enabled)
 	assert.Equal(t, cfg.Hosts[1].SortOrder, loaded.Hosts[1].SortOrder)
+}
+
+// --- ColorConfig bar_fg 測試 ---
+
+func TestColorConfig_ParseBarFG(t *testing.T) {
+	tomlData := `
+[local]
+bar_bg = "#111111"
+bar_fg = "#ffffff"
+badge_bg = "#222222"
+badge_fg = "#333333"
+`
+	cfg, err := config.LoadFromString(tomlData)
+	require.NoError(t, err)
+
+	assert.Equal(t, "#111111", cfg.Local.BarBG, "local bar_bg 應正確解析")
+	assert.Equal(t, "#ffffff", cfg.Local.BarFG, "local bar_fg 應正確解析")
+	assert.Equal(t, "#222222", cfg.Local.BadgeBG)
+	assert.Equal(t, "#333333", cfg.Local.BadgeFG)
+}
+
+func TestDefaultConfig_LocalBarFGEmpty(t *testing.T) {
+	cfg := config.Default()
+
+	assert.Equal(t, "", cfg.Local.BarFG, "local bar_fg 預設應為空字串")
+}
+
+// --- HostEntry 新欄位測試 ---
+
+func TestHostEntry_ParseNewColorFields(t *testing.T) {
+	tomlData := `
+[[hosts]]
+name = "server-a"
+address = "10.0.0.1"
+color = "#73daca"
+enabled = true
+sort_order = 1
+bar_bg = "#1a2b2b"
+bar_fg = "#e0e0e0"
+badge_bg = "#73daca"
+badge_fg = "#1a1b26"
+archived = false
+
+[[hosts]]
+name = "server-b"
+address = "10.0.0.2"
+color = "#ff9e64"
+enabled = false
+sort_order = 2
+archived = true
+`
+	cfg, err := config.LoadFromString(tomlData)
+	require.NoError(t, err)
+
+	require.Len(t, cfg.Hosts, 2)
+
+	h := cfg.Hosts[0]
+	assert.Equal(t, "server-a", h.Name)
+	assert.Equal(t, "#1a2b2b", h.BarBG, "host bar_bg 應正確解析")
+	assert.Equal(t, "#e0e0e0", h.BarFG, "host bar_fg 應正確解析")
+	assert.Equal(t, "#73daca", h.BadgeBG, "host badge_bg 應正確解析")
+	assert.Equal(t, "#1a1b26", h.BadgeFG, "host badge_fg 應正確解析")
+	assert.False(t, h.Archived, "archived=false 應正確解析")
+
+	h2 := cfg.Hosts[1]
+	assert.Equal(t, "server-b", h2.Name)
+	assert.True(t, h2.Archived, "archived=true 應正確解析")
+	assert.Equal(t, "", h2.BarBG, "未設定的 bar_bg 應為空字串")
+	assert.Equal(t, "", h2.BarFG, "未設定的 bar_fg 應為空字串")
+	// LoadFromString 自動遷移：badge_bg 為空但 Color 有值時 fallback 到 host.Color
+	assert.Equal(t, "#ff9e64", h2.BadgeBG, "badge_bg 為空時自動 fallback 到 host.Color")
+	assert.Equal(t, "", h2.BadgeFG, "未設定的 badge_fg 應為空字串")
+}
+
+func TestDefaultConfig_NoRemotePreset(t *testing.T) {
+	cfg := config.Default()
+
+	// Remote 已棄用，Default() 不設值（nil）
+	assert.Nil(t, cfg.Remote, "Default() 的 Remote 應為 nil（已棄用）")
+}
+
+func TestHostEntry_ArchivedRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cfg := config.Default()
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{
+			Name: "server", Address: "10.0.0.1", Color: "#73daca", Enabled: false, SortOrder: 1,
+			BarBG: "#1a2b2b", BarFG: "#e0e0e0", BadgeBG: "#73daca", BadgeFG: "#1a1b26",
+			Archived: true,
+		},
+	}
+
+	err := config.SaveConfig(path, cfg)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	loaded, err := config.LoadFromString(string(data))
+	require.NoError(t, err)
+
+	require.Len(t, loaded.Hosts, 2)
+	s := loaded.Hosts[1]
+	assert.Equal(t, "#1a2b2b", s.BarBG, "bar_bg 應 round-trip 正確")
+	assert.Equal(t, "#e0e0e0", s.BarFG, "bar_fg 應 round-trip 正確")
+	assert.Equal(t, "#73daca", s.BadgeBG, "badge_bg 應 round-trip 正確")
+	assert.Equal(t, "#1a1b26", s.BadgeFG, "badge_fg 應 round-trip 正確")
+	assert.True(t, s.Archived, "archived 應 round-trip 正確")
+}
+
+// --- HostEntry.ToColorConfig 測試 ---
+
+func TestHostEntry_ToColorConfig(t *testing.T) {
+	h := config.HostEntry{
+		Color:   "#accent",
+		BarBG:   "#1a2b2b",
+		BarFG:   "#e0e0e0",
+		BadgeBG: "#73daca",
+		BadgeFG: "#1a1b26",
+	}
+	cc := h.ToColorConfig()
+	assert.Equal(t, "#1a2b2b", cc.BarBG, "BarBG 應與 host bar_bg 一致")
+	assert.Equal(t, "#e0e0e0", cc.BarFG, "BarFG 應與 host bar_fg 一致")
+	assert.Equal(t, "#73daca", cc.BadgeBG, "BadgeBG 有值時不應 fallback")
+	assert.Equal(t, "#1a1b26", cc.BadgeFG, "BadgeFG 應與 host badge_fg 一致")
+}
+
+func TestHostEntry_ToColorConfig_BadgeFallback(t *testing.T) {
+	h := config.HostEntry{
+		Color:   "#5f8787",
+		BarBG:   "#111111",
+		BarFG:   "#ffffff",
+		BadgeBG: "", // 空值 → fallback 到 Color
+		BadgeFG: "#cccccc",
+	}
+	cc := h.ToColorConfig()
+	assert.Equal(t, "#5f8787", cc.BadgeBG, "BadgeBG 為空時應 fallback 到 Color")
+	assert.Equal(t, "#111111", cc.BarBG, "BarBG 應保持不變")
+	assert.Equal(t, "#ffffff", cc.BarFG, "BarFG 應保持不變")
+	assert.Equal(t, "#cccccc", cc.BadgeFG, "BadgeFG 應保持不變")
+}
+
+func TestHostEntry_ToColorConfig_AllEmpty(t *testing.T) {
+	h := config.HostEntry{}
+	cc := h.ToColorConfig()
+	assert.Equal(t, "", cc.BarBG, "全空時 BarBG 應為空")
+	assert.Equal(t, "", cc.BarFG, "全空時 BarFG 應為空")
+	assert.Equal(t, "", cc.BadgeBG, "全空時 BadgeBG 應為空（Color 亦空，不 fallback）")
+	assert.Equal(t, "", cc.BadgeFG, "全空時 BadgeFG 應為空")
+}
+
+// --- LoadFromString 自動遷移整合測試 ---
+
+func TestLoadFromString_AutoMigrate(t *testing.T) {
+	tomlData := `
+[local]
+  badge_bg = "#5f8787"
+  badge_fg = "#c0caf5"
+
+[remote]
+  bar_bg = "#1a2b2b"
+  badge_bg = "#73daca"
+  badge_fg = "#1a1b26"
+
+[[hosts]]
+  name = "local"
+  address = ""
+  color = "#5f8787"
+  enabled = true
+
+[[hosts]]
+  name = "mlab1"
+  address = "mlab1"
+  color = "#e0af68"
+  enabled = true
+`
+	cfg, err := config.LoadFromString(tomlData)
+	require.NoError(t, err)
+
+	// mlab1 應繼承 [remote] 的顏色（四色全空 + [remote] 有值 → 繼承）
+	require.Len(t, cfg.Hosts, 2)
+	assert.Equal(t, "#1a2b2b", cfg.Hosts[1].BarBG)
+	assert.Equal(t, "#73daca", cfg.Hosts[1].BadgeBG) // [remote].badge_bg 繼承（非 color fallback）
+	assert.Equal(t, "#1a1b26", cfg.Hosts[1].BadgeFG)
+
+	// [remote] 遷移後為 nil
+	assert.Nil(t, cfg.Remote)
 }
 
 // --- AgentEntry 測試 ---

@@ -2,6 +2,27 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.37.0] - 2026-03-14
+
+### Added
+- 主機管理三態模型：啟用/停用/封存（軟刪除），按 `[n]` 新增、`[d]` 封存、`space` 啟停切換
+- 主機管理右側設定面板：`Enter`/`→` 展開，可編輯 bar_bg、bar_fg、badge_bg、badge_fg 四色
+- Per-host 顏色設定：每台主機獨立儲存四色於 `[[hosts]]` 條目，取代舊版全域 `[remote]`
+- 顏色預覽區塊：編輯顏色時即時模擬 status bar 外觀（badge + bar 色塊）
+- `Ctrl+S` 一次儲存全部主機設定，當前 attach 主機立即套用 status bar
+- `HostEntry.ToColorConfig()` 輔助方法：BadgeBG 為空時 fallback 到 Color
+- `StatusBarArgs` 支援 bar_fg：`status-style` 同時設定 bg/fg
+- Config TUI 新增 `local.bar_fg` 欄位
+- Session 列表依 enabled/archived 過濾（含 hub 模式 client 端過濾）
+- `MergeHosts` 支援 archived：封存主機不被 `--host` flag 意外啟用，新增同名自動解封存
+
+### Changed
+- `Config.Remote` 改為 `*ColorConfig`（已棄用），遷移後為 nil，`SaveConfig` 不再寫出 `[remote]` 區段
+- `LoadFromString` 自動執行 `MigrateRemoteToHosts`：舊版 `[remote]` 顏色一次性遷移到各主機
+- `applyHostBar` 改讀 per-host 四色，移除 `cfg.Remote` fallback
+- Config TUI 移除所有 `remote.*` 欄位
+- Daemon `GetConfig`/`SetConfig` 移除 `remote.*`、補齊 `local.bar_fg`
+
 ## [0.36.1] - 2026-03-14
 
 ### Fixed

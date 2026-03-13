@@ -11,6 +11,7 @@ import (
 // ColorConfig 是本地或遠端模式的顏色設定。
 type ColorConfig struct {
 	BarBG   string `toml:"bar_bg"`   // 狀態列背景色（空字串=保持 tmux 預設）
+	BarFG   string `toml:"bar_fg"`   // 狀態列前景色（空字串=保持 tmux 預設）
 	BadgeBG string `toml:"badge_bg"` // 徽章背景色
 	BadgeFG string `toml:"badge_fg"` // 徽章前景色
 }
@@ -22,11 +23,33 @@ type HostEntry struct {
 	Color     string `toml:"color"`   // accent color
 	Enabled   bool   `toml:"enabled"`
 	SortOrder int    `toml:"sort_order"`
+	// 每台主機獨立的顏色設定（覆蓋全域 local/remote）
+	BarBG   string `toml:"bar_bg"`   // 狀態列背景色
+	BarFG   string `toml:"bar_fg"`   // 狀態列前景色
+	BadgeBG string `toml:"badge_bg"` // 徽章背景色
+	BadgeFG string `toml:"badge_fg"` // 徽章前景色
+	// 封存狀態：封存後不顯示於主選單，但資料保留
+	Archived bool `toml:"archived"`
 }
 
 // IsLocal 回傳此主機是否為本機（Address 為空）。
 func (h HostEntry) IsLocal() bool {
 	return h.Address == ""
+}
+
+// ToColorConfig 將 HostEntry 的四色轉為 ColorConfig。
+// BadgeBG 為空時 fallback 到 Color。
+func (h HostEntry) ToColorConfig() ColorConfig {
+	badgeBG := h.BadgeBG
+	if badgeBG == "" && h.Color != "" {
+		badgeBG = h.Color
+	}
+	return ColorConfig{
+		BarBG:   h.BarBG,
+		BarFG:   h.BarFG,
+		BadgeBG: badgeBG,
+		BadgeFG: h.BadgeFG,
+	}
 }
 
 // AgentEntry 代表一個 agent 預設。
@@ -51,8 +74,8 @@ type Config struct {
 	InTmux          bool   `toml:"-"` // 執行時偵測，不寫入設定檔
 	InPopup         bool   `toml:"-"` // popup 模式，不寫入設定檔
 
-	Local  ColorConfig `toml:"local"`  // 本地模式顏色
-	Remote ColorConfig `toml:"remote"` // 遠端模式顏色
+	Local  ColorConfig  `toml:"local"`            // 本地模式顏色
+	Remote *ColorConfig `toml:"remote,omitempty"` // 已棄用：遷移後為 nil，SaveConfig 不再寫出
 
 	Hosts  []HostEntry  `toml:"hosts"`  // 主機清單
 	Agents []AgentEntry `toml:"agents"` // Agent 預設清單
@@ -67,13 +90,9 @@ func Default() Config {
 		PollIntervalSec: 2,
 		Local: ColorConfig{
 			BarBG:   "", // 空值=保持 tmux 預設
+			BarFG:   "", // 空值=保持 tmux 預設
 			BadgeBG: "#5f8787",
 			BadgeFG: "#c0caf5",
-		},
-		Remote: ColorConfig{
-			BarBG:   "#1a2b2b",
-			BadgeBG: "#73daca",
-			BadgeFG: "#1a1b26",
 		},
 		Hosts: []HostEntry{
 			{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
@@ -85,11 +104,13 @@ func Default() Config {
 }
 
 // LoadFromString 從 TOML 字串載入設定，未指定欄位使用預設值。
+// 解析完成後自動執行 MigrateRemoteToHosts，將舊版 [remote] 顏色遷移到各主機的獨立設定。
 func LoadFromString(data string) (Config, error) {
 	cfg := Default()
 	if _, err := toml.Decode(data, &cfg); err != nil {
 		return Config{}, err
 	}
+	MigrateRemoteToHosts(&cfg)
 	return cfg, nil
 }
 

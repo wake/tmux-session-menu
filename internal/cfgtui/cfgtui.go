@@ -51,11 +51,9 @@ type field struct {
 func clientFields(cfg config.Config) []field {
 	return []field{
 		{key: "local.bar_bg", label: "本地 bar 背景色", value: cfg.Local.BarBG},
+		{key: "local.bar_fg", label: "本地 bar 前景色", value: cfg.Local.BarFG},
 		{key: "local.badge_bg", label: "本地 badge 背景色", value: cfg.Local.BadgeBG},
 		{key: "local.badge_fg", label: "本地 badge 前景色", value: cfg.Local.BadgeFG},
-		{key: "remote.bar_bg", label: "遠端 bar 背景色", value: cfg.Remote.BarBG},
-		{key: "remote.badge_bg", label: "遠端 badge 背景色", value: cfg.Remote.BadgeBG},
-		{key: "remote.badge_fg", label: "遠端 badge 前景色", value: cfg.Remote.BadgeFG},
 	}
 }
 
@@ -65,11 +63,9 @@ func serverFields(cfg config.Config) []field {
 		{key: "preview_lines", label: "預覽行數", value: strconv.Itoa(cfg.PreviewLines)},
 		{key: "poll_interval_sec", label: "輪詢間隔", value: strconv.Itoa(cfg.PollIntervalSec)},
 		{key: "local.bar_bg", label: "本地 bar 背景色", value: cfg.Local.BarBG},
+		{key: "local.bar_fg", label: "本地 bar 前景色", value: cfg.Local.BarFG},
 		{key: "local.badge_bg", label: "本地 badge 背景色", value: cfg.Local.BadgeBG},
 		{key: "local.badge_fg", label: "本地 badge 前景色", value: cfg.Local.BadgeFG},
-		{key: "remote.bar_bg", label: "遠端 bar 背景色", value: cfg.Remote.BarBG},
-		{key: "remote.badge_bg", label: "遠端 badge 背景色", value: cfg.Remote.BadgeBG},
-		{key: "remote.badge_fg", label: "遠端 badge 前景色", value: cfg.Remote.BadgeFG},
 	}
 }
 
@@ -83,16 +79,12 @@ func defaultFieldValue(key string) string {
 		return strconv.Itoa(def.PollIntervalSec)
 	case "local.bar_bg":
 		return def.Local.BarBG
+	case "local.bar_fg":
+		return def.Local.BarFG
 	case "local.badge_bg":
 		return def.Local.BadgeBG
 	case "local.badge_fg":
 		return def.Local.BadgeFG
-	case "remote.bar_bg":
-		return def.Remote.BarBG
-	case "remote.badge_bg":
-		return def.Remote.BadgeBG
-	case "remote.badge_fg":
-		return def.Remote.BadgeFG
 	default:
 		return ""
 	}
@@ -243,20 +235,14 @@ func (m Model) ResultConfig() config.Config {
 	if v, ok := values["local.bar_bg"]; ok {
 		cfg.Local.BarBG = v
 	}
+	if v, ok := values["local.bar_fg"]; ok {
+		cfg.Local.BarFG = v
+	}
 	if v, ok := values["local.badge_bg"]; ok {
 		cfg.Local.BadgeBG = v
 	}
 	if v, ok := values["local.badge_fg"]; ok {
 		cfg.Local.BadgeFG = v
-	}
-	if v, ok := values["remote.bar_bg"]; ok {
-		cfg.Remote.BarBG = v
-	}
-	if v, ok := values["remote.badge_bg"]; ok {
-		cfg.Remote.BadgeBG = v
-	}
-	if v, ok := values["remote.badge_fg"]; ok {
-		cfg.Remote.BadgeFG = v
 	}
 
 	return cfg

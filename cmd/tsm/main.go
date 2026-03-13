@@ -431,16 +431,7 @@ func runTUI() {
 		// 遠端 session — attach
 		hostCfg := host.Config()
 		applyHostBar := func() {
-			if hostCfg.Color != "" {
-				barCfg := config.ColorConfig{
-					BarBG:   hostCfg.Color,
-					BadgeBG: hostCfg.Color,
-					BadgeFG: cfg.Remote.BadgeFG,
-				}
-				_ = tmux.ApplyStatusBar(exec, barCfg)
-			} else {
-				_ = tmux.ApplyStatusBar(exec, cfg.Remote)
-			}
+			_ = tmux.ApplyStatusBar(exec, hostCfg.ToColorConfig())
 		}
 
 		applyHostBar()
@@ -522,8 +513,9 @@ func runRemote(host string) {
 				return // 使用者按 q/esc 退出
 			}
 
-			// 套用 remote status bar 樣式
-			_ = tmux.ApplyStatusBar(exec, cfg.Remote)
+			// 套用 remote status bar 樣式（使用 per-host 四色）
+			hostEntry := findHostEntryByAddr(cfg.Hosts, host)
+			_ = tmux.ApplyStatusBar(exec, hostEntry.ToColorConfig())
 
 			// 連線到遠端 session
 			result := remote.Attach(host, selected)
@@ -550,8 +542,9 @@ func runRemote(host string) {
 
 		// 重連成功：若有目標 session 則重新 attach，否則回到選單
 		for selected != "" {
-			// 套用 remote status bar 樣式
-			_ = tmux.ApplyStatusBar(exec, cfg.Remote)
+			// 套用 remote status bar 樣式（使用 per-host 四色）
+			hostEntry2 := findHostEntryByAddr(cfg.Hosts, host)
+			_ = tmux.ApplyStatusBar(exec, hostEntry2.ToColorConfig())
 
 			result := remote.Attach(host, selected)
 
@@ -968,18 +961,9 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubCon
 			continue
 		}
 
-		// 遠端 session — attach
+		// 遠端 session — attach（使用 per-host 四色）
 		applyHostBar := func() {
-			if hostEntry.Color != "" {
-				barCfg := config.ColorConfig{
-					BarBG:   hostEntry.Color,
-					BadgeBG: hostEntry.Color,
-					BadgeFG: cfg.Remote.BadgeFG,
-				}
-				_ = tmux.ApplyStatusBar(exec, barCfg)
-			} else {
-				_ = tmux.ApplyStatusBar(exec, cfg.Remote)
-			}
+			_ = tmux.ApplyStatusBar(exec, hostEntry.ToColorConfig())
 		}
 
 		applyHostBar()
@@ -1026,6 +1010,17 @@ func findHostEntry(hosts []config.HostEntry, hostID string) *config.HostEntry {
 		}
 	}
 	return nil
+}
+
+// findHostEntryByAddr 從 host 清單中依位址查找 HostEntry（用於 runRemote 等以位址識別主機的場景）。
+// 找不到時回傳空 HostEntry（ToColorConfig 會產生空 ColorConfig）。
+func findHostEntryByAddr(hosts []config.HostEntry, addr string) config.HostEntry {
+	for _, h := range hosts {
+		if h.Address == addr {
+			return h
+		}
+	}
+	return config.HostEntry{}
 }
 
 func switchToSession(name string, readOnly bool) {

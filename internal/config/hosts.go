@@ -106,6 +106,19 @@ func mergeWithFlags(hosts []HostEntry, hostFlags []string, localFlag bool) []Hos
 			continue
 		}
 
+		// 封存主機不受旗標影響，維持停用狀態
+		if result[i].Archived {
+			result[i].Enabled = false
+			// 仍標記為已匹配，避免被當作未知主機重複新增
+			if flagSet[result[i].Name] {
+				matched[result[i].Name] = true
+			}
+			if flagSet[result[i].Address] {
+				matched[result[i].Address] = true
+			}
+			continue
+		}
+
 		// 比對 Name 或 Address
 		nameMatch := flagSet[result[i].Name]
 		addrMatch := flagSet[result[i].Address]
@@ -142,6 +155,17 @@ func mergeWithFlags(hosts []HostEntry, hostFlags []string, localFlag bool) []Hos
 	}
 
 	return result
+}
+
+// FindArchivedHost 在主機清單中尋找指定名稱且已封存的主機。
+// 找到時回傳 (true, 索引)；未找到或主機未封存時回傳 (false, -1)。
+func FindArchivedHost(hosts []HostEntry, name string) (bool, int) {
+	for i, h := range hosts {
+		if h.Name == name && h.Archived {
+			return true, i
+		}
+	}
+	return false, -1
 }
 
 // pickColor 從 DefaultColors 色池中選取第一個未使用的顏色。
