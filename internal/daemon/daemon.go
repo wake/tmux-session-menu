@@ -140,7 +140,9 @@ func (d *Daemon) Run() error {
 				})
 				return err
 			case tsmv1.MutationType_MUTATION_CREATE_SESSION:
-				_, err := svc.CreateSession(ctx, &tsmv1.CreateSessionRequest{Name: req.SessionName})
+				_, err := svc.CreateSession(ctx, &tsmv1.CreateSessionRequest{
+					Name: req.SessionName, Path: req.Path, Command: req.Command,
+				})
 				return err
 			case tsmv1.MutationType_MUTATION_MOVE_SESSION:
 				gid, _ := strconv.ParseInt(req.GroupId, 10, 64)

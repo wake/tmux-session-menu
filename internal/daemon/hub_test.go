@@ -237,6 +237,63 @@ func TestHubManager_ProxyMutation_LocalNotConfigured(t *testing.T) {
 	assert.Contains(t, resp.Error, "local mutation handler not configured")
 }
 
+func TestHubManager_ProxyMutation_CreateSessionPassesPathCommand(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	var gotPath, gotCommand string
+	mockClient := &mockMutationClient{
+		createFn: func(ctx context.Context, name, path, command string) error {
+			gotPath = path
+			gotCommand = command
+			return nil
+		},
+	}
+	mgr.setHostClient("mlab", mockClient)
+
+	resp, err := mgr.ProxyMutation(context.Background(), &tsmv1.ProxyMutationRequest{
+		HostId:      "mlab",
+		Type:        tsmv1.MutationType_MUTATION_CREATE_SESSION,
+		SessionName: "dev",
+		Path:        "~/Workspace",
+		Command:     "claude",
+	})
+
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+	assert.Equal(t, "~/Workspace", gotPath)
+	assert.Equal(t, "claude", gotCommand)
+}
+
+func TestHubManager_ProxyMutation_CreateSessionLocalPassesPathCommand(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+
+	mgr.AddHost(config.HostEntry{Name: "air", Enabled: true})
+
+	var gotReq *tsmv1.ProxyMutationRequest
+	mgr.localMutationFn = func(req *tsmv1.ProxyMutationRequest) error {
+		gotReq = req
+		return nil
+	}
+
+	resp, err := mgr.ProxyMutation(context.Background(), &tsmv1.ProxyMutationRequest{
+		HostId:      "air",
+		Type:        tsmv1.MutationType_MUTATION_CREATE_SESSION,
+		SessionName: "main",
+		Path:        "/tmp",
+		Command:     "vim",
+	})
+
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+	require.NotNil(t, gotReq)
+	assert.Equal(t, "/tmp", gotReq.Path)
+	assert.Equal(t, "vim", gotReq.Command)
+}
+
 func TestHubManager_ProxyMutation_RemoteError(t *testing.T) {
 	mhub := NewMultiHostHub()
 	mgr := NewHubManager(mhub)

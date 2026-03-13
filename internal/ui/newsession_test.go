@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/ui"
@@ -102,6 +103,47 @@ func TestNewSession_InvalidNameChars(t *testing.T) {
 	model := updated.(ui.Model)
 	assert.NotNil(t, model.Err())
 	assert.Contains(t, model.Err().Error(), "'.' 或 ':'")
+}
+
+func TestNewSession_HubModeHostTabsFromSnapshot(t *testing.T) {
+	// Hub 模式下應從 hubHostSnap 提取主機 tab
+	tsmv1Snap := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{HostId: "air", Name: "air", Color: "#5f8787", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+			{HostId: "mlab", Name: "mlab", Color: "#73daca", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+		},
+	}
+
+	m := ui.NewModel(ui.Deps{HubMode: true})
+	// 透過 HubSnapshotMsg 設定 hubHostSnap
+	m2, _ := m.Update(ui.HubSnapshotMsg{Snapshot: tsmv1Snap})
+	m = m2.(ui.Model)
+
+	m, _ = applyKey(m, "n")
+	view := m.View()
+	assert.Contains(t, view, "air")
+	assert.Contains(t, view, "mlab")
+	assert.Contains(t, view, "◄ ► 切換") // 多主機才有
+}
+
+func TestNewSession_HubModeFiltersDisconnectedHosts(t *testing.T) {
+	// Hub 模式下 DISCONNECTED 的主機不應出現在 new session tab 中
+	// 只有一台 CONNECTED → 不顯示主機切換提示
+	tsmv1Snap := &tsmv1.MultiHostSnapshot{
+		Hosts: []*tsmv1.HostState{
+			{HostId: "air", Name: "air", Color: "#5f8787", Status: tsmv1.HostStatus_HOST_STATUS_CONNECTED},
+			{HostId: "mlab", Name: "mlab", Color: "#73daca", Status: tsmv1.HostStatus_HOST_STATUS_DISCONNECTED},
+		},
+	}
+
+	m := ui.NewModel(ui.Deps{HubMode: true})
+	m2, _ := m.Update(ui.HubSnapshotMsg{Snapshot: tsmv1Snap})
+	m = m2.(ui.Model)
+
+	m, _ = applyKey(m, "n")
+	view := m.View()
+	// 只有一台可用主機，不應出現切換提示（表示 tab 區域未渲染多主機切換）
+	assert.NotContains(t, view, "◄ ► 切換")
 }
 
 func TestNewSession_HostTabsShownForMultiHost(t *testing.T) {

@@ -85,6 +85,8 @@ message ProxyMutationRequest {
   string session_name = 3;
   string new_name = 4;
   string group_id = 5;
+  string path = 6;       // session 啟動路徑
+  string command = 7;    // agent 啟動指令
 }
 
 // ProxyMutationResponse 代理操作結果。

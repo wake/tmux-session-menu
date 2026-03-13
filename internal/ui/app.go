@@ -1026,7 +1026,7 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.deps.Store != nil {
 			recentPaths, _ = m.deps.Store.RecentPaths(3)
 		}
-		// 建立可選主機清單（多主機模式）
+		// 建立可選主機清單（多主機模式或 hub 模式）
 		var hosts []hostTabInfo
 		if m.deps.HostMgr != nil {
 			for _, h := range m.deps.HostMgr.Hosts() {
@@ -1034,6 +1034,15 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if cfg.Enabled {
 					hosts = append(hosts, hostTabInfo{ID: cfg.Name, Name: cfg.Name, Color: cfg.Color})
 				}
+			}
+		} else if m.deps.HubMode && m.hubHostSnap != nil {
+			for _, h := range m.hubHostSnap.Hosts {
+				if h.Status != tsmv1.HostStatus_HOST_STATUS_CONNECTED {
+					continue // 只顯示已連線的主機，避免使用者選到不可用的目標
+				}
+				hosts = append(hosts, hostTabInfo{
+					ID: h.HostId, Name: h.Name, Color: h.Color,
+				})
 			}
 		}
 		m.newSession.initForm(m.deps.Cfg.Agents, recentPaths, hosts)
@@ -1158,7 +1167,7 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						var err error
 						if deps.HubMode {
 							err = c.ProxyMutation(context.Background(), hostID,
-								tsmv1.MutationType_MUTATION_KILL_SESSION, name, "", "")
+								tsmv1.MutationType_MUTATION_KILL_SESSION, name, "", "", "", "")
 						} else {
 							err = c.KillSession(context.Background(), name)
 						}
@@ -1332,7 +1341,7 @@ func (m Model) updateDualInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var err error
 			if m.deps.HubMode {
 				err = c.ProxyMutation(context.Background(), m.hostForCursor(),
-					tsmv1.MutationType_MUTATION_RENAME_SESSION, origName, customName, "")
+					tsmv1.MutationType_MUTATION_RENAME_SESSION, origName, customName, "", "", "")
 			} else {
 				err = c.RenameSession(context.Background(), origName, customName, newSessionName)
 			}
@@ -1438,7 +1447,7 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if m.deps.HubMode {
 					err = c.ProxyMutation(context.Background(), m.hostForCursor(),
 						tsmv1.MutationType_MUTATION_MOVE_SESSION, m.pickerTarget, "",
-						fmt.Sprintf("%d", group.ID))
+						fmt.Sprintf("%d", group.ID), "", "")
 				} else {
 					err = c.MoveSession(context.Background(), m.pickerTarget, group.ID, 0)
 				}

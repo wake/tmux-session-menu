@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
 )
 
@@ -197,10 +198,23 @@ func (m Model) updateNewSession(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		// 取得目標主機的 client
 		hostID := f.selectedHostID()
-		client := m.clientForHost(hostID)
 
-		// 建立 session
-		if client != nil {
+		// Hub 模式：透過 ProxyMutation 路由到目標主機
+		if m.deps.HubMode && m.deps.Client != nil {
+			err := m.deps.Client.ProxyMutation(context.Background(), hostID,
+				tsmv1.MutationType_MUTATION_CREATE_SESSION,
+				sessionName, "", "", path, command)
+			if err != nil {
+				m.err = err
+				m.mode = ModeNormal
+				return m, nil
+			}
+			if customName != "" {
+				_ = m.deps.Client.ProxyMutation(context.Background(), hostID,
+					tsmv1.MutationType_MUTATION_RENAME_SESSION,
+					sessionName, customName, "", "", "")
+			}
+		} else if client := m.clientForHost(hostID); client != nil {
 			if err := client.CreateSession(context.Background(), sessionName, path, command); err != nil {
 				m.err = err
 				m.mode = ModeNormal
