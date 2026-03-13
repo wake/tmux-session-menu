@@ -355,6 +355,20 @@ func (m Model) SearchQuery() string {
 // HubDegraded 回傳 hub 模式是否因 daemon 不支援而需要降級到 HostManager。
 func (m Model) HubDegraded() bool { return m.hubDegraded }
 
+// connectionMode 回傳目前的連線模式名稱，用於標題列顯示。
+func (m Model) connectionMode() string {
+	switch {
+	case m.deps.HubMode && m.deps.Client != nil:
+		return "Hub"
+	case m.deps.HostMgr != nil:
+		return "HostManager"
+	case m.deps.Client != nil:
+		return "Daemon"
+	default:
+		return "Direct"
+	}
+}
+
 // UpgradeReady 回傳是否有已下載完成可安裝的升級。
 func (m Model) UpgradeReady() bool { return m.upgradeReady }
 
@@ -1828,8 +1842,9 @@ func (m Model) View() string {
 
 	// Header
 	title := headerStyle.Render("tmux session menu")
+	mode := versionStyle.Render(" [" + m.connectionMode() + "]")
 	ver := versionStyle.Render("  " + version.String())
-	b.WriteString(title + ver + "\n")
+	b.WriteString(title + mode + ver + "\n")
 
 	// Items list
 	displayItems := m.visibleItems()
