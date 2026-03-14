@@ -1086,21 +1086,27 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 		item := fm.SelectedItem()
 		hostEntry := findHostEntry(cfg.Hosts, item.HostID)
 
-		// hub-socket 模式：路由由 resolveHubHost 決定，config 只用於顏色合併
+		// hub-socket 模式：spoke 只處理自己的 session，其他一律委託 hub
 		if hctx != nil {
-			routed := resolveHubHost(hctx, item)
-			if hostEntry != nil {
-				routed.Color = hostEntry.Color
-				routed.BarBG = hostEntry.BarBG
-				routed.BarFG = hostEntry.BarFG
-				routed.BadgeBG = hostEntry.BadgeBG
-				routed.BadgeFG = hostEntry.BadgeFG
+			if hctx.HubSelf != "" && item.HostID == hctx.HubSelf {
+				// spoke 自己的 session → 本機切換
+				switchToSession(selected, fm.ReadOnly())
+				if cfg.InPopup {
+					return hubResultExit
+				}
+				continue
 			}
-			hostEntry = routed
+			// 跨主機 session → 請求 hub 處理，然後 detach 回到 hub
+			if err := c.RequestAttach(context.Background(), item.HostID, selected); err != nil {
+				fmt.Fprintf(os.Stderr, "request attach: %v\n", err)
+				continue
+			}
+			_ = osexec.Command("tmux", "detach-client").Run()
+			return hubResultExit
 		}
 
 		if hostEntry == nil || hostEntry.IsLocal() {
-			// 本機 session
+			// 本機 session（非 hub-socket 模式）
 			switchToSession(selected, fm.ReadOnly())
 			if cfg.InPopup {
 				return hubResultExit
