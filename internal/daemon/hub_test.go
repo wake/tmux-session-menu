@@ -317,3 +317,50 @@ func TestHubManager_ProxyMutation_RemoteError(t *testing.T) {
 	assert.False(t, resp.Success)
 	assert.Contains(t, resp.Error, "session not found")
 }
+
+func TestHubManager_PendingAttach_SetAndTake(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	// 初始無 pending
+	got := mgr.TakePendingAttach()
+	assert.Nil(t, got)
+
+	// 設定 pending
+	err := mgr.SetPendingAttach("mlab", "dev")
+	require.NoError(t, err)
+
+	// 取得並清除
+	got = mgr.TakePendingAttach()
+	require.NotNil(t, got)
+	assert.Equal(t, "mlab", got.HostID)
+	assert.Equal(t, "dev", got.SessionName)
+
+	// 再取應為 nil（已清除）
+	got = mgr.TakePendingAttach()
+	assert.Nil(t, got)
+}
+
+func TestHubManager_PendingAttach_LastWriteWins(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "mlab2", Address: "mlab2", Enabled: true})
+
+	_ = mgr.SetPendingAttach("mlab", "dev")
+	_ = mgr.SetPendingAttach("mlab2", "work")
+
+	got := mgr.TakePendingAttach()
+	require.NotNil(t, got)
+	assert.Equal(t, "mlab2", got.HostID)
+	assert.Equal(t, "work", got.SessionName)
+}
+
+func TestHubManager_PendingAttach_UnknownHost(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+
+	err := mgr.SetPendingAttach("nonexistent", "dev")
+	assert.Error(t, err)
+}

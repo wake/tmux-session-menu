@@ -52,6 +52,14 @@ type HubManager struct {
 	// remote 清理用
 	remoteCancel context.CancelFunc
 	remoteWg     sync.WaitGroup
+
+	pending *pendingAttach // 受 mu 保護
+}
+
+// pendingAttach 記錄 spoke 請求的跨主機 session 切換目標。
+type pendingAttach struct {
+	HostID      string
+	SessionName string
 }
 
 // hubHost 記錄單台主機的設定、狀態與最新快照。
@@ -222,6 +230,28 @@ func (m *HubManager) dispatchRemoteMutation(
 	default:
 		return fmt.Errorf("unsupported mutation type: %v", req.Type)
 	}
+}
+
+// SetPendingAttach 設定 pending attach 目標（後寫覆蓋）。
+// hostID 必須存在於已註冊的 hosts 中。
+func (m *HubManager) SetPendingAttach(hostID, sessionName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.hosts[hostID]; !ok {
+		return fmt.Errorf("unknown host: %s", hostID)
+	}
+	m.pending = &pendingAttach{HostID: hostID, SessionName: sessionName}
+	return nil
+}
+
+// TakePendingAttach 取得並清除 pending attach（read-and-clear）。
+// 無 pending 時回傳 nil。
+func (m *HubManager) TakePendingAttach() *pendingAttach {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p := m.pending
+	m.pending = nil
+	return p
 }
 
 // StartRemoteHosts 為每台已啟用的非 local 主機啟動連線 goroutine。
