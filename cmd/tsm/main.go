@@ -191,6 +191,10 @@ func main() {
 		runUpgrade(force)
 		return
 	}
+	if args[0] == "__restore-bar" {
+		runRestoreBar()
+		return
+	}
 
 	printUsage()
 	os.Exit(1)
@@ -444,12 +448,12 @@ func runTUI() {
 		// 遠端 session — attach
 		hostCfg := host.Config()
 		applyHostBar := func() {
-			_ = tmux.ApplyStatusBar(exec, hostCfg.ToColorConfig())
+			hideStatusBar(exec)
 		}
 
 		applyHostBar()
 		result := remote.Attach(hostCfg.Address, selected)
-		_ = tmux.ApplyStatusBar(exec, cfg.Local)
+		restoreStatusBar(exec, cfg.Local)
 
 		if result == remote.AttachDetached {
 			if remote.CheckAndClearExitRequested(hostCfg.Address) {
@@ -465,7 +469,7 @@ func runTUI() {
 			}
 			applyHostBar()
 			result = remote.Attach(hostCfg.Address, selected)
-			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+			restoreStatusBar(exec, cfg.Local)
 			if result == remote.AttachDetached {
 				if remote.CheckAndClearExitRequested(hostCfg.Address) {
 					return
@@ -526,15 +530,14 @@ func runRemote(host string) {
 				return // 使用者按 q/esc 退出
 			}
 
-			// 套用 remote status bar 樣式（使用 per-host 四色）
-			hostEntry := findHostEntryByAddr(cfg.Hosts, host)
-			_ = tmux.ApplyStatusBar(exec, hostEntry.ToColorConfig())
+			// 隱藏 local status bar，只顯示 remote tmux 的 status bar
+			hideStatusBar(exec)
 
 			// 連線到遠端 session
 			result := remote.Attach(host, selected)
 
 			// 恢復 local status bar 樣式
-			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+			restoreStatusBar(exec, cfg.Local)
 
 			if result == remote.AttachDetached {
 				// 檢查遠端是否有 ctrl+e 的退出信號
@@ -555,14 +558,13 @@ func runRemote(host string) {
 
 		// 重連成功：若有目標 session 則重新 attach，否則回到選單
 		for selected != "" {
-			// 套用 remote status bar 樣式（使用 per-host 四色）
-			hostEntry2 := findHostEntryByAddr(cfg.Hosts, host)
-			_ = tmux.ApplyStatusBar(exec, hostEntry2.ToColorConfig())
+			// 隱藏 local status bar，只顯示 remote tmux 的 status bar
+			hideStatusBar(exec)
 
 			result := remote.Attach(host, selected)
 
 			// 恢復 local status bar 樣式
-			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+			restoreStatusBar(exec, cfg.Local)
 
 			if result == remote.AttachDetached {
 				if remote.CheckAndClearExitRequested(host) {
@@ -839,7 +841,7 @@ func hubReconnectLoop(
 		// re-attach 同一 session
 		applyHostBar()
 		reResult := remote.Attach(hostEntry.Address, session)
-		_ = tmux.ApplyStatusBar(exec, localColors)
+		restoreStatusBar(exec, localColors)
 
 		if reResult == remote.AttachDetached {
 			if remote.CheckAndClearExitRequested(hostEntry.Address) {
@@ -915,11 +917,47 @@ func runConfig() {
 	fmt.Println("設定已儲存")
 }
 
+// runRestoreBar 恢復 local tmux status bar（顯示 + 套用 local 配色）。
+// 用於 popup 模式 remote attach 結束後的清理。
+func runRestoreBar() {
+	exec := tmux.NewRealExecutor()
+	_, _ = exec.Execute("set-option", "status", "on")
+	cfg := loadConfig()
+	_ = tmux.ApplyStatusBar(exec, cfg.Local)
+}
+
+// hideStatusBar 隱藏 local tmux status bar，避免巢狀 tmux 雙層 bar。
+func hideStatusBar(exec tmux.Executor) {
+	_, _ = exec.Execute("set-option", "status", "off")
+}
+
+// restoreStatusBar 恢復 local tmux status bar 顯示並套用 local 配色。
+func restoreStatusBar(exec tmux.Executor, localColors config.ColorConfig) {
+	_, _ = exec.Execute("set-option", "status", "on")
+	_ = tmux.ApplyStatusBar(exec, localColors)
+}
+
+// popupRemoteAttach 在 popup 模式建立新 tmux window 執行 remote attach。
+// 隱藏 local status bar，SSH 結束後由 __restore-bar 子命令自動恢復。
+func popupRemoteAttach(exec tmux.Executor, host, session string) {
+	hideStatusBar(exec)
+	sshCmd := remote.AttachShellCommand(host, session)
+	tsmExe, _ := os.Executable()
+	if tsmExe == "" {
+		tsmExe = "tsm"
+	}
+	wrapCmd := fmt.Sprintf("%s; '%s' __restore-bar", sshCmd, tsmExe)
+	if err := osexec.Command("tmux", "new-window", "-n", session, wrapCmd).Run(); err != nil {
+		restoreStatusBar(exec, loadConfig().Local)
+	}
+}
+
 // ensureLocalStatusBar 確保 status-left 格式為最新（使用 per-session #{@tsm_name}）。
+// 同時恢復 status on，防止 remote attach 異常結束後殘留 status off。
 func ensureLocalStatusBar(cfg config.Config) {
 	if cfg.InTmux {
 		exec := tmux.NewRealExecutor()
-		_ = tmux.ApplyStatusBar(exec, cfg.Local)
+		restoreStatusBar(exec, cfg.Local)
 	}
 }
 
@@ -1137,25 +1175,22 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			continue
 		}
 
-		// 遠端 session — attach（使用 per-host 四色）
+		// 遠端 session — attach
+		// 隱藏 local status bar，只顯示 remote tmux 的 status bar，避免雙層 bar。
 		applyHostBar := func() {
-			_ = tmux.ApplyStatusBar(exec, hostEntry.ToColorConfig())
+			hideStatusBar(exec)
 		}
 
 		if cfg.InPopup {
 			// Popup 模式：在新 tmux window 執行 remote attach，popup 自行關閉。
-			// 不能在 popup 內跑 SSH，否則遠端 session 會渲染在 popup 視窗裡。
-			applyHostBar()
-			cmd := remote.AttachShellCommand(hostEntry.Address, selected)
-			if err := osexec.Command("tmux", "new-window", "-n", selected, cmd).Run(); err != nil {
-				_ = tmux.ApplyStatusBar(exec, cfg.Local)
-			}
+			// 隱藏 local status bar + SSH 結束後由 __restore-bar 恢復。
+			popupRemoteAttach(exec, hostEntry.Address, selected)
 			return hubResultExit
 		}
 
 		applyHostBar()
 		result := remote.Attach(hostEntry.Address, selected)
-		_ = tmux.ApplyStatusBar(exec, cfg.Local)
+		restoreStatusBar(exec, cfg.Local)
 
 		if result == remote.AttachDetached {
 			if remote.CheckAndClearExitRequested(hostEntry.Address) {
@@ -1173,18 +1208,16 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 				}
 				// 遠端 spoke → popup 模式走 new-window
 				if cfg.InPopup {
-					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
-					cmd := remote.AttachShellCommand(pHost.Address, pSession)
-					_ = osexec.Command("tmux", "new-window", "-n", pSession, cmd).Run()
+					popupRemoteAttach(exec, pHost.Address, pSession)
 					return hubResultExit
 				}
 				// 遠端 spoke → 直接 attach
 				pApply := func() {
-					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
+					hideStatusBar(exec)
 				}
 				pApply()
 				pResult := remote.Attach(pHost.Address, pSession)
-				_ = tmux.ApplyStatusBar(exec, cfg.Local)
+				restoreStatusBar(exec, cfg.Local)
 				if pResult == remote.AttachDetached {
 					if remote.CheckAndClearExitRequested(pHost.Address) {
 						return hubResultExit
@@ -1223,18 +1256,16 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 				}
 				// 遠端 spoke → popup 模式走 new-window
 				if cfg.InPopup {
-					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
-					cmd := remote.AttachShellCommand(pHost.Address, pSession)
-					_ = osexec.Command("tmux", "new-window", "-n", pSession, cmd).Run()
+					popupRemoteAttach(exec, pHost.Address, pSession)
 					return hubResultExit
 				}
 				// 遠端 spoke → 直接 attach
 				pApply := func() {
-					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
+					hideStatusBar(exec)
 				}
 				pApply()
 				pResult := remote.Attach(pHost.Address, pSession)
-				_ = tmux.ApplyStatusBar(exec, cfg.Local)
+				restoreStatusBar(exec, cfg.Local)
 				if pResult == remote.AttachDetached {
 					if remote.CheckAndClearExitRequested(pHost.Address) {
 						return hubResultExit
@@ -1303,10 +1334,10 @@ func switchToSession(name string, readOnly bool) {
 			// 清除可能殘留的舊版 key-table 設定（升級相容）
 			_ = osexec.Command("tmux", "set-option", "-t", name, "-u", "key-table").Run()
 
-			// 套用 local status bar 樣式
+			// 套用 local status bar 樣式（含恢復 status on，防止 remote attach 後殘留 off）
 			cfg := loadConfig()
 			exec := tmux.NewRealExecutor()
-			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+			restoreStatusBar(exec, cfg.Local)
 		}
 	} else {
 		args := []string{"attach-session", "-t", name}
