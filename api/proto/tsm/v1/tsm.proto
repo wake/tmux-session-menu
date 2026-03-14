@@ -95,6 +95,58 @@ message ProxyMutationResponse {
   string error = 2;
 }
 
+// HostConfigEntry 描述一台主機的完整設定（對應 config.HostEntry）。
+message HostConfigEntry {
+  string name = 1;
+  string address = 2;      // 唯讀，僅由 hub daemon 端設定
+  string color = 3;         // accent color（圓點、badge_bg fallback）
+  bool enabled = 4;
+  int32 sort_order = 5;
+  string bar_bg = 6;
+  string bar_fg = 7;
+  string badge_bg = 8;
+  string badge_fg = 9;
+  bool archived = 10;
+}
+
+// GetHostsConfigRequest 取得主機設定清單。
+message GetHostsConfigRequest {}
+
+// GetHostsConfigResponse 回傳主機設定清單。
+message GetHostsConfigResponse {
+  repeated HostConfigEntry hosts = 1;
+}
+
+// HostConfigAction 列舉主機設定的操作類型。
+enum HostConfigAction {
+  HOST_CONFIG_ACTION_UNSPECIFIED = 0;  // 預留：daemon 應拒絕此值
+  HOST_CONFIG_ENABLE = 1;
+  HOST_CONFIG_DISABLE = 2;
+  HOST_CONFIG_ARCHIVE = 3;
+  HOST_CONFIG_UNARCHIVE = 4;
+  HOST_CONFIG_UPDATE_COLORS = 5;
+  HOST_CONFIG_REORDER = 6;
+}
+
+// UpdateHostConfigRequest 更新主機設定。
+message UpdateHostConfigRequest {
+  string host_name = 1;
+  HostConfigAction action = 2;
+  // UPDATE_COLORS 使用：
+  string bar_bg = 3;
+  string bar_fg = 4;
+  string badge_bg = 5;
+  string badge_fg = 6;
+  string color = 7;
+  // REORDER 使用：完整排序清單（所有非封存主機名稱，按期望順序排列）
+  repeated string ordered_hosts = 8;
+}
+
+// UpdateHostConfigResponse 回傳操作後的完整主機清單。
+message UpdateHostConfigResponse {
+  repeated HostConfigEntry hosts = 1;
+}
+
 // WatchRequest 是 Watch RPC 的請求（目前為空，未來可擴充過濾條件）。
 message WatchRequest {}
 
@@ -268,4 +320,9 @@ service SessionManager {
 
   // ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
   rpc ProxyMutation(ProxyMutationRequest) returns (ProxyMutationResponse);
+
+  // GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
+  rpc GetHostsConfig(GetHostsConfigRequest) returns (GetHostsConfigResponse);
+  // UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
+  rpc UpdateHostConfig(UpdateHostConfigRequest) returns (UpdateHostConfigResponse);
 }

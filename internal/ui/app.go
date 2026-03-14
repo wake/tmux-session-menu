@@ -122,6 +122,7 @@ type Model struct {
 	// HostPicker mode（主機管理面板）
 	hostPickerCursor int
 	hubHostSnap      *tsmv1.MultiHostSnapshot // hub 模式：最新的主機快照（供 host picker 使用）
+	hubHosts         []config.HostEntry       // hub-socket 模式：從 hub daemon 取得的主機設定
 
 	// host picker 右側面板
 	hostPanelOpen    bool
@@ -733,11 +734,42 @@ func (m Model) pollInterval() time.Duration {
 	return interval
 }
 
+// isHubSocketMode 判斷是否為 hub-socket 模式（spoke 透過 reverse tunnel 連到 hub daemon）。
+// 此模式下 hosts 設定從 hub daemon 讀取，而非本地 config。
+// 需同時滿足：HubMode=true、無本地 HostMgr、有 gRPC Client。
+func (m Model) isHubSocketMode() bool {
+	return m.deps.HubMode && m.deps.HostMgr == nil && m.deps.Client != nil
+}
+
+// hubHostsConfigMsg 攜帶從 hub daemon 取得的主機設定。
+type hubHostsConfigMsg struct {
+	Hosts []config.HostEntry
+	Err   error
+}
+
+// hubHostConfigUpdatedMsg 攜帶 UpdateHostConfig RPC 的結果。
+type hubHostConfigUpdatedMsg struct {
+	Hosts []config.HostEntry
+	Err   error
+}
+
+// fetchHubHostsCmd 從 hub daemon 非同步載入主機設定。
+func fetchHubHostsCmd(c *client.Client) tea.Cmd {
+	return func() tea.Msg {
+		hosts, err := c.GetHostsConfig(context.Background())
+		return hubHostsConfigMsg{Hosts: hosts, Err: err}
+	}
+}
+
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
 	if m.deps.HubMode && m.deps.Client != nil {
 		// Hub 模式：透過 WatchMultiHost stream 接收多主機聚合快照
-		return watchHubCmd(m.deps.Client)
+		cmds := []tea.Cmd{watchHubCmd(m.deps.Client)}
+		if m.isHubSocketMode() {
+			cmds = append(cmds, fetchHubHostsCmd(m.deps.Client))
+		}
+		return tea.Batch(cmds...)
 	}
 	if m.deps.HostMgr != nil {
 		// 多主機模式（主要路徑）：立即送出目前快照，再等待後續通知
@@ -823,9 +855,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.hubHostSnap = msg.Snapshot
-		m.syncHubHostsToConfig()
+		if !m.isHubSocketMode() {
+			m.syncHubHostsToConfig()
+		}
 		inputs := ConvertMultiHostSnapshot(msg.Snapshot)
-		inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
+		if m.isHubSocketMode() {
+			inputs = FilterActiveHosts(inputs, m.hubHosts)
+		} else {
+			inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
+		}
 		m.items = FlattenMultiHost(inputs)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
@@ -838,6 +876,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, animTickCmd())
 		}
 		return m, tea.Batch(cmds...)
+	case hubHostsConfigMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else {
+			m.hubHosts = msg.Hosts
+			if m.hubHostSnap != nil {
+				m.rebuildHubItems()
+			}
+		}
+		return m, nil
+	case hubHostConfigUpdatedMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else if msg.Hosts != nil {
+			m.hubHosts = msg.Hosts
+			m.rebuildHubItems()
+			visible := m.visibleHubHosts()
+			if m.hostPickerCursor >= len(visible) && len(visible) > 0 {
+				m.hostPickerCursor = len(visible) - 1
+			}
+		}
+		return m, nil
 	case MultiHostSnapshotMsg:
 		filtered := FilterActiveHosts(msg.Snapshots, m.deps.Cfg.Hosts)
 		m.items = FlattenMultiHost(filtered)
@@ -1057,9 +1117,22 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else if m.deps.HubMode && m.hubHostSnap != nil {
+			enabledHosts := make(map[string]bool)
+			hostSource := m.deps.Cfg.Hosts
+			if m.isHubSocketMode() {
+				hostSource = m.hubHosts
+			}
+			for _, h := range hostSource {
+				if h.Enabled && !h.Archived {
+					enabledHosts[h.Name] = true
+				}
+			}
 			for _, h := range m.hubHostSnap.Hosts {
 				if h.Status != tsmv1.HostStatus_HOST_STATUS_CONNECTED {
-					continue // 只顯示已連線的主機，避免使用者選到不可用的目標
+					continue
+				}
+				if !enabledHosts[h.Name] {
+					continue
 				}
 				hosts = append(hosts, hostTabInfo{
 					ID: h.HostId, Name: h.Name, Color: h.Color,
@@ -1128,6 +1201,9 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.deps.HostMgr != nil || (m.deps.HubMode && m.hubHostSnap != nil) {
 			m.mode = ModeHostPicker
 			m.hostPickerCursor = 0
+			if m.isHubSocketMode() {
+				return m, fetchHubHostsCmd(m.deps.Client)
+			}
 			return m, nil
 		}
 		return m, nil
@@ -1298,7 +1374,21 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				_ = m.deps.HostMgr.Enable(context.Background(), value)
 				m.persistHosts()
 			} else if m.deps.HubMode {
-				// Hub 模式：直接操作 deps.Cfg.Hosts
+				// hub-socket 模式：透過 RPC 操作
+				if m.isHubSocketMode() {
+					if found, _ := config.FindArchivedHost(m.hubHosts, value); found {
+						return m, func() tea.Msg {
+							updated, err := m.deps.Client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+								HostName: value,
+								Action:   tsmv1.HostConfigAction_HOST_CONFIG_UNARCHIVE,
+							})
+							return hubHostConfigUpdatedMsg{Hosts: updated, Err: err}
+						}
+					}
+					m.mode = ModeHostPicker
+					return m, nil
+				}
+				// tsm --host 模式：直接操作 deps.Cfg.Hosts
 				// 檢查是否有同名封存主機 → 解封存
 				if found, idx := config.FindArchivedHost(m.deps.Cfg.Hosts, value); found {
 					m.deps.Cfg.Hosts[idx].Archived = false

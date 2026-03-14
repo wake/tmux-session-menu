@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -30,6 +31,7 @@ type Service struct {
 	hubMgr    *HubManager   // nil = 非 hub 模式
 	state     *StateManager
 	startedAt time.Time
+	cfgMu     sync.Mutex
 }
 
 // NewService 建立新的 gRPC service。
@@ -303,16 +305,125 @@ func (s *Service) ProxyMutation(
 	return s.hubMgr.ProxyMutation(ctx, req)
 }
 
+// loadServerConfigPath 回傳 config.toml 路徑，優先使用 TSM_CONFIG_PATH 環境變數。
+func loadServerConfigPath() string {
+	if p := os.Getenv("TSM_CONFIG_PATH"); p != "" {
+		return p
+	}
+	return config.ExpandPath("~/.config/tsm/config.toml")
+}
+
 // loadServerConfig 讀取伺服器端的 config.toml，讀取失敗時回傳預設值。
 func loadServerConfig() config.Config {
 	cfg := config.Default()
-	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
+	cfgPath := loadServerConfigPath()
 	if data, err := os.ReadFile(cfgPath); err == nil {
 		if loaded, err := config.LoadFromString(string(data)); err == nil {
 			cfg = loaded
 		}
 	}
 	return cfg
+}
+
+// hostEntryToProto 將 config.HostEntry 轉換為 proto HostConfigEntry。
+func hostEntryToProto(h config.HostEntry) *tsmv1.HostConfigEntry {
+	return &tsmv1.HostConfigEntry{
+		Name:      h.Name,
+		Address:   h.Address,
+		Color:     h.Color,
+		Enabled:   h.Enabled,
+		SortOrder: int32(h.SortOrder),
+		BarBg:     h.BarBG,
+		BarFg:     h.BarFG,
+		BadgeBg:   h.BadgeBG,
+		BadgeFg:   h.BadgeFG,
+		Archived:  h.Archived,
+	}
+}
+
+// hostEntriesToProto 批次轉換 HostEntry 切片。
+func hostEntriesToProto(hosts []config.HostEntry) []*tsmv1.HostConfigEntry {
+	result := make([]*tsmv1.HostConfigEntry, len(hosts))
+	for i, h := range hosts {
+		result[i] = hostEntryToProto(h)
+	}
+	return result
+}
+
+// GetHostsConfig 取得 daemon 所在主機的 hosts 設定清單。
+func (s *Service) GetHostsConfig(_ context.Context, _ *tsmv1.GetHostsConfigRequest) (*tsmv1.GetHostsConfigResponse, error) {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	cfg := loadServerConfig()
+	return &tsmv1.GetHostsConfigResponse{
+		Hosts: hostEntriesToProto(cfg.Hosts),
+	}, nil
+}
+
+// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定（啟用/停用/封存/解封存/顏色/排序）。
+func (s *Service) UpdateHostConfig(_ context.Context, req *tsmv1.UpdateHostConfigRequest) (*tsmv1.UpdateHostConfigResponse, error) {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+
+	cfgPath := loadServerConfigPath()
+	cfg := loadServerConfig()
+
+	// REORDER 不需要 host_name，直接套用排序後存檔
+	if req.Action == tsmv1.HostConfigAction_HOST_CONFIG_REORDER {
+		for i, name := range req.OrderedHosts {
+			for j := range cfg.Hosts {
+				if cfg.Hosts[j].Name == name {
+					cfg.Hosts[j].SortOrder = i
+					break
+				}
+			}
+		}
+		if err := config.SaveConfig(cfgPath, cfg); err != nil {
+			return nil, status.Errorf(codes.Internal, "save config: %v", err)
+		}
+		return &tsmv1.UpdateHostConfigResponse{Hosts: hostEntriesToProto(cfg.Hosts)}, nil
+	}
+
+	if req.Action == tsmv1.HostConfigAction_HOST_CONFIG_ACTION_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "action unspecified")
+	}
+
+	// 找目標主機
+	idx := -1
+	for i, h := range cfg.Hosts {
+		if h.Name == req.HostName {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return nil, status.Errorf(codes.NotFound, "host %q not found", req.HostName)
+	}
+
+	switch req.Action {
+	case tsmv1.HostConfigAction_HOST_CONFIG_ENABLE:
+		cfg.Hosts[idx].Enabled = true
+	case tsmv1.HostConfigAction_HOST_CONFIG_DISABLE:
+		cfg.Hosts[idx].Enabled = false
+	case tsmv1.HostConfigAction_HOST_CONFIG_ARCHIVE:
+		cfg.Hosts[idx].Archived = true
+		cfg.Hosts[idx].Enabled = false
+	case tsmv1.HostConfigAction_HOST_CONFIG_UNARCHIVE:
+		cfg.Hosts[idx].Archived = false
+		cfg.Hosts[idx].Enabled = true
+	case tsmv1.HostConfigAction_HOST_CONFIG_UPDATE_COLORS:
+		cfg.Hosts[idx].BarBG = req.BarBg
+		cfg.Hosts[idx].BarFG = req.BarFg
+		cfg.Hosts[idx].BadgeBG = req.BadgeBg
+		cfg.Hosts[idx].BadgeFG = req.BadgeFg
+		cfg.Hosts[idx].Color = req.Color
+	}
+
+	config.SyncLocalHostToConfig(&cfg)
+	if err := config.SaveConfig(cfgPath, cfg); err != nil {
+		return nil, status.Errorf(codes.Internal, "save config: %v", err)
+	}
+	return &tsmv1.UpdateHostConfigResponse{Hosts: hostEntriesToProto(cfg.Hosts)}, nil
 }
 
 // GetConfig 取得 daemon 所在主機的設定。

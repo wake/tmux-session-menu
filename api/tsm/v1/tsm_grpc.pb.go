@@ -37,6 +37,8 @@ const (
 	SessionManager_ReportUploadResult_FullMethodName = "/tsm.v1.SessionManager/ReportUploadResult"
 	SessionManager_WatchMultiHost_FullMethodName     = "/tsm.v1.SessionManager/WatchMultiHost"
 	SessionManager_ProxyMutation_FullMethodName      = "/tsm.v1.SessionManager/ProxyMutation"
+	SessionManager_GetHostsConfig_FullMethodName     = "/tsm.v1.SessionManager/GetHostsConfig"
+	SessionManager_UpdateHostConfig_FullMethodName   = "/tsm.v1.SessionManager/UpdateHostConfig"
 )
 
 // SessionManagerClient is the client API for SessionManager service.
@@ -73,6 +75,10 @@ type SessionManagerClient interface {
 	WatchMultiHost(ctx context.Context, in *WatchMultiHostRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MultiHostSnapshot], error)
 	// ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
 	ProxyMutation(ctx context.Context, in *ProxyMutationRequest, opts ...grpc.CallOption) (*ProxyMutationResponse, error)
+	// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
+	GetHostsConfig(ctx context.Context, in *GetHostsConfigRequest, opts ...grpc.CallOption) (*GetHostsConfigResponse, error)
+	// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
+	UpdateHostConfig(ctx context.Context, in *UpdateHostConfigRequest, opts ...grpc.CallOption) (*UpdateHostConfigResponse, error)
 }
 
 type sessionManagerClient struct {
@@ -271,6 +277,26 @@ func (c *sessionManagerClient) ProxyMutation(ctx context.Context, in *ProxyMutat
 	return out, nil
 }
 
+func (c *sessionManagerClient) GetHostsConfig(ctx context.Context, in *GetHostsConfigRequest, opts ...grpc.CallOption) (*GetHostsConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetHostsConfigResponse)
+	err := c.cc.Invoke(ctx, SessionManager_GetHostsConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionManagerClient) UpdateHostConfig(ctx context.Context, in *UpdateHostConfigRequest, opts ...grpc.CallOption) (*UpdateHostConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateHostConfigResponse)
+	err := c.cc.Invoke(ctx, SessionManager_UpdateHostConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionManagerServer is the server API for SessionManager service.
 // All implementations must embed UnimplementedSessionManagerServer
 // for forward compatibility.
@@ -305,6 +331,10 @@ type SessionManagerServer interface {
 	WatchMultiHost(*WatchMultiHostRequest, grpc.ServerStreamingServer[MultiHostSnapshot]) error
 	// ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
 	ProxyMutation(context.Context, *ProxyMutationRequest) (*ProxyMutationResponse, error)
+	// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
+	GetHostsConfig(context.Context, *GetHostsConfigRequest) (*GetHostsConfigResponse, error)
+	// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
+	UpdateHostConfig(context.Context, *UpdateHostConfigRequest) (*UpdateHostConfigResponse, error)
 	mustEmbedUnimplementedSessionManagerServer()
 }
 
@@ -365,6 +395,12 @@ func (UnimplementedSessionManagerServer) WatchMultiHost(*WatchMultiHostRequest, 
 }
 func (UnimplementedSessionManagerServer) ProxyMutation(context.Context, *ProxyMutationRequest) (*ProxyMutationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ProxyMutation not implemented")
+}
+func (UnimplementedSessionManagerServer) GetHostsConfig(context.Context, *GetHostsConfigRequest) (*GetHostsConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetHostsConfig not implemented")
+}
+func (UnimplementedSessionManagerServer) UpdateHostConfig(context.Context, *UpdateHostConfigRequest) (*UpdateHostConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateHostConfig not implemented")
 }
 func (UnimplementedSessionManagerServer) mustEmbedUnimplementedSessionManagerServer() {}
 func (UnimplementedSessionManagerServer) testEmbeddedByValue()                        {}
@@ -679,6 +715,42 @@ func _SessionManager_ProxyMutation_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SessionManager_GetHostsConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetHostsConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).GetHostsConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_GetHostsConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).GetHostsConfig(ctx, req.(*GetHostsConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SessionManager_UpdateHostConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateHostConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).UpdateHostConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_UpdateHostConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).UpdateHostConfig(ctx, req.(*UpdateHostConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SessionManager_ServiceDesc is the grpc.ServiceDesc for SessionManager service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -745,6 +817,14 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ProxyMutation",
 			Handler:    _SessionManager_ProxyMutation_Handler,
+		},
+		{
+			MethodName: "GetHostsConfig",
+			Handler:    _SessionManager_GetHostsConfig_Handler,
+		},
+		{
+			MethodName: "UpdateHostConfig",
+			Handler:    _SessionManager_UpdateHostConfig_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

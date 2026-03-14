@@ -300,6 +300,49 @@ func tryConnect(ctx context.Context, sockPath string) (*grpc.ClientConn, error) 
 	return conn, nil
 }
 
+// protoToHostEntry 將 proto HostConfigEntry 轉換為 config.HostEntry。
+func protoToHostEntry(h *tsmv1.HostConfigEntry) config.HostEntry {
+	return config.HostEntry{
+		Name:      h.Name,
+		Address:   h.Address,
+		Color:     h.Color,
+		Enabled:   h.Enabled,
+		SortOrder: int(h.SortOrder),
+		BarBG:     h.BarBg,
+		BarFG:     h.BarFg,
+		BadgeBG:   h.BadgeBg,
+		BadgeFG:   h.BadgeFg,
+		Archived:  h.Archived,
+	}
+}
+
+// protoToHostEntries 將 []*tsmv1.HostConfigEntry 轉換為 []config.HostEntry。
+func protoToHostEntries(hosts []*tsmv1.HostConfigEntry) []config.HostEntry {
+	result := make([]config.HostEntry, len(hosts))
+	for i, h := range hosts {
+		result[i] = protoToHostEntry(h)
+	}
+	return result
+}
+
+// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
+func (c *Client) GetHostsConfig(ctx context.Context) ([]config.HostEntry, error) {
+	resp, err := c.rpc.GetHostsConfig(ctx, &tsmv1.GetHostsConfigRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return protoToHostEntries(resp.Hosts), nil
+}
+
+// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定，回傳更新後的完整清單。
+func (c *Client) UpdateHostConfig(ctx context.Context, req *tsmv1.UpdateHostConfigRequest) ([]config.HostEntry, error) {
+	resp, err := c.rpc.UpdateHostConfig(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return protoToHostEntries(resp.Hosts), nil
+}
+
 // autoStartDaemon fork 一個背景 daemon 程序，並等待它就緒。
 func autoStartDaemon(sockPath string) error {
 	exe, err := daemon.ResolveExe()
