@@ -736,12 +736,19 @@ func (m Model) pollInterval() time.Duration {
 
 // isHubSocketMode 判斷是否為 hub-socket 模式（spoke 透過 reverse tunnel 連到 hub daemon）。
 // 此模式下 hosts 設定從 hub daemon 讀取，而非本地 config。
+// 需同時滿足：HubMode=true、無本地 HostMgr、有 gRPC Client。
 func (m Model) isHubSocketMode() bool {
-	return m.deps.HubMode && m.deps.HostMgr == nil
+	return m.deps.HubMode && m.deps.HostMgr == nil && m.deps.Client != nil
 }
 
 // hubHostsConfigMsg 攜帶從 hub daemon 取得的主機設定。
 type hubHostsConfigMsg struct {
+	Hosts []config.HostEntry
+	Err   error
+}
+
+// hubHostConfigUpdatedMsg 攜帶 UpdateHostConfig RPC 的結果。
+type hubHostConfigUpdatedMsg struct {
 	Hosts []config.HostEntry
 	Err   error
 }
@@ -874,6 +881,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hubHosts = msg.Hosts
 			if m.hubHostSnap != nil {
 				m.rebuildHubItems()
+			}
+		}
+		return m, nil
+	case hubHostConfigUpdatedMsg:
+		if msg.Err == nil && msg.Hosts != nil {
+			m.hubHosts = msg.Hosts
+			m.rebuildHubItems()
+			visible := m.visibleHubHosts()
+			if m.hostPickerCursor >= len(visible) && len(visible) > 0 {
+				m.hostPickerCursor = len(visible) - 1
 			}
 		}
 		return m, nil
@@ -1353,7 +1370,21 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				_ = m.deps.HostMgr.Enable(context.Background(), value)
 				m.persistHosts()
 			} else if m.deps.HubMode {
-				// Hub 模式：直接操作 deps.Cfg.Hosts
+				// hub-socket 模式：透過 RPC 操作
+				if m.isHubSocketMode() {
+					if found, _ := config.FindArchivedHost(m.hubHosts, value); found {
+						return m, func() tea.Msg {
+							updated, err := m.deps.Client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+								HostName: value,
+								Action:   tsmv1.HostConfigAction_HOST_CONFIG_UNARCHIVE,
+							})
+							return hubHostConfigUpdatedMsg{Hosts: updated, Err: err}
+						}
+					}
+					m.mode = ModeHostPicker
+					return m, nil
+				}
+				// tsm --host 模式：直接操作 deps.Cfg.Hosts
 				// 檢查是否有同名封存主機 → 解封存
 				if found, idx := config.FindArchivedHost(m.deps.Cfg.Hosts, value); found {
 					m.deps.Cfg.Hosts[idx].Archived = false

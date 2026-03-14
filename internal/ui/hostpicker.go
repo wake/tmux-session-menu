@@ -23,6 +23,7 @@ type hostDraftEntry struct {
 	BarFG   string
 	BadgeBG string
 	BadgeFG string
+	Color   string
 }
 
 // hostPanelFieldCount 是右側面板的欄位數量（0=啟用, 1=bar_bg, 2=bar_fg, 3=badge_bg, 4=badge_fg）。
@@ -690,6 +691,7 @@ func (m *Model) ensureDraftFromEntry(entry config.HostEntry) {
 		BarFG:   entry.BarFG,
 		BadgeBG: entry.BadgeBG,
 		BadgeFG: entry.BadgeFG,
+		Color:   entry.Color,
 	}
 }
 
@@ -764,6 +766,37 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Ctrl+S 儲存（面板開啟或關閉皆可）
 	if msg.String() == "ctrl+s" {
+		if m.isHubSocketMode() {
+			drafts := make(map[string]hostDraftEntry, len(m.hostPanelDraft))
+			for k, v := range m.hostPanelDraft {
+				drafts[k] = v
+			}
+			c := m.deps.Client
+			m.hostPanelOpen = false
+			m.hostPanelEditing = false
+			m.hostSavedMsg = "已儲存"
+			return m, func() tea.Msg {
+				var updated []config.HostEntry
+				var lastErr error
+				for hostName, draft := range drafts {
+					result, err := c.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+						HostName: hostName,
+						Action:   tsmv1.HostConfigAction_HOST_CONFIG_UPDATE_COLORS,
+						BarBg:    draft.BarBG,
+						BarFg:    draft.BarFG,
+						BadgeBg:  draft.BadgeBG,
+						BadgeFg:  draft.BadgeFG,
+						Color:    draft.Color,
+					})
+					if err != nil {
+						lastErr = err
+					} else {
+						updated = result
+					}
+				}
+				return hubHostConfigUpdatedMsg{Hosts: updated, Err: lastErr}
+			}
+		}
 		m.applyHubHostDrafts()
 		m.persistHubHosts()
 		m.rebuildHubItems()
@@ -808,9 +841,22 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.hostPickerCursor--
 		}
 	case " ":
-		// 切換啟用/停用：直接修改 deps.Cfg.Hosts 並持久化，立即重建 session 列表
+		// 切換啟用/停用
 		if m.hostPickerCursor < len(hosts) {
 			h := hosts[m.hostPickerCursor]
+			if m.isHubSocketMode() {
+				action := tsmv1.HostConfigAction_HOST_CONFIG_DISABLE
+				if !h.Enabled {
+					action = tsmv1.HostConfigAction_HOST_CONFIG_ENABLE
+				}
+				return m, func() tea.Msg {
+					updated, err := m.deps.Client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+						HostName: h.Name,
+						Action:   action,
+					})
+					return hubHostConfigUpdatedMsg{Hosts: updated, Err: err}
+				}
+			}
 			origIdx := m.hubHostOriginalIndex(h.Name)
 			if origIdx >= 0 {
 				m.deps.Cfg.Hosts[origIdx].Enabled = !m.deps.Cfg.Hosts[origIdx].Enabled
@@ -821,6 +867,22 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "J", "shift+down":
 		// 下移
 		if m.hostPickerCursor < len(hosts)-1 {
+			if m.isHubSocketMode() {
+				reordered := make([]string, len(hosts))
+				for i, h := range hosts {
+					reordered[i] = h.Name
+				}
+				cur := m.hostPickerCursor
+				reordered[cur], reordered[cur+1] = reordered[cur+1], reordered[cur]
+				m.hostPickerCursor++
+				return m, func() tea.Msg {
+					updated, err := m.deps.Client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+						Action:       tsmv1.HostConfigAction_HOST_CONFIG_REORDER,
+						OrderedHosts: reordered,
+					})
+					return hubHostConfigUpdatedMsg{Hosts: updated, Err: err}
+				}
+			}
 			curName := hosts[m.hostPickerCursor].Name
 			nextName := hosts[m.hostPickerCursor+1].Name
 			curIdx := m.hubHostOriginalIndex(curName)
@@ -834,6 +896,22 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "K", "shift+up":
 		// 上移
 		if m.hostPickerCursor > 0 {
+			if m.isHubSocketMode() {
+				reordered := make([]string, len(hosts))
+				for i, h := range hosts {
+					reordered[i] = h.Name
+				}
+				cur := m.hostPickerCursor
+				reordered[cur], reordered[cur-1] = reordered[cur-1], reordered[cur]
+				m.hostPickerCursor--
+				return m, func() tea.Msg {
+					updated, err := m.deps.Client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+						Action:       tsmv1.HostConfigAction_HOST_CONFIG_REORDER,
+						OrderedHosts: reordered,
+					})
+					return hubHostConfigUpdatedMsg{Hosts: updated, Err: err}
+				}
+			}
 			curName := hosts[m.hostPickerCursor].Name
 			prevName := hosts[m.hostPickerCursor-1].Name
 			curIdx := m.hubHostOriginalIndex(curName)
@@ -857,6 +935,15 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.hostPickerCursor < len(hosts) {
 			h := hosts[m.hostPickerCursor]
 			if !h.IsLocal() {
+				if m.isHubSocketMode() {
+					return m, func() tea.Msg {
+						updated, err := m.deps.Client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+							HostName: h.Name,
+							Action:   tsmv1.HostConfigAction_HOST_CONFIG_ARCHIVE,
+						})
+						return hubHostConfigUpdatedMsg{Hosts: updated, Err: err}
+					}
+				}
 				origIdx := m.hubHostOriginalIndex(h.Name)
 				if origIdx >= 0 {
 					m.deps.Cfg.Hosts[origIdx].Archived = true
