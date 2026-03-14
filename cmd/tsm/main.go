@@ -325,7 +325,7 @@ func runTUI() {
 	if hubSocket != "" {
 		if c, err := client.DialSocket(hubSocket); err == nil {
 			hctx := readHubContext()
-			result := runHubTUI(c, cfg, cfgPath, hctx)
+			result := runHubTUI(c, cfg, cfgPath, hubSocket, hctx)
 			if result == hubResultExit || result == hubResultDegraded || result == hubResultError {
 				return
 			}
@@ -342,7 +342,7 @@ func runTUI() {
 
 	// 多主機模式：嘗試 Hub（WatchMultiHost），降級時走 HostManager
 	if c, err := client.Dial(cfg); err == nil {
-		result := runHubTUI(c, cfg, cfgPath, nil)
+		result := runHubTUI(c, cfg, cfgPath, "", nil)
 		if result == hubResultExit {
 			return
 		}
@@ -569,6 +569,31 @@ func runRemote(host string) {
 	}
 }
 
+// reconnLoop 在 ctx 取消前不斷重試 dialFn。
+// 每次嘗試前呼叫 notifyFn(StateConnecting)。
+// 成功時依序呼叫 successFn 與 notifyFn(StateConnected)。
+// 失敗時等待 retryDelay 再重試。
+func reconnLoop(ctx context.Context, dialFn func(ctx context.Context) error, retryDelay time.Duration, notifyFn func(remote.ReconnStateMsg), successFn func()) {
+	for {
+		notifyFn(remote.ReconnStateMsg{State: remote.StateConnecting})
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if err := dialFn(ctx); err == nil {
+			successFn()
+			notifyFn(remote.ReconnStateMsg{State: remote.StateConnected})
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(retryDelay):
+		}
+	}
+}
+
 // doReconnect 顯示重連 modal 並背景嘗試重建 SSH tunnel + gRPC。
 // 成功回傳新的 client，使用者放棄回傳 nil。
 func doReconnect(host, session string, tun *remote.Tunnel) *client.Client {
@@ -708,6 +733,74 @@ func doMultiHostReconnect(mgr *hostmgr.HostManager, hostID, session string) bool
 	}
 
 	return true
+}
+
+// doHubReconnect 顯示重連 modal 並背景嘗試重建 gRPC client 到 daemon。
+// hubSocket 非空時使用 DialSocket（hub-socket 模式），否則使用 Dial（本地 daemon，含 auto-start）。
+// 成功回傳新的 client，使用者放棄回傳 nil。
+func doHubReconnect(cfg config.Config, host, session, hubSocket string) *client.Client {
+	rm := remote.NewReconnectModel(host, session)
+	reconnProg := tea.NewProgram(rm, tea.WithAltScreen())
+
+	type reconnResult struct {
+		client *client.Client
+	}
+	resultCh := make(chan reconnResult, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		defer close(resultCh)
+		var newC *client.Client
+		reconnLoop(ctx, func(dialCtx context.Context) error {
+			var c *client.Client
+			var err error
+			if hubSocket != "" {
+				c, err = client.DialSocket(hubSocket)
+			} else {
+				c, err = client.Dial(cfg)
+			}
+			if err != nil {
+				return err
+			}
+			newC = c
+			return nil
+		}, time.Second, func(msg remote.ReconnStateMsg) {
+			reconnProg.Send(msg)
+		}, func() {
+			resultCh <- reconnResult{client: newC}
+		})
+	}()
+
+	reconnFinal, err := reconnProg.Run()
+	cancel()
+
+	if err != nil {
+		return nil
+	}
+
+	rfm, ok := reconnFinal.(remote.ReconnectModel)
+	if !ok {
+		return nil
+	}
+
+	// 嘗試取得新 client（短暫等待以防 goroutine 尚未寫入）
+	var newC *client.Client
+	select {
+	case res, ok := <-resultCh:
+		if ok && res.client != nil {
+			newC = res.client
+		}
+	case <-time.After(2 * time.Second):
+	}
+
+	if rfm.Quit() {
+		if newC != nil {
+			newC.Close()
+		}
+		return nil
+	}
+
+	return newC
 }
 
 // runStatusName 輸出當前 session 的自訂名稱，供 tmux status bar 使用。
@@ -874,7 +967,7 @@ func runDaemonTUI(cfg config.Config, cfgPath string) {
 // runHubTUI 執行 hub 模式的 TUI 迴圈：顯示 sessions → 選取 → attach → 回到 TUI。
 // 處理 session 選取、config 開啟、升級、及遠端 attach 重連。
 // hctx 為 hub-socket 模式的額外資訊，非 hub-socket 模式傳入 nil。
-func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubContext) hubResult {
+func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, hctx *hubContext) hubResult {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	if wErr := c.WatchMultiHost(hubCtx); wErr != nil {
 		hubCancel()
@@ -988,7 +1081,37 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath string, hctx *hubCon
 			continue
 		}
 
-		// 斷線 → hub daemon 會自動重連遠端主機，回到 TUI 讓使用者重選
+		// 斷線 → 顯示重連 modal，嘗試重建 daemon 連線後 re-attach 同一 session
+		for {
+			newC := doHubReconnect(cfg, hostEntry.Address, selected, hubSocket)
+			if newC == nil {
+				// 使用者放棄 → 回到 TUI 選單
+				break
+			}
+			hubCancel()
+			c.Close()
+			c = newC
+
+			// 重建 WatchMultiHost stream
+			hubCtx, hubCancel = context.WithCancel(context.Background())
+			if wErr := c.WatchMultiHost(hubCtx); wErr != nil {
+				// stream 建立失敗 → 再次重連
+				continue
+			}
+
+			// re-attach 同一 session
+			applyHostBar()
+			reResult := remote.Attach(hostEntry.Address, selected)
+			_ = tmux.ApplyStatusBar(exec, cfg.Local)
+
+			if reResult == remote.AttachDetached {
+				if remote.CheckAndClearExitRequested(hostEntry.Address) {
+					return hubResultExit
+				}
+				break // 正常 detach → 回到 TUI 選單
+			}
+			// 又斷線 → 繼續重連迴圈
+		}
 		continue
 	}
 }
