@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"testing"
 	"time"
 
@@ -82,26 +81,6 @@ func TestReconnLoop_SendsConnectingOnEachAttempt(t *testing.T) {
 		remote.StateConnecting,
 		remote.StateConnected,
 	}, states)
-}
-
-func TestDetectLocalAddr_Loopback(t *testing.T) {
-	// 連到 127.0.0.1 時，出口 IP 應為 127.0.0.1
-	got := detectLocalAddr("127.0.0.1")
-	assert.Equal(t, "127.0.0.1", got)
-}
-
-func TestDetectLocalAddr_StripUser(t *testing.T) {
-	// user@host 格式應正確解析（127.0.0.1 保證可達）
-	got := detectLocalAddr("user@127.0.0.1")
-	assert.Equal(t, "127.0.0.1", got)
-}
-
-func TestDetectLocalAddr_Unreachable(t *testing.T) {
-	// TEST-NET-1 (RFC 5737)：OS 可能透過預設路由回傳出口 IP，也可能失敗
-	got := detectLocalAddr("192.0.2.1")
-	if got != "" {
-		assert.NotNil(t, net.ParseIP(got), "should be empty or a valid IP")
-	}
 }
 
 func TestParseRunMode(t *testing.T) {

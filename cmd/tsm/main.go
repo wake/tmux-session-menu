@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -115,14 +114,12 @@ func parseHubSocket(args []string) string {
 }
 
 // readHubContext 從 tmux 選項讀取 hub-socket 模式的額外資訊。
-// hub daemon 在建立 reverse tunnel 時會設定 @tsm_hub_host 和 @tsm_hub_self。
 func readHubContext() *hubContext {
-	hubHost := strings.TrimSpace(string(mustOutput(osexec.Command("tmux", "show-option", "-gqv", "@tsm_hub_host"))))
 	hubSelf := strings.TrimSpace(string(mustOutput(osexec.Command("tmux", "show-option", "-gqv", "@tsm_hub_self"))))
-	if hubHost == "" && hubSelf == "" {
+	if hubSelf == "" {
 		return nil
 	}
-	return &hubContext{HubHost: hubHost, HubSelf: hubSelf}
+	return &hubContext{HubSelf: hubSelf}
 }
 
 // mustOutput 執行命令並回傳 stdout，忽略錯誤（tmux 選項不存在時回傳空字串）。
@@ -941,10 +938,8 @@ const (
 )
 
 // hubContext 攜帶 hub-socket 模式的額外資訊。
-// 當透過 reverse tunnel 連線時，spoke 需要知道自己的 host ID 和 hub 的 SSH 地址。
 type hubContext struct {
-	HubHost string // hub 的 SSH 地址（用於 SSH attach 到 hub 上的 session）
-	HubSelf string // spoke 在 hub 中的 host ID（用於判斷哪些 session 是本機的）
+	HubSelf string // spoke 在 hub 中的 host ID
 }
 
 // runDaemonTUI 執行 Daemon 模式的 TUI 迴圈（tsm 無參數，只看本機）。
@@ -1204,26 +1199,6 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			}
 		}
 		continue
-	}
-}
-
-// resolveHubHost 在 hub-socket 模式下，根據 hubContext 判斷 host 是本機還是遠端。
-// 若 hostID 等於 hubSelf → 本機（Address 為空，呼叫端走 switchToSession）。
-// 否則 → 遠端，使用 hubHost 作為 SSH 地址。
-func resolveHubHost(hctx *hubContext, item ui.ListItem) *config.HostEntry {
-	// HubSelf 未知時無法可靠判斷 local vs remote，保守處理為本機
-	if hctx.HubSelf == "" {
-		return &config.HostEntry{Name: item.HostID, Address: ""}
-	}
-	if item.HostID == hctx.HubSelf {
-		// 這是 spoke 自己的 session → 本機
-		return &config.HostEntry{Name: item.HostID, Address: ""}
-	}
-	// 遠端 session：使用 hub host 地址
-	return &config.HostEntry{
-		Name:    item.HostID,
-		Address: hctx.HubHost,
-		Color:   item.HostColor,
 	}
 }
 
@@ -1861,61 +1836,27 @@ func runItermCoprocess(args []string) {
 	upload.RunCoprocess(filenames)
 }
 
-// detectLocalAddr 偵測本機連到 remoteHost 時使用的出口 IP 地址。
-// 利用 UDP dial 讓 OS 路由表決定出口介面，不實際傳送封包。
-// remoteHost 可以是 "host"、"user@host" 或 IP 格式。
-func detectLocalAddr(remoteHost string) string {
-	host := remoteHost
-	if i := strings.LastIndex(host, "@"); i >= 0 {
-		host = host[i+1:]
-	}
-	conn, err := net.DialTimeout("udp", net.JoinHostPort(host, "22"), time.Second)
-	if err != nil {
-		return ""
-	}
-	defer conn.Close()
-	udpAddr, ok := conn.LocalAddr().(*net.UDPAddr)
-	if !ok {
-		return ""
-	}
-	return udpAddr.IP.String()
-}
-
 // makeHubDialFn 建立 daemon hub 模式的遠端 dial 函式。
 // 使用 SSH tunnel（forward + reverse）+ gRPC DialSocket 連線到遠端 daemon。
 // reverse tunnel 讓遠端主機的 Ctrl+Q 能透過 @tsm_hub_socket 連回 hub daemon。
 // 放在 main.go 以避免 daemon → client 循環依賴。
 func makeHubDialFn(hubSocketPath string, hosts []config.HostEntry) daemon.HubDialFn {
-	// 建立 address → name 對照表，供設定 @tsm_hub_self 使用
 	nameByAddr := make(map[string]string)
 	for _, h := range hosts {
 		if h.Address != "" {
 			nameByAddr[h.Address] = h.Name
 		}
 	}
-	hostname, _ := os.Hostname()
 
 	return func(ctx context.Context, address string) (daemon.HubRemoteClient, func(), error) {
 		tun := remote.NewTunnel(address, remote.WithReverse(hubSocketPath))
 		if err := tun.Start(); err != nil {
 			return nil, nil, err
 		}
-		// 設定遠端 tmux 的 @tsm_hub_socket，讓 Ctrl+Q 能連回 hub
-		// 透過獨立 SSH 呼叫（非走 tunnel），失敗不影響 forward tunnel 功能
 		reverseSock := remote.ReverseSocketPath(address)
 		if err := remote.SetHubSocket(address, reverseSock); err != nil {
 			log.Printf("warn: set hub socket on %s failed: %v", address, err)
 		}
-		// 設定 @tsm_hub_host（hub 的可達 IP 地址）讓 spoke 端能 SSH 回 hub
-		// 偵測本機連到 spoke 的出口 IP，而非 os.Hostname()（hostname 可能無法從 spoke 端解析）
-		hubAddr := detectLocalAddr(address)
-		if hubAddr == "" {
-			hubAddr = hostname // 偵測失敗時 fallback 到 hostname
-		}
-		if err := remote.SetHubHost(address, hubAddr); err != nil {
-			log.Printf("warn: set hub host on %s failed: %v", address, err)
-		}
-		// 設定 @tsm_hub_self（spoke 在 hub 中的 host ID）讓 spoke 判斷哪些 session 是自己的
 		if selfName, ok := nameByAddr[address]; ok {
 			if err := remote.SetHubSelf(address, selfName); err != nil {
 				log.Printf("warn: set hub self on %s failed: %v", address, err)
@@ -1925,7 +1866,6 @@ func makeHubDialFn(hubSocketPath string, hosts []config.HostEntry) daemon.HubDia
 		c, err := client.DialSocketCtx(ctx, tun.LocalSocket())
 		if err != nil {
 			_ = remote.ClearHubSocket(address)
-			_ = remote.ClearHubHost(address)
 			_ = remote.ClearHubSelf(address)
 			tun.Close()
 			return nil, nil, err
@@ -1933,7 +1873,6 @@ func makeHubDialFn(hubSocketPath string, hosts []config.HostEntry) daemon.HubDia
 		if err := c.Watch(ctx); err != nil {
 			c.Close()
 			_ = remote.ClearHubSocket(address)
-			_ = remote.ClearHubHost(address)
 			_ = remote.ClearHubSelf(address)
 			tun.Close()
 			return nil, nil, err
@@ -1941,7 +1880,6 @@ func makeHubDialFn(hubSocketPath string, hosts []config.HostEntry) daemon.HubDia
 		cleanup := func() {
 			c.Close()
 			_ = remote.ClearHubSocket(address)
-			_ = remote.ClearHubHost(address)
 			_ = remote.ClearHubSelf(address)
 			tun.Close()
 		}
