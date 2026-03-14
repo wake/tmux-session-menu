@@ -1182,3 +1182,34 @@ func TestHubMode_HostPicker_ShowsHubHosts(t *testing.T) {
 	view := m.View()
 	assert.Contains(t, view, "mlab", "host picker 應顯示從 hub 同步的 mlab")
 }
+
+// TestApplyCurrentStatusBarCmd_HubMode 驗證 Hub 模式（HostMgr==nil）也能套用 local host 色彩。
+func TestApplyCurrentStatusBarCmd_HubMode(t *testing.T) {
+	deps := ui.Deps{
+		HubMode: true,
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", BarBG: "#111111", BarFG: "#222222", BadgeBG: "#333333", BadgeFG: "#444444"},
+				{Name: "remote", Address: "remote.local", BarBG: "#aaaaaa"},
+			},
+		},
+	}
+	m := ui.NewModel(deps)
+	cmd := m.ApplyCurrentStatusBarCmd()
+	assert.NotNil(t, cmd, "Hub mode 有 local host 時應回傳非 nil cmd")
+}
+
+// TestApplyCurrentStatusBarCmd_NoLocal 驗證無 local host 時回傳 nil。
+func TestApplyCurrentStatusBarCmd_NoLocal(t *testing.T) {
+	deps := ui.Deps{
+		HubMode: true,
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "remote", Address: "remote.local"},
+			},
+		},
+	}
+	m := ui.NewModel(deps)
+	cmd := m.ApplyCurrentStatusBarCmd()
+	assert.Nil(t, cmd, "無 local host 時應回傳 nil")
+}

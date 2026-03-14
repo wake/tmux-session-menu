@@ -896,6 +896,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.hostPickerCursor >= len(visible) && len(visible) > 0 {
 				m.hostPickerCursor = len(visible) - 1
 			}
+			// 同步 local host 色彩到 tmux status bar
+			return m, m.applyCurrentStatusBarCmd()
 		}
 		return m, nil
 	case MultiHostSnapshotMsg:
