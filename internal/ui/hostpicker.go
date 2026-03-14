@@ -384,14 +384,28 @@ func (m Model) persistHostsWithSync() {
 	_ = config.SaveConfig(cfgPath, fileCfg)
 }
 
+// ApplyCurrentStatusBarCmd 回傳套用本機 status bar 的 tea.Cmd（exported for testing）。
+func (m Model) ApplyCurrentStatusBarCmd() tea.Cmd { return m.applyCurrentStatusBarCmd() }
+
 // applyCurrentStatusBarCmd 回傳套用本機 status bar 的 tea.Cmd。
 func (m Model) applyCurrentStatusBarCmd() tea.Cmd {
-	if m.deps.HostMgr == nil {
+	if m.deps.HostMgr != nil {
+		for _, h := range m.deps.HostMgr.Hosts() {
+			if h.IsLocal() {
+				cc := h.Config().ToColorConfig()
+				return func() tea.Msg {
+					exec := tmux.NewRealExecutor()
+					_ = tmux.ApplyStatusBar(exec, cc)
+					return nil
+				}
+			}
+		}
 		return nil
 	}
-	for _, h := range m.deps.HostMgr.Hosts() {
+	// Hub mode：從 deps.Cfg.Hosts 找 local host
+	for _, h := range m.deps.Cfg.Hosts {
 		if h.IsLocal() {
-			cc := h.Config().ToColorConfig()
+			cc := h.ToColorConfig()
 			return func() tea.Msg {
 				exec := tmux.NewRealExecutor()
 				_ = tmux.ApplyStatusBar(exec, cc)
@@ -805,7 +819,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.hostPanelOpen = false
 		m.hostPanelEditing = false
 		m.hostSavedMsg = "已儲存"
-		return m, nil
+		return m, m.applyCurrentStatusBarCmd()
 	}
 
 	// 正在編輯色彩欄位：委派給 hub panel editing handler

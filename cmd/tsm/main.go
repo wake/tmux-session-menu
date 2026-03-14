@@ -312,14 +312,16 @@ func runTUI() {
 	}
 	// else: tsm --host 裸用 → 直接使用 config 中的 enabled 狀態（不存 config）
 
-	// 同步 host 旗標到 tmux @tsm_popup_args，讓 Ctrl+Q 重現相同模式
-	if cfg.InTmux {
-		syncPopupArgs(buildPopupHostArgs(args))
-	}
-
 	// Hub 模式：若提供 --hub-socket，嘗試透過 reverse tunnel socket 連線到 hub daemon
 	// 連線失敗時 graceful degradation 到 local 模式
 	hubSocket := parseHubSocket(args)
+
+	// 同步 host 旗標到 tmux @tsm_popup_args，讓 Ctrl+Q 重現相同模式
+	// hub-socket mode 不覆寫：避免清空 @tsm_popup_args，否則 tunnel 斷線時
+	// bind block fallback 會變成 tsm --inline（純 Daemon mode）
+	if cfg.InTmux && hubSocket == "" {
+		syncPopupArgs(buildPopupHostArgs(args))
+	}
 	if hubSocket != "" {
 		if c, err := client.DialSocket(hubSocket); err == nil {
 			hctx := readHubContext()
