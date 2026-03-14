@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.42.1] - 2026-03-14
+
+### Fixed
+- Hub-socket popup 不再覆寫 `@tsm_popup_args`：修正 tunnel 斷線時 Ctrl+Q fallback 變成純 Daemon mode 的問題
+- Hub 模式 host picker 改色後 tmux status bar 立即套用：`applyCurrentStatusBarCmd` 支援 Hub mode（HostMgr==nil）
+
 ## [0.42.0] - 2026-03-14
 
 ### Changed
