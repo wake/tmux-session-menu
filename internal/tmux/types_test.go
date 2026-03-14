@@ -14,10 +14,10 @@ func TestSession_StatusIcon_AiPresent(t *testing.T) {
 		expect string
 	}{
 		{"ai running", tmux.Session{AiType: "claude", Status: tmux.StatusRunning}, "●"},
-		{"ai waiting", tmux.Session{AiType: "claude", Status: tmux.StatusWaiting}, "●"},
+		{"ai waiting", tmux.Session{AiType: "claude", Status: tmux.StatusWaiting}, "◐"},
 		{"ai idle", tmux.Session{AiType: "claude", Status: tmux.StatusIdle}, "●"},
 		{"ai error", tmux.Session{AiType: "claude", Status: tmux.StatusError}, "✗"},
-		{"no ai running", tmux.Session{AiType: "", Status: tmux.StatusRunning}, "○"},
+		{"no ai running", tmux.Session{AiType: "", Status: tmux.StatusRunning}, "❯"},
 		{"no ai idle", tmux.Session{AiType: "", Status: tmux.StatusIdle}, "○"},
 	}
 	for _, tt := range tests {

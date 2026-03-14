@@ -9,7 +9,7 @@ var (
 	dimStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))            // dim text
 	statusRunningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#91E200"))            // running green
 	statusWaitingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E8D969"))            // waiting yellow
-	statusIdleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))            // idle gray
+	statusIdleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA"))            // idle gray (lighter)
 	statusErrorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B80"))            // error red
 	sessionNameStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))            // bright white
 	groupNameStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1E174"))            // group name: warm yellow

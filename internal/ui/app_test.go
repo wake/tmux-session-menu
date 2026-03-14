@@ -263,12 +263,12 @@ func TestModel_View_UnifiedStatusIcons(t *testing.T) {
 
 	view := m.View()
 
-	// running 和 waiting 都用 ●
+	// agent running 用 ●
 	assert.Contains(t, view, "●")
-	// idle 用 ○
+	// agent waiting 用 ◐
+	assert.Contains(t, view, "◐")
+	// idle（非 agent）用 ○
 	assert.Contains(t, view, "○")
-	// 不應出現 ◐（舊的 waiting 圖示）
-	assert.NotContains(t, view, "◐", "不應使用舊的 ◐ 圖示")
 }
 
 func TestModel_AnimTick(t *testing.T) {
