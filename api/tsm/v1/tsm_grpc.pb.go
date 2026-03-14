@@ -37,6 +37,8 @@ const (
 	SessionManager_ReportUploadResult_FullMethodName = "/tsm.v1.SessionManager/ReportUploadResult"
 	SessionManager_WatchMultiHost_FullMethodName     = "/tsm.v1.SessionManager/WatchMultiHost"
 	SessionManager_ProxyMutation_FullMethodName      = "/tsm.v1.SessionManager/ProxyMutation"
+	SessionManager_RequestAttach_FullMethodName      = "/tsm.v1.SessionManager/RequestAttach"
+	SessionManager_TakePendingAttach_FullMethodName  = "/tsm.v1.SessionManager/TakePendingAttach"
 	SessionManager_GetHostsConfig_FullMethodName     = "/tsm.v1.SessionManager/GetHostsConfig"
 	SessionManager_UpdateHostConfig_FullMethodName   = "/tsm.v1.SessionManager/UpdateHostConfig"
 )
@@ -75,6 +77,10 @@ type SessionManagerClient interface {
 	WatchMultiHost(ctx context.Context, in *WatchMultiHostRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MultiHostSnapshot], error)
 	// ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
 	ProxyMutation(ctx context.Context, in *ProxyMutationRequest, opts ...grpc.CallOption) (*ProxyMutationResponse, error)
+	// RequestAttach 由 spoke 發送，請求 hub 切換到指定主機的 session（hub-socket 模式專用）。
+	RequestAttach(ctx context.Context, in *RequestAttachRequest, opts ...grpc.CallOption) (*RequestAttachResponse, error)
+	// TakePendingAttach 由 hub 呼叫，取得並清除 pending attach（read-and-clear 語意）。
+	TakePendingAttach(ctx context.Context, in *TakePendingAttachRequest, opts ...grpc.CallOption) (*TakePendingAttachResponse, error)
 	// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
 	GetHostsConfig(ctx context.Context, in *GetHostsConfigRequest, opts ...grpc.CallOption) (*GetHostsConfigResponse, error)
 	// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
@@ -277,6 +283,26 @@ func (c *sessionManagerClient) ProxyMutation(ctx context.Context, in *ProxyMutat
 	return out, nil
 }
 
+func (c *sessionManagerClient) RequestAttach(ctx context.Context, in *RequestAttachRequest, opts ...grpc.CallOption) (*RequestAttachResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestAttachResponse)
+	err := c.cc.Invoke(ctx, SessionManager_RequestAttach_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sessionManagerClient) TakePendingAttach(ctx context.Context, in *TakePendingAttachRequest, opts ...grpc.CallOption) (*TakePendingAttachResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TakePendingAttachResponse)
+	err := c.cc.Invoke(ctx, SessionManager_TakePendingAttach_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *sessionManagerClient) GetHostsConfig(ctx context.Context, in *GetHostsConfigRequest, opts ...grpc.CallOption) (*GetHostsConfigResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetHostsConfigResponse)
@@ -331,6 +357,10 @@ type SessionManagerServer interface {
 	WatchMultiHost(*WatchMultiHostRequest, grpc.ServerStreamingServer[MultiHostSnapshot]) error
 	// ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
 	ProxyMutation(context.Context, *ProxyMutationRequest) (*ProxyMutationResponse, error)
+	// RequestAttach 由 spoke 發送，請求 hub 切換到指定主機的 session（hub-socket 模式專用）。
+	RequestAttach(context.Context, *RequestAttachRequest) (*RequestAttachResponse, error)
+	// TakePendingAttach 由 hub 呼叫，取得並清除 pending attach（read-and-clear 語意）。
+	TakePendingAttach(context.Context, *TakePendingAttachRequest) (*TakePendingAttachResponse, error)
 	// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
 	GetHostsConfig(context.Context, *GetHostsConfigRequest) (*GetHostsConfigResponse, error)
 	// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
@@ -395,6 +425,12 @@ func (UnimplementedSessionManagerServer) WatchMultiHost(*WatchMultiHostRequest, 
 }
 func (UnimplementedSessionManagerServer) ProxyMutation(context.Context, *ProxyMutationRequest) (*ProxyMutationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ProxyMutation not implemented")
+}
+func (UnimplementedSessionManagerServer) RequestAttach(context.Context, *RequestAttachRequest) (*RequestAttachResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestAttach not implemented")
+}
+func (UnimplementedSessionManagerServer) TakePendingAttach(context.Context, *TakePendingAttachRequest) (*TakePendingAttachResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TakePendingAttach not implemented")
 }
 func (UnimplementedSessionManagerServer) GetHostsConfig(context.Context, *GetHostsConfigRequest) (*GetHostsConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHostsConfig not implemented")
@@ -715,6 +751,42 @@ func _SessionManager_ProxyMutation_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SessionManager_RequestAttach_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestAttachRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).RequestAttach(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_RequestAttach_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).RequestAttach(ctx, req.(*RequestAttachRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SessionManager_TakePendingAttach_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TakePendingAttachRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).TakePendingAttach(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_TakePendingAttach_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).TakePendingAttach(ctx, req.(*TakePendingAttachRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SessionManager_GetHostsConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetHostsConfigRequest)
 	if err := dec(in); err != nil {
@@ -817,6 +889,14 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ProxyMutation",
 			Handler:    _SessionManager_ProxyMutation_Handler,
+		},
+		{
+			MethodName: "RequestAttach",
+			Handler:    _SessionManager_RequestAttach_Handler,
+		},
+		{
+			MethodName: "TakePendingAttach",
+			Handler:    _SessionManager_TakePendingAttach_Handler,
 		},
 		{
 			MethodName: "GetHostsConfig",
