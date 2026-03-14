@@ -2,6 +2,14 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.41.0] - 2026-03-14
+
+### Added
+- Hub-socket 模式主機設定統一讀寫：所有 `[[hosts]]` 設定透過 `GetHostsConfig` / `UpdateHostConfig` gRPC RPC 走 hub daemon，不再讀寫 spoke 本地 config
+- 支援 6 種主機設定操作（enable/disable/archive/unarchive/colors/reorder）皆走 RPC
+- Daemon 端 `cfgMu` mutex 保護 config 讀寫序列，防止並發衝突
+- RPC 錯誤正確顯示於 UI error banner
+
 ## [0.40.0] - 2026-03-14
 
 ### Added
