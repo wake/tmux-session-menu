@@ -1136,6 +1136,15 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			_ = tmux.ApplyStatusBar(exec, hostEntry.ToColorConfig())
 		}
 
+		if cfg.InPopup {
+			// Popup 模式：在新 tmux window 執行 remote attach，popup 自行關閉。
+			// 不能在 popup 內跑 SSH，否則遠端 session 會渲染在 popup 視窗裡。
+			applyHostBar()
+			cmd := remote.AttachShellCommand(hostEntry.Address, selected)
+			_ = osexec.Command("tmux", "new-window", "-n", selected, cmd).Run()
+			return hubResultExit
+		}
+
 		applyHostBar()
 		result := remote.Attach(hostEntry.Address, selected)
 		_ = tmux.ApplyStatusBar(exec, cfg.Local)
