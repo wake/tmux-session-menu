@@ -700,6 +700,61 @@ func TestUpdateHostConfig_Unspecified(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, st.Code())
 }
 
+// --- RequestAttach / TakePendingAttach RPC 測試 ---
+
+// setupHubService 建立一個含 hub 模式的 Service（不需 bufconn，直接呼叫方法）。
+func setupHubService(t *testing.T) (*Service, func()) {
+	t.Helper()
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "local", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	svc := &Service{hubMgr: mgr, mhub: mhub}
+	return svc, func() {}
+}
+
+func TestService_RequestAttach(t *testing.T) {
+	svc, cleanup := setupHubService(t)
+	defer cleanup()
+
+	// 成功
+	resp, err := svc.RequestAttach(context.Background(), &tsmv1.RequestAttachRequest{
+		HostId: "local", SessionName: "dev",
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// 驗證 pending 已設定
+	tResp, err := svc.TakePendingAttach(context.Background(), &tsmv1.TakePendingAttachRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, "local", tResp.HostId)
+	assert.Equal(t, "dev", tResp.SessionName)
+
+	// 再取應為空
+	tResp, err = svc.TakePendingAttach(context.Background(), &tsmv1.TakePendingAttachRequest{})
+	require.NoError(t, err)
+	assert.Empty(t, tResp.HostId)
+}
+
+func TestService_RequestAttach_NotHubMode(t *testing.T) {
+	svc := &Service{} // hubMgr == nil
+	_, err := svc.RequestAttach(context.Background(), &tsmv1.RequestAttachRequest{
+		HostId: "mlab", SessionName: "dev",
+	})
+	assert.Error(t, err)
+}
+
+func TestService_RequestAttach_UnknownHost(t *testing.T) {
+	svc, cleanup := setupHubService(t)
+	defer cleanup()
+
+	_, err := svc.RequestAttach(context.Background(), &tsmv1.RequestAttachRequest{
+		HostId: "nonexistent", SessionName: "dev",
+	})
+	assert.Error(t, err)
+}
+
 // TestService_GetUploadTarget_NoAiType 驗證：無 hook 狀態時，IsClaudeActive 應為 false。
 func TestService_GetUploadTarget_NoAiType(t *testing.T) {
 	now := time.Now().Unix()

@@ -305,6 +305,36 @@ func (s *Service) ProxyMutation(
 	return s.hubMgr.ProxyMutation(ctx, req)
 }
 
+// RequestAttach 接收 spoke 端的 attach 請求，暫存到 HubManager（hub 模式專用）。
+func (s *Service) RequestAttach(
+	ctx context.Context, req *tsmv1.RequestAttachRequest,
+) (*tsmv1.RequestAttachResponse, error) {
+	if s.hubMgr == nil {
+		return nil, status.Error(codes.Unavailable, "not in hub mode")
+	}
+	if err := s.hubMgr.SetPendingAttach(req.HostId, req.SessionName); err != nil {
+		return nil, status.Errorf(codes.NotFound, "%v", err)
+	}
+	return &tsmv1.RequestAttachResponse{Success: true}, nil
+}
+
+// TakePendingAttach 取得並清除 pending attach（hub 模式專用）。
+func (s *Service) TakePendingAttach(
+	ctx context.Context, req *tsmv1.TakePendingAttachRequest,
+) (*tsmv1.TakePendingAttachResponse, error) {
+	if s.hubMgr == nil {
+		return &tsmv1.TakePendingAttachResponse{}, nil
+	}
+	p := s.hubMgr.TakePendingAttach()
+	if p == nil {
+		return &tsmv1.TakePendingAttachResponse{}, nil
+	}
+	return &tsmv1.TakePendingAttachResponse{
+		HostId:      p.HostID,
+		SessionName: p.SessionName,
+	}, nil
+}
+
 // loadServerConfigPath 回傳 config.toml 路徑，優先使用 TSM_CONFIG_PATH 環境變數。
 func loadServerConfigPath() string {
 	if p := os.Getenv("TSM_CONFIG_PATH"); p != "" {
