@@ -182,6 +182,68 @@ func (MutationType) EnumDescriptor() ([]byte, []int) {
 	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{2}
 }
 
+// HostConfigAction 列舉主機設定的操作類型。
+type HostConfigAction int32
+
+const (
+	HostConfigAction_HOST_CONFIG_ACTION_UNSPECIFIED HostConfigAction = 0 // 預留：daemon 應拒絕此值
+	HostConfigAction_HOST_CONFIG_ENABLE             HostConfigAction = 1
+	HostConfigAction_HOST_CONFIG_DISABLE            HostConfigAction = 2
+	HostConfigAction_HOST_CONFIG_ARCHIVE            HostConfigAction = 3
+	HostConfigAction_HOST_CONFIG_UNARCHIVE          HostConfigAction = 4
+	HostConfigAction_HOST_CONFIG_UPDATE_COLORS      HostConfigAction = 5
+	HostConfigAction_HOST_CONFIG_REORDER            HostConfigAction = 6
+)
+
+// Enum value maps for HostConfigAction.
+var (
+	HostConfigAction_name = map[int32]string{
+		0: "HOST_CONFIG_ACTION_UNSPECIFIED",
+		1: "HOST_CONFIG_ENABLE",
+		2: "HOST_CONFIG_DISABLE",
+		3: "HOST_CONFIG_ARCHIVE",
+		4: "HOST_CONFIG_UNARCHIVE",
+		5: "HOST_CONFIG_UPDATE_COLORS",
+		6: "HOST_CONFIG_REORDER",
+	}
+	HostConfigAction_value = map[string]int32{
+		"HOST_CONFIG_ACTION_UNSPECIFIED": 0,
+		"HOST_CONFIG_ENABLE":             1,
+		"HOST_CONFIG_DISABLE":            2,
+		"HOST_CONFIG_ARCHIVE":            3,
+		"HOST_CONFIG_UNARCHIVE":          4,
+		"HOST_CONFIG_UPDATE_COLORS":      5,
+		"HOST_CONFIG_REORDER":            6,
+	}
+)
+
+func (x HostConfigAction) Enum() *HostConfigAction {
+	p := new(HostConfigAction)
+	*p = x
+	return p
+}
+
+func (x HostConfigAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HostConfigAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_proto_tsm_v1_tsm_proto_enumTypes[3].Descriptor()
+}
+
+func (HostConfigAction) Type() protoreflect.EnumType {
+	return &file_api_proto_tsm_v1_tsm_proto_enumTypes[3]
+}
+
+func (x HostConfigAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HostConfigAction.Descriptor instead.
+func (HostConfigAction) EnumDescriptor() ([]byte, []int) {
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{3}
+}
+
 // Session 對應 tmux.Session。
 type Session struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -729,6 +791,353 @@ func (x *ProxyMutationResponse) GetError() string {
 	return ""
 }
 
+// HostConfigEntry 描述一台主機的完整設定（對應 config.HostEntry）。
+type HostConfigEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Address       string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"` // 唯讀，僅由 hub daemon 端設定
+	Color         string                 `protobuf:"bytes,3,opt,name=color,proto3" json:"color,omitempty"`     // accent color（圓點、badge_bg fallback）
+	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	SortOrder     int32                  `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
+	BarBg         string                 `protobuf:"bytes,6,opt,name=bar_bg,json=barBg,proto3" json:"bar_bg,omitempty"`
+	BarFg         string                 `protobuf:"bytes,7,opt,name=bar_fg,json=barFg,proto3" json:"bar_fg,omitempty"`
+	BadgeBg       string                 `protobuf:"bytes,8,opt,name=badge_bg,json=badgeBg,proto3" json:"badge_bg,omitempty"`
+	BadgeFg       string                 `protobuf:"bytes,9,opt,name=badge_fg,json=badgeFg,proto3" json:"badge_fg,omitempty"`
+	Archived      bool                   `protobuf:"varint,10,opt,name=archived,proto3" json:"archived,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HostConfigEntry) Reset() {
+	*x = HostConfigEntry{}
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostConfigEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostConfigEntry) ProtoMessage() {}
+
+func (x *HostConfigEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostConfigEntry.ProtoReflect.Descriptor instead.
+func (*HostConfigEntry) Descriptor() ([]byte, []int) {
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *HostConfigEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *HostConfigEntry) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *HostConfigEntry) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *HostConfigEntry) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *HostConfigEntry) GetSortOrder() int32 {
+	if x != nil {
+		return x.SortOrder
+	}
+	return 0
+}
+
+func (x *HostConfigEntry) GetBarBg() string {
+	if x != nil {
+		return x.BarBg
+	}
+	return ""
+}
+
+func (x *HostConfigEntry) GetBarFg() string {
+	if x != nil {
+		return x.BarFg
+	}
+	return ""
+}
+
+func (x *HostConfigEntry) GetBadgeBg() string {
+	if x != nil {
+		return x.BadgeBg
+	}
+	return ""
+}
+
+func (x *HostConfigEntry) GetBadgeFg() string {
+	if x != nil {
+		return x.BadgeFg
+	}
+	return ""
+}
+
+func (x *HostConfigEntry) GetArchived() bool {
+	if x != nil {
+		return x.Archived
+	}
+	return false
+}
+
+// GetHostsConfigRequest 取得主機設定清單。
+type GetHostsConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHostsConfigRequest) Reset() {
+	*x = GetHostsConfigRequest{}
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHostsConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHostsConfigRequest) ProtoMessage() {}
+
+func (x *GetHostsConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHostsConfigRequest.ProtoReflect.Descriptor instead.
+func (*GetHostsConfigRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{8}
+}
+
+// GetHostsConfigResponse 回傳主機設定清單。
+type GetHostsConfigResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hosts         []*HostConfigEntry     `protobuf:"bytes,1,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHostsConfigResponse) Reset() {
+	*x = GetHostsConfigResponse{}
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHostsConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHostsConfigResponse) ProtoMessage() {}
+
+func (x *GetHostsConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHostsConfigResponse.ProtoReflect.Descriptor instead.
+func (*GetHostsConfigResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetHostsConfigResponse) GetHosts() []*HostConfigEntry {
+	if x != nil {
+		return x.Hosts
+	}
+	return nil
+}
+
+// UpdateHostConfigRequest 更新主機設定。
+type UpdateHostConfigRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	HostName string                 `protobuf:"bytes,1,opt,name=host_name,json=hostName,proto3" json:"host_name,omitempty"`
+	Action   HostConfigAction       `protobuf:"varint,2,opt,name=action,proto3,enum=tsm.v1.HostConfigAction" json:"action,omitempty"`
+	// UPDATE_COLORS 使用：
+	BarBg   string `protobuf:"bytes,3,opt,name=bar_bg,json=barBg,proto3" json:"bar_bg,omitempty"`
+	BarFg   string `protobuf:"bytes,4,opt,name=bar_fg,json=barFg,proto3" json:"bar_fg,omitempty"`
+	BadgeBg string `protobuf:"bytes,5,opt,name=badge_bg,json=badgeBg,proto3" json:"badge_bg,omitempty"`
+	BadgeFg string `protobuf:"bytes,6,opt,name=badge_fg,json=badgeFg,proto3" json:"badge_fg,omitempty"`
+	Color   string `protobuf:"bytes,7,opt,name=color,proto3" json:"color,omitempty"`
+	// REORDER 使用：完整排序清單（所有非封存主機名稱，按期望順序排列）
+	OrderedHosts  []string `protobuf:"bytes,8,rep,name=ordered_hosts,json=orderedHosts,proto3" json:"ordered_hosts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateHostConfigRequest) Reset() {
+	*x = UpdateHostConfigRequest{}
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateHostConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateHostConfigRequest) ProtoMessage() {}
+
+func (x *UpdateHostConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateHostConfigRequest.ProtoReflect.Descriptor instead.
+func (*UpdateHostConfigRequest) Descriptor() ([]byte, []int) {
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *UpdateHostConfigRequest) GetHostName() string {
+	if x != nil {
+		return x.HostName
+	}
+	return ""
+}
+
+func (x *UpdateHostConfigRequest) GetAction() HostConfigAction {
+	if x != nil {
+		return x.Action
+	}
+	return HostConfigAction_HOST_CONFIG_ACTION_UNSPECIFIED
+}
+
+func (x *UpdateHostConfigRequest) GetBarBg() string {
+	if x != nil {
+		return x.BarBg
+	}
+	return ""
+}
+
+func (x *UpdateHostConfigRequest) GetBarFg() string {
+	if x != nil {
+		return x.BarFg
+	}
+	return ""
+}
+
+func (x *UpdateHostConfigRequest) GetBadgeBg() string {
+	if x != nil {
+		return x.BadgeBg
+	}
+	return ""
+}
+
+func (x *UpdateHostConfigRequest) GetBadgeFg() string {
+	if x != nil {
+		return x.BadgeFg
+	}
+	return ""
+}
+
+func (x *UpdateHostConfigRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *UpdateHostConfigRequest) GetOrderedHosts() []string {
+	if x != nil {
+		return x.OrderedHosts
+	}
+	return nil
+}
+
+// UpdateHostConfigResponse 回傳操作後的完整主機清單。
+type UpdateHostConfigResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hosts         []*HostConfigEntry     `protobuf:"bytes,1,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateHostConfigResponse) Reset() {
+	*x = UpdateHostConfigResponse{}
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateHostConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateHostConfigResponse) ProtoMessage() {}
+
+func (x *UpdateHostConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateHostConfigResponse.ProtoReflect.Descriptor instead.
+func (*UpdateHostConfigResponse) Descriptor() ([]byte, []int) {
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateHostConfigResponse) GetHosts() []*HostConfigEntry {
+	if x != nil {
+		return x.Hosts
+	}
+	return nil
+}
+
 // WatchRequest 是 Watch RPC 的請求（目前為空，未來可擴充過濾條件）。
 type WatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -738,7 +1147,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[7]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +1159,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[7]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +1172,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{7}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{12}
 }
 
 // WatchMultiHostRequest 是 WatchMultiHost RPC 的請求（hub 模式專用）。
@@ -775,7 +1184,7 @@ type WatchMultiHostRequest struct {
 
 func (x *WatchMultiHostRequest) Reset() {
 	*x = WatchMultiHostRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[8]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -787,7 +1196,7 @@ func (x *WatchMultiHostRequest) String() string {
 func (*WatchMultiHostRequest) ProtoMessage() {}
 
 func (x *WatchMultiHostRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[8]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -800,7 +1209,7 @@ func (x *WatchMultiHostRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchMultiHostRequest.ProtoReflect.Descriptor instead.
 func (*WatchMultiHostRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{8}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{13}
 }
 
 // CreateSessionRequest 建立新的 tmux session。
@@ -815,7 +1224,7 @@ type CreateSessionRequest struct {
 
 func (x *CreateSessionRequest) Reset() {
 	*x = CreateSessionRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[9]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -827,7 +1236,7 @@ func (x *CreateSessionRequest) String() string {
 func (*CreateSessionRequest) ProtoMessage() {}
 
 func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[9]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -840,7 +1249,7 @@ func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateSessionRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{9}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreateSessionRequest) GetName() string {
@@ -874,7 +1283,7 @@ type KillSessionRequest struct {
 
 func (x *KillSessionRequest) Reset() {
 	*x = KillSessionRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[10]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -886,7 +1295,7 @@ func (x *KillSessionRequest) String() string {
 func (*KillSessionRequest) ProtoMessage() {}
 
 func (x *KillSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[10]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +1308,7 @@ func (x *KillSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KillSessionRequest.ProtoReflect.Descriptor instead.
 func (*KillSessionRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{10}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *KillSessionRequest) GetName() string {
@@ -921,7 +1330,7 @@ type RenameSessionRequest struct {
 
 func (x *RenameSessionRequest) Reset() {
 	*x = RenameSessionRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[11]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -933,7 +1342,7 @@ func (x *RenameSessionRequest) String() string {
 func (*RenameSessionRequest) ProtoMessage() {}
 
 func (x *RenameSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[11]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -946,7 +1355,7 @@ func (x *RenameSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameSessionRequest.ProtoReflect.Descriptor instead.
 func (*RenameSessionRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{11}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RenameSessionRequest) GetSessionName() string {
@@ -981,7 +1390,7 @@ type RenameGroupRequest struct {
 
 func (x *RenameGroupRequest) Reset() {
 	*x = RenameGroupRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[12]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -993,7 +1402,7 @@ func (x *RenameGroupRequest) String() string {
 func (*RenameGroupRequest) ProtoMessage() {}
 
 func (x *RenameGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[12]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1006,7 +1415,7 @@ func (x *RenameGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameGroupRequest.ProtoReflect.Descriptor instead.
 func (*RenameGroupRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{12}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RenameGroupRequest) GetGroupId() int64 {
@@ -1034,7 +1443,7 @@ type CreateGroupRequest struct {
 
 func (x *CreateGroupRequest) Reset() {
 	*x = CreateGroupRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[13]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1046,7 +1455,7 @@ func (x *CreateGroupRequest) String() string {
 func (*CreateGroupRequest) ProtoMessage() {}
 
 func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[13]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1059,7 +1468,7 @@ func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGroupRequest.ProtoReflect.Descriptor instead.
 func (*CreateGroupRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{13}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CreateGroupRequest) GetName() string {
@@ -1088,7 +1497,7 @@ type MoveSessionRequest struct {
 
 func (x *MoveSessionRequest) Reset() {
 	*x = MoveSessionRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[14]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1100,7 +1509,7 @@ func (x *MoveSessionRequest) String() string {
 func (*MoveSessionRequest) ProtoMessage() {}
 
 func (x *MoveSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[14]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1113,7 +1522,7 @@ func (x *MoveSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveSessionRequest.ProtoReflect.Descriptor instead.
 func (*MoveSessionRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{14}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *MoveSessionRequest) GetSessionName() string {
@@ -1153,7 +1562,7 @@ type ReorderRequest struct {
 
 func (x *ReorderRequest) Reset() {
 	*x = ReorderRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[15]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1165,7 +1574,7 @@ func (x *ReorderRequest) String() string {
 func (*ReorderRequest) ProtoMessage() {}
 
 func (x *ReorderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[15]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1178,7 +1587,7 @@ func (x *ReorderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReorderRequest.ProtoReflect.Descriptor instead.
 func (*ReorderRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{15}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ReorderRequest) GetTarget() isReorderRequest_Target {
@@ -1232,7 +1641,7 @@ type GroupReorder struct {
 
 func (x *GroupReorder) Reset() {
 	*x = GroupReorder{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[16]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1244,7 +1653,7 @@ func (x *GroupReorder) String() string {
 func (*GroupReorder) ProtoMessage() {}
 
 func (x *GroupReorder) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[16]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1257,7 +1666,7 @@ func (x *GroupReorder) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupReorder.ProtoReflect.Descriptor instead.
 func (*GroupReorder) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{16}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GroupReorder) GetGroupId() int64 {
@@ -1285,7 +1694,7 @@ type SessionReorder struct {
 
 func (x *SessionReorder) Reset() {
 	*x = SessionReorder{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[17]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1297,7 +1706,7 @@ func (x *SessionReorder) String() string {
 func (*SessionReorder) ProtoMessage() {}
 
 func (x *SessionReorder) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[17]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1310,7 +1719,7 @@ func (x *SessionReorder) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionReorder.ProtoReflect.Descriptor instead.
 func (*SessionReorder) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{17}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SessionReorder) GetSessionName() string {
@@ -1344,7 +1753,7 @@ type ToggleCollapseRequest struct {
 
 func (x *ToggleCollapseRequest) Reset() {
 	*x = ToggleCollapseRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[18]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1356,7 +1765,7 @@ func (x *ToggleCollapseRequest) String() string {
 func (*ToggleCollapseRequest) ProtoMessage() {}
 
 func (x *ToggleCollapseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[18]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1369,7 +1778,7 @@ func (x *ToggleCollapseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToggleCollapseRequest.ProtoReflect.Descriptor instead.
 func (*ToggleCollapseRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{18}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ToggleCollapseRequest) GetGroupId() int64 {
@@ -1392,7 +1801,7 @@ type DaemonStatusResponse struct {
 
 func (x *DaemonStatusResponse) Reset() {
 	*x = DaemonStatusResponse{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[19]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1404,7 +1813,7 @@ func (x *DaemonStatusResponse) String() string {
 func (*DaemonStatusResponse) ProtoMessage() {}
 
 func (x *DaemonStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[19]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1417,7 +1826,7 @@ func (x *DaemonStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonStatusResponse.ProtoReflect.Descriptor instead.
 func (*DaemonStatusResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{19}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DaemonStatusResponse) GetPid() int32 {
@@ -1459,7 +1868,7 @@ type ConfigValue struct {
 
 func (x *ConfigValue) Reset() {
 	*x = ConfigValue{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[20]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1471,7 +1880,7 @@ func (x *ConfigValue) String() string {
 func (*ConfigValue) ProtoMessage() {}
 
 func (x *ConfigValue) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[20]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1484,7 +1893,7 @@ func (x *ConfigValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigValue.ProtoReflect.Descriptor instead.
 func (*ConfigValue) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{20}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ConfigValue) GetKey() string {
@@ -1510,7 +1919,7 @@ type GetConfigRequest struct {
 
 func (x *GetConfigRequest) Reset() {
 	*x = GetConfigRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[21]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1522,7 +1931,7 @@ func (x *GetConfigRequest) String() string {
 func (*GetConfigRequest) ProtoMessage() {}
 
 func (x *GetConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[21]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1535,7 +1944,7 @@ func (x *GetConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetConfigRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{21}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{26}
 }
 
 // GetConfigResponse 回傳設定值。
@@ -1548,7 +1957,7 @@ type GetConfigResponse struct {
 
 func (x *GetConfigResponse) Reset() {
 	*x = GetConfigResponse{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[22]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1560,7 +1969,7 @@ func (x *GetConfigResponse) String() string {
 func (*GetConfigResponse) ProtoMessage() {}
 
 func (x *GetConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[22]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1573,7 +1982,7 @@ func (x *GetConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigResponse.ProtoReflect.Descriptor instead.
 func (*GetConfigResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{22}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetConfigResponse) GetValues() []*ConfigValue {
@@ -1593,7 +2002,7 @@ type SetConfigRequest struct {
 
 func (x *SetConfigRequest) Reset() {
 	*x = SetConfigRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[23]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1605,7 +2014,7 @@ func (x *SetConfigRequest) String() string {
 func (*SetConfigRequest) ProtoMessage() {}
 
 func (x *SetConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[23]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1618,7 +2027,7 @@ func (x *SetConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetConfigRequest.ProtoReflect.Descriptor instead.
 func (*SetConfigRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{23}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SetConfigRequest) GetValues() []*ConfigValue {
@@ -1640,7 +2049,7 @@ type UploadedFile struct {
 
 func (x *UploadedFile) Reset() {
 	*x = UploadedFile{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[24]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1652,7 +2061,7 @@ func (x *UploadedFile) String() string {
 func (*UploadedFile) ProtoMessage() {}
 
 func (x *UploadedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[24]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1665,7 +2074,7 @@ func (x *UploadedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadedFile.ProtoReflect.Descriptor instead.
 func (*UploadedFile) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{24}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *UploadedFile) GetLocalPath() string {
@@ -1701,7 +2110,7 @@ type UploadEvent struct {
 
 func (x *UploadEvent) Reset() {
 	*x = UploadEvent{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[25]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1713,7 +2122,7 @@ func (x *UploadEvent) String() string {
 func (*UploadEvent) ProtoMessage() {}
 
 func (x *UploadEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[25]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1726,7 +2135,7 @@ func (x *UploadEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadEvent.ProtoReflect.Descriptor instead.
 func (*UploadEvent) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{25}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UploadEvent) GetFiles() []*UploadedFile {
@@ -1759,7 +2168,7 @@ type GetUploadTargetRequest struct {
 
 func (x *GetUploadTargetRequest) Reset() {
 	*x = GetUploadTargetRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[26]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1771,7 +2180,7 @@ func (x *GetUploadTargetRequest) String() string {
 func (*GetUploadTargetRequest) ProtoMessage() {}
 
 func (x *GetUploadTargetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[26]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1784,7 +2193,7 @@ func (x *GetUploadTargetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUploadTargetRequest.ProtoReflect.Descriptor instead.
 func (*GetUploadTargetRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{26}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{31}
 }
 
 // GetUploadTargetResponse 回傳上傳目標判斷結果。
@@ -1803,7 +2212,7 @@ type GetUploadTargetResponse struct {
 
 func (x *GetUploadTargetResponse) Reset() {
 	*x = GetUploadTargetResponse{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[27]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1815,7 +2224,7 @@ func (x *GetUploadTargetResponse) String() string {
 func (*GetUploadTargetResponse) ProtoMessage() {}
 
 func (x *GetUploadTargetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[27]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1828,7 +2237,7 @@ func (x *GetUploadTargetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUploadTargetResponse.ProtoReflect.Descriptor instead.
 func (*GetUploadTargetResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{27}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetUploadTargetResponse) GetUploadMode() bool {
@@ -1891,7 +2300,7 @@ type SetUploadModeRequest struct {
 
 func (x *SetUploadModeRequest) Reset() {
 	*x = SetUploadModeRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[28]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1903,7 +2312,7 @@ func (x *SetUploadModeRequest) String() string {
 func (*SetUploadModeRequest) ProtoMessage() {}
 
 func (x *SetUploadModeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[28]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1916,7 +2325,7 @@ func (x *SetUploadModeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUploadModeRequest.ProtoReflect.Descriptor instead.
 func (*SetUploadModeRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{28}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SetUploadModeRequest) GetEnabled() bool {
@@ -1945,7 +2354,7 @@ type ReportUploadResultRequest struct {
 
 func (x *ReportUploadResultRequest) Reset() {
 	*x = ReportUploadResultRequest{}
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[29]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1957,7 +2366,7 @@ func (x *ReportUploadResultRequest) String() string {
 func (*ReportUploadResultRequest) ProtoMessage() {}
 
 func (x *ReportUploadResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[29]
+	mi := &file_api_proto_tsm_v1_tsm_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1970,7 +2379,7 @@ func (x *ReportUploadResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportUploadResultRequest.ProtoReflect.Descriptor instead.
 func (*ReportUploadResultRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{29}
+	return file_api_proto_tsm_v1_tsm_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ReportUploadResultRequest) GetSessionName() string {
@@ -2047,7 +2456,34 @@ const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"\acommand\x18\a \x01(\tR\acommand\"G\n" +
 	"\x15ProxyMutationResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\x0e\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x8e\x02\n" +
+	"\x0fHostConfigEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aaddress\x18\x02 \x01(\tR\aaddress\x12\x14\n" +
+	"\x05color\x18\x03 \x01(\tR\x05color\x12\x18\n" +
+	"\aenabled\x18\x04 \x01(\bR\aenabled\x12\x1d\n" +
+	"\n" +
+	"sort_order\x18\x05 \x01(\x05R\tsortOrder\x12\x15\n" +
+	"\x06bar_bg\x18\x06 \x01(\tR\x05barBg\x12\x15\n" +
+	"\x06bar_fg\x18\a \x01(\tR\x05barFg\x12\x19\n" +
+	"\bbadge_bg\x18\b \x01(\tR\abadgeBg\x12\x19\n" +
+	"\bbadge_fg\x18\t \x01(\tR\abadgeFg\x12\x1a\n" +
+	"\barchived\x18\n" +
+	" \x01(\bR\barchived\"\x17\n" +
+	"\x15GetHostsConfigRequest\"G\n" +
+	"\x16GetHostsConfigResponse\x12-\n" +
+	"\x05hosts\x18\x01 \x03(\v2\x17.tsm.v1.HostConfigEntryR\x05hosts\"\x87\x02\n" +
+	"\x17UpdateHostConfigRequest\x12\x1b\n" +
+	"\thost_name\x18\x01 \x01(\tR\bhostName\x120\n" +
+	"\x06action\x18\x02 \x01(\x0e2\x18.tsm.v1.HostConfigActionR\x06action\x12\x15\n" +
+	"\x06bar_bg\x18\x03 \x01(\tR\x05barBg\x12\x15\n" +
+	"\x06bar_fg\x18\x04 \x01(\tR\x05barFg\x12\x19\n" +
+	"\bbadge_bg\x18\x05 \x01(\tR\abadgeBg\x12\x19\n" +
+	"\bbadge_fg\x18\x06 \x01(\tR\abadgeFg\x12\x14\n" +
+	"\x05color\x18\a \x01(\tR\x05color\x12#\n" +
+	"\rordered_hosts\x18\b \x03(\tR\forderedHosts\"I\n" +
+	"\x18UpdateHostConfigResponse\x12-\n" +
+	"\x05hosts\x18\x01 \x03(\v2\x17.tsm.v1.HostConfigEntryR\x05hosts\"\x0e\n" +
 	"\fWatchRequest\"\x17\n" +
 	"\x15WatchMultiHostRequest\"X\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
@@ -2145,7 +2581,16 @@ const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"\x15MUTATION_KILL_SESSION\x10\x00\x12\x1b\n" +
 	"\x17MUTATION_RENAME_SESSION\x10\x01\x12\x1b\n" +
 	"\x17MUTATION_CREATE_SESSION\x10\x02\x12\x19\n" +
-	"\x15MUTATION_MOVE_SESSION\x10\x032\xb5\t\n" +
+	"\x15MUTATION_MOVE_SESSION\x10\x03*\xd3\x01\n" +
+	"\x10HostConfigAction\x12\"\n" +
+	"\x1eHOST_CONFIG_ACTION_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12HOST_CONFIG_ENABLE\x10\x01\x12\x17\n" +
+	"\x13HOST_CONFIG_DISABLE\x10\x02\x12\x17\n" +
+	"\x13HOST_CONFIG_ARCHIVE\x10\x03\x12\x19\n" +
+	"\x15HOST_CONFIG_UNARCHIVE\x10\x04\x12\x1d\n" +
+	"\x19HOST_CONFIG_UPDATE_COLORS\x10\x05\x12\x17\n" +
+	"\x13HOST_CONFIG_REORDER\x10\x062\xdd\n" +
+	"\n" +
 	"\x0eSessionManager\x126\n" +
 	"\x05Watch\x12\x14.tsm.v1.WatchRequest\x1a\x15.tsm.v1.StateSnapshot0\x01\x12E\n" +
 	"\rCreateSession\x12\x1c.tsm.v1.CreateSessionRequest\x1a\x16.google.protobuf.Empty\x12A\n" +
@@ -2163,7 +2608,9 @@ const file_api_proto_tsm_v1_tsm_proto_rawDesc = "" +
 	"\rSetUploadMode\x12\x1c.tsm.v1.SetUploadModeRequest\x1a\x16.google.protobuf.Empty\x12O\n" +
 	"\x12ReportUploadResult\x12!.tsm.v1.ReportUploadResultRequest\x1a\x16.google.protobuf.Empty\x12L\n" +
 	"\x0eWatchMultiHost\x12\x1d.tsm.v1.WatchMultiHostRequest\x1a\x19.tsm.v1.MultiHostSnapshot0\x01\x12L\n" +
-	"\rProxyMutation\x12\x1c.tsm.v1.ProxyMutationRequest\x1a\x1d.tsm.v1.ProxyMutationResponseB4Z2github.com/wake/tmux-session-menu/api/tsm/v1;tsmv1b\x06proto3"
+	"\rProxyMutation\x12\x1c.tsm.v1.ProxyMutationRequest\x1a\x1d.tsm.v1.ProxyMutationResponse\x12O\n" +
+	"\x0eGetHostsConfig\x12\x1d.tsm.v1.GetHostsConfigRequest\x1a\x1e.tsm.v1.GetHostsConfigResponse\x12U\n" +
+	"\x10UpdateHostConfig\x12\x1f.tsm.v1.UpdateHostConfigRequest\x1a .tsm.v1.UpdateHostConfigResponseB4Z2github.com/wake/tmux-session-menu/api/tsm/v1;tsmv1b\x06proto3"
 
 var (
 	file_api_proto_tsm_v1_tsm_proto_rawDescOnce sync.Once
@@ -2177,101 +2624,114 @@ func file_api_proto_tsm_v1_tsm_proto_rawDescGZIP() []byte {
 	return file_api_proto_tsm_v1_tsm_proto_rawDescData
 }
 
-var file_api_proto_tsm_v1_tsm_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_api_proto_tsm_v1_tsm_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_api_proto_tsm_v1_tsm_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_api_proto_tsm_v1_tsm_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_api_proto_tsm_v1_tsm_proto_goTypes = []any{
 	(SessionStatus)(0),                // 0: tsm.v1.SessionStatus
 	(HostStatus)(0),                   // 1: tsm.v1.HostStatus
 	(MutationType)(0),                 // 2: tsm.v1.MutationType
-	(*Session)(nil),                   // 3: tsm.v1.Session
-	(*Group)(nil),                     // 4: tsm.v1.Group
-	(*StateSnapshot)(nil),             // 5: tsm.v1.StateSnapshot
-	(*HostState)(nil),                 // 6: tsm.v1.HostState
-	(*MultiHostSnapshot)(nil),         // 7: tsm.v1.MultiHostSnapshot
-	(*ProxyMutationRequest)(nil),      // 8: tsm.v1.ProxyMutationRequest
-	(*ProxyMutationResponse)(nil),     // 9: tsm.v1.ProxyMutationResponse
-	(*WatchRequest)(nil),              // 10: tsm.v1.WatchRequest
-	(*WatchMultiHostRequest)(nil),     // 11: tsm.v1.WatchMultiHostRequest
-	(*CreateSessionRequest)(nil),      // 12: tsm.v1.CreateSessionRequest
-	(*KillSessionRequest)(nil),        // 13: tsm.v1.KillSessionRequest
-	(*RenameSessionRequest)(nil),      // 14: tsm.v1.RenameSessionRequest
-	(*RenameGroupRequest)(nil),        // 15: tsm.v1.RenameGroupRequest
-	(*CreateGroupRequest)(nil),        // 16: tsm.v1.CreateGroupRequest
-	(*MoveSessionRequest)(nil),        // 17: tsm.v1.MoveSessionRequest
-	(*ReorderRequest)(nil),            // 18: tsm.v1.ReorderRequest
-	(*GroupReorder)(nil),              // 19: tsm.v1.GroupReorder
-	(*SessionReorder)(nil),            // 20: tsm.v1.SessionReorder
-	(*ToggleCollapseRequest)(nil),     // 21: tsm.v1.ToggleCollapseRequest
-	(*DaemonStatusResponse)(nil),      // 22: tsm.v1.DaemonStatusResponse
-	(*ConfigValue)(nil),               // 23: tsm.v1.ConfigValue
-	(*GetConfigRequest)(nil),          // 24: tsm.v1.GetConfigRequest
-	(*GetConfigResponse)(nil),         // 25: tsm.v1.GetConfigResponse
-	(*SetConfigRequest)(nil),          // 26: tsm.v1.SetConfigRequest
-	(*UploadedFile)(nil),              // 27: tsm.v1.UploadedFile
-	(*UploadEvent)(nil),               // 28: tsm.v1.UploadEvent
-	(*GetUploadTargetRequest)(nil),    // 29: tsm.v1.GetUploadTargetRequest
-	(*GetUploadTargetResponse)(nil),   // 30: tsm.v1.GetUploadTargetResponse
-	(*SetUploadModeRequest)(nil),      // 31: tsm.v1.SetUploadModeRequest
-	(*ReportUploadResultRequest)(nil), // 32: tsm.v1.ReportUploadResultRequest
-	(*timestamppb.Timestamp)(nil),     // 33: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),             // 34: google.protobuf.Empty
+	(HostConfigAction)(0),             // 3: tsm.v1.HostConfigAction
+	(*Session)(nil),                   // 4: tsm.v1.Session
+	(*Group)(nil),                     // 5: tsm.v1.Group
+	(*StateSnapshot)(nil),             // 6: tsm.v1.StateSnapshot
+	(*HostState)(nil),                 // 7: tsm.v1.HostState
+	(*MultiHostSnapshot)(nil),         // 8: tsm.v1.MultiHostSnapshot
+	(*ProxyMutationRequest)(nil),      // 9: tsm.v1.ProxyMutationRequest
+	(*ProxyMutationResponse)(nil),     // 10: tsm.v1.ProxyMutationResponse
+	(*HostConfigEntry)(nil),           // 11: tsm.v1.HostConfigEntry
+	(*GetHostsConfigRequest)(nil),     // 12: tsm.v1.GetHostsConfigRequest
+	(*GetHostsConfigResponse)(nil),    // 13: tsm.v1.GetHostsConfigResponse
+	(*UpdateHostConfigRequest)(nil),   // 14: tsm.v1.UpdateHostConfigRequest
+	(*UpdateHostConfigResponse)(nil),  // 15: tsm.v1.UpdateHostConfigResponse
+	(*WatchRequest)(nil),              // 16: tsm.v1.WatchRequest
+	(*WatchMultiHostRequest)(nil),     // 17: tsm.v1.WatchMultiHostRequest
+	(*CreateSessionRequest)(nil),      // 18: tsm.v1.CreateSessionRequest
+	(*KillSessionRequest)(nil),        // 19: tsm.v1.KillSessionRequest
+	(*RenameSessionRequest)(nil),      // 20: tsm.v1.RenameSessionRequest
+	(*RenameGroupRequest)(nil),        // 21: tsm.v1.RenameGroupRequest
+	(*CreateGroupRequest)(nil),        // 22: tsm.v1.CreateGroupRequest
+	(*MoveSessionRequest)(nil),        // 23: tsm.v1.MoveSessionRequest
+	(*ReorderRequest)(nil),            // 24: tsm.v1.ReorderRequest
+	(*GroupReorder)(nil),              // 25: tsm.v1.GroupReorder
+	(*SessionReorder)(nil),            // 26: tsm.v1.SessionReorder
+	(*ToggleCollapseRequest)(nil),     // 27: tsm.v1.ToggleCollapseRequest
+	(*DaemonStatusResponse)(nil),      // 28: tsm.v1.DaemonStatusResponse
+	(*ConfigValue)(nil),               // 29: tsm.v1.ConfigValue
+	(*GetConfigRequest)(nil),          // 30: tsm.v1.GetConfigRequest
+	(*GetConfigResponse)(nil),         // 31: tsm.v1.GetConfigResponse
+	(*SetConfigRequest)(nil),          // 32: tsm.v1.SetConfigRequest
+	(*UploadedFile)(nil),              // 33: tsm.v1.UploadedFile
+	(*UploadEvent)(nil),               // 34: tsm.v1.UploadEvent
+	(*GetUploadTargetRequest)(nil),    // 35: tsm.v1.GetUploadTargetRequest
+	(*GetUploadTargetResponse)(nil),   // 36: tsm.v1.GetUploadTargetResponse
+	(*SetUploadModeRequest)(nil),      // 37: tsm.v1.SetUploadModeRequest
+	(*ReportUploadResultRequest)(nil), // 38: tsm.v1.ReportUploadResultRequest
+	(*timestamppb.Timestamp)(nil),     // 39: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),             // 40: google.protobuf.Empty
 }
 var file_api_proto_tsm_v1_tsm_proto_depIdxs = []int32{
-	33, // 0: tsm.v1.Session.activity:type_name -> google.protobuf.Timestamp
+	39, // 0: tsm.v1.Session.activity:type_name -> google.protobuf.Timestamp
 	0,  // 1: tsm.v1.Session.status:type_name -> tsm.v1.SessionStatus
-	3,  // 2: tsm.v1.StateSnapshot.sessions:type_name -> tsm.v1.Session
-	4,  // 3: tsm.v1.StateSnapshot.groups:type_name -> tsm.v1.Group
-	28, // 4: tsm.v1.StateSnapshot.upload_events:type_name -> tsm.v1.UploadEvent
+	4,  // 2: tsm.v1.StateSnapshot.sessions:type_name -> tsm.v1.Session
+	5,  // 3: tsm.v1.StateSnapshot.groups:type_name -> tsm.v1.Group
+	34, // 4: tsm.v1.StateSnapshot.upload_events:type_name -> tsm.v1.UploadEvent
 	1,  // 5: tsm.v1.HostState.status:type_name -> tsm.v1.HostStatus
-	5,  // 6: tsm.v1.HostState.snapshot:type_name -> tsm.v1.StateSnapshot
-	6,  // 7: tsm.v1.MultiHostSnapshot.hosts:type_name -> tsm.v1.HostState
+	6,  // 6: tsm.v1.HostState.snapshot:type_name -> tsm.v1.StateSnapshot
+	7,  // 7: tsm.v1.MultiHostSnapshot.hosts:type_name -> tsm.v1.HostState
 	2,  // 8: tsm.v1.ProxyMutationRequest.type:type_name -> tsm.v1.MutationType
-	19, // 9: tsm.v1.ReorderRequest.group:type_name -> tsm.v1.GroupReorder
-	20, // 10: tsm.v1.ReorderRequest.session:type_name -> tsm.v1.SessionReorder
-	33, // 11: tsm.v1.DaemonStatusResponse.started_at:type_name -> google.protobuf.Timestamp
-	23, // 12: tsm.v1.GetConfigResponse.values:type_name -> tsm.v1.ConfigValue
-	23, // 13: tsm.v1.SetConfigRequest.values:type_name -> tsm.v1.ConfigValue
-	27, // 14: tsm.v1.UploadEvent.files:type_name -> tsm.v1.UploadedFile
-	27, // 15: tsm.v1.ReportUploadResultRequest.files:type_name -> tsm.v1.UploadedFile
-	10, // 16: tsm.v1.SessionManager.Watch:input_type -> tsm.v1.WatchRequest
-	12, // 17: tsm.v1.SessionManager.CreateSession:input_type -> tsm.v1.CreateSessionRequest
-	13, // 18: tsm.v1.SessionManager.KillSession:input_type -> tsm.v1.KillSessionRequest
-	14, // 19: tsm.v1.SessionManager.RenameSession:input_type -> tsm.v1.RenameSessionRequest
-	16, // 20: tsm.v1.SessionManager.CreateGroup:input_type -> tsm.v1.CreateGroupRequest
-	15, // 21: tsm.v1.SessionManager.RenameGroup:input_type -> tsm.v1.RenameGroupRequest
-	17, // 22: tsm.v1.SessionManager.MoveSession:input_type -> tsm.v1.MoveSessionRequest
-	18, // 23: tsm.v1.SessionManager.Reorder:input_type -> tsm.v1.ReorderRequest
-	21, // 24: tsm.v1.SessionManager.ToggleCollapse:input_type -> tsm.v1.ToggleCollapseRequest
-	34, // 25: tsm.v1.SessionManager.DaemonStatus:input_type -> google.protobuf.Empty
-	24, // 26: tsm.v1.SessionManager.GetConfig:input_type -> tsm.v1.GetConfigRequest
-	26, // 27: tsm.v1.SessionManager.SetConfig:input_type -> tsm.v1.SetConfigRequest
-	29, // 28: tsm.v1.SessionManager.GetUploadTarget:input_type -> tsm.v1.GetUploadTargetRequest
-	31, // 29: tsm.v1.SessionManager.SetUploadMode:input_type -> tsm.v1.SetUploadModeRequest
-	32, // 30: tsm.v1.SessionManager.ReportUploadResult:input_type -> tsm.v1.ReportUploadResultRequest
-	11, // 31: tsm.v1.SessionManager.WatchMultiHost:input_type -> tsm.v1.WatchMultiHostRequest
-	8,  // 32: tsm.v1.SessionManager.ProxyMutation:input_type -> tsm.v1.ProxyMutationRequest
-	5,  // 33: tsm.v1.SessionManager.Watch:output_type -> tsm.v1.StateSnapshot
-	34, // 34: tsm.v1.SessionManager.CreateSession:output_type -> google.protobuf.Empty
-	34, // 35: tsm.v1.SessionManager.KillSession:output_type -> google.protobuf.Empty
-	34, // 36: tsm.v1.SessionManager.RenameSession:output_type -> google.protobuf.Empty
-	34, // 37: tsm.v1.SessionManager.CreateGroup:output_type -> google.protobuf.Empty
-	34, // 38: tsm.v1.SessionManager.RenameGroup:output_type -> google.protobuf.Empty
-	34, // 39: tsm.v1.SessionManager.MoveSession:output_type -> google.protobuf.Empty
-	34, // 40: tsm.v1.SessionManager.Reorder:output_type -> google.protobuf.Empty
-	34, // 41: tsm.v1.SessionManager.ToggleCollapse:output_type -> google.protobuf.Empty
-	22, // 42: tsm.v1.SessionManager.DaemonStatus:output_type -> tsm.v1.DaemonStatusResponse
-	25, // 43: tsm.v1.SessionManager.GetConfig:output_type -> tsm.v1.GetConfigResponse
-	34, // 44: tsm.v1.SessionManager.SetConfig:output_type -> google.protobuf.Empty
-	30, // 45: tsm.v1.SessionManager.GetUploadTarget:output_type -> tsm.v1.GetUploadTargetResponse
-	34, // 46: tsm.v1.SessionManager.SetUploadMode:output_type -> google.protobuf.Empty
-	34, // 47: tsm.v1.SessionManager.ReportUploadResult:output_type -> google.protobuf.Empty
-	7,  // 48: tsm.v1.SessionManager.WatchMultiHost:output_type -> tsm.v1.MultiHostSnapshot
-	9,  // 49: tsm.v1.SessionManager.ProxyMutation:output_type -> tsm.v1.ProxyMutationResponse
-	33, // [33:50] is the sub-list for method output_type
-	16, // [16:33] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	11, // 9: tsm.v1.GetHostsConfigResponse.hosts:type_name -> tsm.v1.HostConfigEntry
+	3,  // 10: tsm.v1.UpdateHostConfigRequest.action:type_name -> tsm.v1.HostConfigAction
+	11, // 11: tsm.v1.UpdateHostConfigResponse.hosts:type_name -> tsm.v1.HostConfigEntry
+	25, // 12: tsm.v1.ReorderRequest.group:type_name -> tsm.v1.GroupReorder
+	26, // 13: tsm.v1.ReorderRequest.session:type_name -> tsm.v1.SessionReorder
+	39, // 14: tsm.v1.DaemonStatusResponse.started_at:type_name -> google.protobuf.Timestamp
+	29, // 15: tsm.v1.GetConfigResponse.values:type_name -> tsm.v1.ConfigValue
+	29, // 16: tsm.v1.SetConfigRequest.values:type_name -> tsm.v1.ConfigValue
+	33, // 17: tsm.v1.UploadEvent.files:type_name -> tsm.v1.UploadedFile
+	33, // 18: tsm.v1.ReportUploadResultRequest.files:type_name -> tsm.v1.UploadedFile
+	16, // 19: tsm.v1.SessionManager.Watch:input_type -> tsm.v1.WatchRequest
+	18, // 20: tsm.v1.SessionManager.CreateSession:input_type -> tsm.v1.CreateSessionRequest
+	19, // 21: tsm.v1.SessionManager.KillSession:input_type -> tsm.v1.KillSessionRequest
+	20, // 22: tsm.v1.SessionManager.RenameSession:input_type -> tsm.v1.RenameSessionRequest
+	22, // 23: tsm.v1.SessionManager.CreateGroup:input_type -> tsm.v1.CreateGroupRequest
+	21, // 24: tsm.v1.SessionManager.RenameGroup:input_type -> tsm.v1.RenameGroupRequest
+	23, // 25: tsm.v1.SessionManager.MoveSession:input_type -> tsm.v1.MoveSessionRequest
+	24, // 26: tsm.v1.SessionManager.Reorder:input_type -> tsm.v1.ReorderRequest
+	27, // 27: tsm.v1.SessionManager.ToggleCollapse:input_type -> tsm.v1.ToggleCollapseRequest
+	40, // 28: tsm.v1.SessionManager.DaemonStatus:input_type -> google.protobuf.Empty
+	30, // 29: tsm.v1.SessionManager.GetConfig:input_type -> tsm.v1.GetConfigRequest
+	32, // 30: tsm.v1.SessionManager.SetConfig:input_type -> tsm.v1.SetConfigRequest
+	35, // 31: tsm.v1.SessionManager.GetUploadTarget:input_type -> tsm.v1.GetUploadTargetRequest
+	37, // 32: tsm.v1.SessionManager.SetUploadMode:input_type -> tsm.v1.SetUploadModeRequest
+	38, // 33: tsm.v1.SessionManager.ReportUploadResult:input_type -> tsm.v1.ReportUploadResultRequest
+	17, // 34: tsm.v1.SessionManager.WatchMultiHost:input_type -> tsm.v1.WatchMultiHostRequest
+	9,  // 35: tsm.v1.SessionManager.ProxyMutation:input_type -> tsm.v1.ProxyMutationRequest
+	12, // 36: tsm.v1.SessionManager.GetHostsConfig:input_type -> tsm.v1.GetHostsConfigRequest
+	14, // 37: tsm.v1.SessionManager.UpdateHostConfig:input_type -> tsm.v1.UpdateHostConfigRequest
+	6,  // 38: tsm.v1.SessionManager.Watch:output_type -> tsm.v1.StateSnapshot
+	40, // 39: tsm.v1.SessionManager.CreateSession:output_type -> google.protobuf.Empty
+	40, // 40: tsm.v1.SessionManager.KillSession:output_type -> google.protobuf.Empty
+	40, // 41: tsm.v1.SessionManager.RenameSession:output_type -> google.protobuf.Empty
+	40, // 42: tsm.v1.SessionManager.CreateGroup:output_type -> google.protobuf.Empty
+	40, // 43: tsm.v1.SessionManager.RenameGroup:output_type -> google.protobuf.Empty
+	40, // 44: tsm.v1.SessionManager.MoveSession:output_type -> google.protobuf.Empty
+	40, // 45: tsm.v1.SessionManager.Reorder:output_type -> google.protobuf.Empty
+	40, // 46: tsm.v1.SessionManager.ToggleCollapse:output_type -> google.protobuf.Empty
+	28, // 47: tsm.v1.SessionManager.DaemonStatus:output_type -> tsm.v1.DaemonStatusResponse
+	31, // 48: tsm.v1.SessionManager.GetConfig:output_type -> tsm.v1.GetConfigResponse
+	40, // 49: tsm.v1.SessionManager.SetConfig:output_type -> google.protobuf.Empty
+	36, // 50: tsm.v1.SessionManager.GetUploadTarget:output_type -> tsm.v1.GetUploadTargetResponse
+	40, // 51: tsm.v1.SessionManager.SetUploadMode:output_type -> google.protobuf.Empty
+	40, // 52: tsm.v1.SessionManager.ReportUploadResult:output_type -> google.protobuf.Empty
+	8,  // 53: tsm.v1.SessionManager.WatchMultiHost:output_type -> tsm.v1.MultiHostSnapshot
+	10, // 54: tsm.v1.SessionManager.ProxyMutation:output_type -> tsm.v1.ProxyMutationResponse
+	13, // 55: tsm.v1.SessionManager.GetHostsConfig:output_type -> tsm.v1.GetHostsConfigResponse
+	15, // 56: tsm.v1.SessionManager.UpdateHostConfig:output_type -> tsm.v1.UpdateHostConfigResponse
+	38, // [38:57] is the sub-list for method output_type
+	19, // [19:38] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_tsm_v1_tsm_proto_init() }
@@ -2279,7 +2739,7 @@ func file_api_proto_tsm_v1_tsm_proto_init() {
 	if File_api_proto_tsm_v1_tsm_proto != nil {
 		return
 	}
-	file_api_proto_tsm_v1_tsm_proto_msgTypes[15].OneofWrappers = []any{
+	file_api_proto_tsm_v1_tsm_proto_msgTypes[20].OneofWrappers = []any{
 		(*ReorderRequest_Group)(nil),
 		(*ReorderRequest_Session)(nil),
 	}
@@ -2288,8 +2748,8 @@ func file_api_proto_tsm_v1_tsm_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_tsm_v1_tsm_proto_rawDesc), len(file_api_proto_tsm_v1_tsm_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   30,
+			NumEnums:      4,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
