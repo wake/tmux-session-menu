@@ -109,8 +109,8 @@ func TestModel_View_RendersSessions(t *testing.T) {
 	assert.Contains(t, view, "dev")
 	assert.Contains(t, view, "my-project")
 	assert.Contains(t, view, "api-server")
-	assert.Contains(t, view, "●") // running
-	assert.Contains(t, view, "○") // idle
+	assert.Contains(t, view, "●") // agent running
+	assert.Contains(t, view, "❯") // non-agent
 	assert.Contains(t, view, "claude-sonnet-4-6")
 }
 
@@ -268,8 +268,8 @@ func TestModel_View_UnifiedStatusIcons(t *testing.T) {
 	assert.Contains(t, view, "●")
 	// agent waiting 用 ◐
 	assert.Contains(t, view, "◐")
-	// idle（非 agent）用 ○
-	assert.Contains(t, view, "○")
+	// 非 agent 一律用 ❯
+	assert.Contains(t, view, "❯")
 }
 
 func TestModel_AnimTick(t *testing.T) {

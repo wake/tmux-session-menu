@@ -110,13 +110,8 @@ func (m Model) infoConnect() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// 設定 tmux @tsm_hub_socket 供下次 Ctrl+Q 使用
-	if m.deps.Cfg.InTmux {
-		exec := tmux.NewRealExecutor()
-		_, _ = exec.Execute("set-option", "-g", "@tsm_hub_socket", sockPath)
-	}
-
-	// 設定重連 socket 並退出，由 main.go 處理實際重連
+	// 只影響當前 session 的重連，不設定 @tsm_hub_socket
+	// （@tsm_hub_socket 由 hub 端 SetHubSocket 管理，不應從 UI 覆寫）
 	m.hubReconnectSock = sockPath
 	m.quitting = true
 	return m, tea.Quit

@@ -55,8 +55,8 @@ func (s Session) RelativeTime() string {
 }
 
 // StatusIcon 回傳對應狀態的圖示字元。
-// agent session（AiType 非空）：running 用 ●，waiting 用 ◐，idle 用 ●，error 用 ✗
-// 一般 session：idle 用 ○（空心），其餘用 ❯（shell prompt）
+// agent session（AiType 非空）：running ●、waiting ◐、idle ○、error ✗
+// 一般 session：一律 ❯（shell prompt）
 func (s Session) StatusIcon() string {
 	if s.AiType != "" {
 		switch s.Status {
@@ -64,12 +64,11 @@ func (s Session) StatusIcon() string {
 			return "✗"
 		case StatusWaiting:
 			return "◐"
+		case StatusIdle:
+			return "○"
 		default:
 			return "●"
 		}
-	}
-	if s.Status == StatusIdle {
-		return "○"
 	}
 	return "❯"
 }

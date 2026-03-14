@@ -2343,8 +2343,13 @@ func (m Model) hasRunning() bool {
 const animFrames = 40
 
 // styledStatusIcon 回傳帶動畫效果的狀態圖示。
-// running 狀態的 ● 會以 sine 波呼吸效果平滑變化亮度。
+// agent running 的 ● 會以 sine 波呼吸效果平滑變化亮度。
+// 非 agent session（icon = ❯）一律用 idle 樣式，不跑動畫。
 func (m Model) styledStatusIcon(status tmux.SessionStatus, icon string) string {
+	// 非 agent session 圖示為 ❯，不需動畫
+	if icon == "❯" {
+		return statusIdleStyle.Render(icon)
+	}
 	switch status {
 	case tmux.StatusRunning:
 		// sine 波：0→1→0 平滑呼吸，亮度 60%～100%

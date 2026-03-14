@@ -35,15 +35,15 @@ func TestSession_StatusIcon(t *testing.T) {
 		sess     tmux.Session
 		expected string
 	}{
-		// 有 AiType：running/waiting/idle 用 ●，error 用 ✗
+		// 有 AiType：running ●、waiting ◐、idle ○、error ✗
 		{"ai running", tmux.Session{AiType: "claude", Status: tmux.StatusRunning}, "●"},
 		{"ai waiting", tmux.Session{AiType: "claude", Status: tmux.StatusWaiting}, "◐"},
-		{"ai idle", tmux.Session{AiType: "claude", Status: tmux.StatusIdle}, "●"},
+		{"ai idle", tmux.Session{AiType: "claude", Status: tmux.StatusIdle}, "○"},
 		{"ai error", tmux.Session{AiType: "claude", Status: tmux.StatusError}, "✗"},
-		// 無 AiType：idle 用 ○，其餘用 ❯
+		// 無 AiType：一律 ❯
 		{"no ai running", tmux.Session{Status: tmux.StatusRunning}, "❯"},
 		{"no ai waiting", tmux.Session{Status: tmux.StatusWaiting}, "❯"},
-		{"no ai idle", tmux.Session{Status: tmux.StatusIdle}, "○"},
+		{"no ai idle", tmux.Session{Status: tmux.StatusIdle}, "❯"},
 		{"no ai error", tmux.Session{Status: tmux.StatusError}, "❯"},
 	}
 
