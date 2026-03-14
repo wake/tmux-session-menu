@@ -92,6 +92,17 @@ func ClearHubSelf(host string) error {
 	return sshRunFn("ssh", host, "bash", "-lc", "tmux set-option -gu @tsm_hub_self")
 }
 
+// AttachShellCommand 回傳 SSH attach 的完整 shell 命令字串。
+// 用於 tmux new-window 等需要 shell 命令字串的場景（例如 popup 模式）。
+// host 與 sessionName 皆用 shellEscape 跳脫，防止 shell injection。
+func AttachShellCommand(host, sessionName string) string {
+	return fmt.Sprintf(
+		"ssh -t -o ServerAliveInterval=5 -o ServerAliveCountMax=3 '%s' "+
+			`'exec $SHELL -lc '"'"'tmux attach-session -t "%s"'"'"''`,
+		shellEscape(host), shellEscape(sessionName),
+	)
+}
+
 // Attach 啟動 `ssh -t host` 並透過遠端 login shell 執行 tmux attach-session。
 // 使用 login shell 確保 PATH 包含 Homebrew 等非系統路徑。
 // 使用者正常 detach 回傳 AttachDetached，連線中斷回傳 AttachDisconnected。
