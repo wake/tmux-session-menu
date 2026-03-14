@@ -648,7 +648,11 @@ func (m *Model) rebuildHubItems() {
 		return
 	}
 	inputs := ConvertMultiHostSnapshot(m.hubHostSnap)
-	inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
+	if m.isHubSocketMode() {
+		inputs = FilterActiveHosts(inputs, m.hubHosts)
+	} else {
+		inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
+	}
 	m.items = FlattenMultiHost(inputs)
 	if len(m.items) == 0 {
 		m.cursor = 0
@@ -659,8 +663,12 @@ func (m *Model) rebuildHubItems() {
 
 // visibleHubHosts 回傳 hub 模式下非封存的主機列表（來自 deps.Cfg.Hosts）。
 func (m Model) visibleHubHosts() []config.HostEntry {
+	hosts := m.deps.Cfg.Hosts
+	if m.isHubSocketMode() {
+		hosts = m.hubHosts
+	}
 	var result []config.HostEntry
-	for _, h := range m.deps.Cfg.Hosts {
+	for _, h := range hosts {
 		if !h.Archived {
 			result = append(result, h)
 		}
@@ -731,7 +739,11 @@ func (m Model) persistHubHosts() {
 
 // hubHostOriginalIndex 在 deps.Cfg.Hosts 中查找 name 的原始索引。
 func (m Model) hubHostOriginalIndex(name string) int {
-	for i, h := range m.deps.Cfg.Hosts {
+	hosts := m.deps.Cfg.Hosts
+	if m.isHubSocketMode() {
+		hosts = m.hubHosts
+	}
+	for i, h := range hosts {
 		if h.Name == name {
 			return i
 		}

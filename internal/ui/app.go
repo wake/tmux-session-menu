@@ -1096,9 +1096,22 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else if m.deps.HubMode && m.hubHostSnap != nil {
+			enabledHosts := make(map[string]bool)
+			hostSource := m.deps.Cfg.Hosts
+			if m.isHubSocketMode() {
+				hostSource = m.hubHosts
+			}
+			for _, h := range hostSource {
+				if h.Enabled && !h.Archived {
+					enabledHosts[h.Name] = true
+				}
+			}
 			for _, h := range m.hubHostSnap.Hosts {
 				if h.Status != tsmv1.HostStatus_HOST_STATUS_CONNECTED {
-					continue // 只顯示已連線的主機，避免使用者選到不可用的目標
+					continue
+				}
+				if !enabledHosts[h.Name] {
+					continue
 				}
 				hosts = append(hosts, hostTabInfo{
 					ID: h.HostId, Name: h.Name, Color: h.Color,
@@ -1167,6 +1180,9 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.deps.HostMgr != nil || (m.deps.HubMode && m.hubHostSnap != nil) {
 			m.mode = ModeHostPicker
 			m.hostPickerCursor = 0
+			if m.isHubSocketMode() {
+				return m, fetchHubHostsCmd(m.deps.Client)
+			}
 			return m, nil
 		}
 		return m, nil
