@@ -2,6 +2,11 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.41.1] - 2026-03-14
+
+### Fixed
+- Hub-socket 模式 hostname 解析修正：spoke 端選擇 hub session 時不再使用無法解析的 `os.Hostname()`，改用 UDP dial 偵測本機出口 IP 作為 `@tsm_hub_host`
+
 ## [0.41.0] - 2026-03-14
 
 ### Added
