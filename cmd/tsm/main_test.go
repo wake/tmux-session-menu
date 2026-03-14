@@ -83,6 +83,25 @@ func TestReconnLoop_SendsConnectingOnEachAttempt(t *testing.T) {
 	}, states)
 }
 
+func TestDetectLocalAddr_Loopback(t *testing.T) {
+	// 連到 127.0.0.1 時，出口 IP 應為 127.0.0.1
+	got := detectLocalAddr("127.0.0.1")
+	assert.Equal(t, "127.0.0.1", got)
+}
+
+func TestDetectLocalAddr_StripUser(t *testing.T) {
+	// user@host 格式應正確解析（127.0.0.1 保證可達）
+	got := detectLocalAddr("user@127.0.0.1")
+	assert.Equal(t, "127.0.0.1", got)
+}
+
+func TestDetectLocalAddr_Unreachable(t *testing.T) {
+	// 無法路由的位址應回傳空字串
+	got := detectLocalAddr("192.0.2.1") // TEST-NET-1, RFC 5737
+	// 即使不可達，OS 仍可能選擇預設路由的出口 IP，所以只驗證不 panic
+	_ = got
+}
+
 func TestParseRunMode(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -1790,6 +1791,22 @@ func runItermCoprocess(args []string) {
 	upload.RunCoprocess(filenames)
 }
 
+// detectLocalAddr 偵測本機連到 remoteHost 時使用的出口 IP 地址。
+// 利用 UDP dial 讓 OS 路由表決定出口介面，不實際傳送封包。
+// remoteHost 可以是 "host"、"user@host" 或 IP 格式。
+func detectLocalAddr(remoteHost string) string {
+	host := remoteHost
+	if i := strings.LastIndex(host, "@"); i >= 0 {
+		host = host[i+1:]
+	}
+	conn, err := net.DialTimeout("udp", net.JoinHostPort(host, "22"), time.Second)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	return conn.LocalAddr().(*net.UDPAddr).IP.String()
+}
+
 // makeHubDialFn 建立 daemon hub 模式的遠端 dial 函式。
 // 使用 SSH tunnel（forward + reverse）+ gRPC DialSocket 連線到遠端 daemon。
 // reverse tunnel 讓遠端主機的 Ctrl+Q 能透過 @tsm_hub_socket 連回 hub daemon。
@@ -1815,8 +1832,13 @@ func makeHubDialFn(hubSocketPath string, hosts []config.HostEntry) daemon.HubDia
 		if err := remote.SetHubSocket(address, reverseSock); err != nil {
 			log.Printf("warn: set hub socket on %s failed: %v", address, err)
 		}
-		// 設定 @tsm_hub_host（hub 的 SSH 地址）讓 spoke 端能 SSH 回 hub
-		if err := remote.SetHubHost(address, hostname); err != nil {
+		// 設定 @tsm_hub_host（hub 的可達 IP 地址）讓 spoke 端能 SSH 回 hub
+		// 偵測本機連到 spoke 的出口 IP，而非 os.Hostname()（hostname 可能無法從 spoke 端解析）
+		hubAddr := detectLocalAddr(address)
+		if hubAddr == "" {
+			hubAddr = hostname // 偵測失敗時 fallback 到 hostname
+		}
+		if err := remote.SetHubHost(address, hubAddr); err != nil {
 			log.Printf("warn: set hub host on %s failed: %v", address, err)
 		}
 		// 設定 @tsm_hub_self（spoke 在 hub 中的 host ID）讓 spoke 判斷哪些 session 是自己的
