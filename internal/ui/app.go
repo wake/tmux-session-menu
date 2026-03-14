@@ -43,8 +43,9 @@ type Deps struct {
 	StatusDir  string
 	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
 
-	Upgrader *upgrade.Upgrader // nil 時 ctrl+u 無效
-	HubMode  bool              // true = 使用 WatchMultiHost（hub 模式）
+	Upgrader  *upgrade.Upgrader // nil 時 ctrl+u 無效
+	HubMode   bool              // true = 使用 WatchMultiHost（hub 模式）
+	HubSocket string            // hub-socket 模式的 socket 路徑（供 info 顯示）
 }
 
 // persistHosts 將 HostManager 的主機清單寫回 config.toml。
@@ -152,6 +153,10 @@ type Model struct {
 
 	// 上傳模式
 	uploadModal uploadModal
+
+	// Info 模式（連線資訊 + Hub 重連）
+	infoHubInput     textinput.Model // hub socket 路徑輸入
+	hubReconnectSock string          // 非空時表示要重連到此 hub socket
 }
 
 // NewModel 建立初始 Model。
@@ -396,6 +401,9 @@ func (m Model) UpgradeInfo() (tmpPath, version string) { return m.upgradeTmpPath
 
 // UpgradeBinPath 回傳 restart-only 時已安裝 binary 的路徑（無需下載）。
 func (m Model) UpgradeBinPath() string { return m.upgradeBinPath }
+
+// HubReconnect 回傳使用者要求重連的 hub socket 路徑（空字串表示不需重連）。
+func (m Model) HubReconnect() string { return m.hubReconnectSock }
 
 // ConfirmPrompt 回傳目前確認對話框的提示文字。
 func (m Model) ConfirmPrompt() string { return m.confirmPrompt }
@@ -1043,6 +1051,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateUpload(msg)
 		case ModeUpgrade:
 			return m.updateUpgrade(msg)
+		case ModeInfo:
+			return m.updateInfo(msg)
 		default:
 			return m.updateNormal(msg)
 		}
@@ -1099,6 +1109,9 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor >= 0 && m.cursor < len(m.items) && m.items[m.cursor].Type == ItemGroup {
 			return m.toggleCollapse(m.items[m.cursor])
 		}
+		return m, nil
+	case "i":
+		m = m.enterInfoMode()
 		return m, nil
 	case "c":
 		m.openConfig_ = true
@@ -2251,6 +2264,8 @@ func (m Model) View() string {
 		b.WriteString(m.uploadModal.view())
 	case ModeUpgrade:
 		b.WriteString(m.renderUpgrade())
+	case ModeInfo:
+		b.WriteString(m.renderInfo())
 	default:
 		b.WriteString("\n")
 		b.WriteString(m.renderToolbar())
@@ -2286,6 +2301,7 @@ func (m Model) renderToolbar() string {
 	if m.deps.Upgrader != nil {
 		line2Parts = append(line2Parts, render("[ctrl+u]", "升級"))
 	}
+	line2Parts = append(line2Parts, render("[i]", "資訊"))
 	lines := []string{
 		fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
 			render("[/]", "搜尋"), render("[n]", "新建"), render("[r]", "更名"), render("[d]", "刪除"), render("[R]", "唯讀進入"), render("[q]", "關閉選單")),
