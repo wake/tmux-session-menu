@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.44.3] - 2026-03-15
+
+### Fixed
+- Hub-socket 模式 `[h]` 改色 Ctrl+S 後 status bar 立即套用：`applyCurrentStatusBarCmd` 從 `hubHosts`（hub daemon 最新設定）取色，而非 stale 的本地 config
+- 新增 `Deps.HubSelf` 欄位讓 spoke 端在 `hubHosts` 中找到自己的主機設定
+
 ## [0.44.2] - 2026-03-15
 
 ### Fixed
