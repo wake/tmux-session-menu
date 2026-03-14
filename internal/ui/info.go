@@ -16,6 +16,7 @@ import (
 // enterInfoMode 進入連線資訊模式，初始化 hub socket 輸入欄位。
 func (m Model) enterInfoMode() Model {
 	m.mode = ModeInfo
+	m.err = nil
 
 	ti := textinput.New()
 	ti.PromptStyle = selectedStyle
@@ -82,10 +83,6 @@ func (m Model) updateInfo(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		// Enter = 連線（同 c）
 		return m.infoConnect()
-	case tea.KeyRunes:
-		if msg.String() == "c" && !m.infoHubInput.Focused() {
-			return m.infoConnect()
-		}
 	}
 
 	// 將按鍵轉發到 text input
@@ -146,10 +143,6 @@ func (m Model) renderInfo() string {
 	b.WriteString("\n")
 	b.WriteString("  " + selectedStyle.Render("── Hub 連線 ──") + "\n")
 	b.WriteString(fmt.Sprintf("  %s  %s\n", label("路徑:"), m.infoHubInput.View()))
-
-	if m.err != nil {
-		b.WriteString(fmt.Sprintf("\n  %s\n", statusErrorStyle.Render("Error: "+m.err.Error())))
-	}
 
 	b.WriteString(fmt.Sprintf("\n  %s  %s\n",
 		render("[Enter]", "連線"),
