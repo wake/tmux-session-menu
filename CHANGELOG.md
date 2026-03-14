@@ -2,6 +2,13 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.44.0] - 2026-03-14
+
+### Changed
+- 狀態圖示重新設計：一般 session idle `○`（空心圓）、shell/running `❯`（prompt 符號）
+- Agent session：running `●`（綠色呼吸）、waiting `◐`（黃色半月）、error `✗`
+- idle 色從 `#888888` 調亮至 `#AAAAAA` 提升可讀性
+
 ## [0.43.0] - 2026-03-14
 
 ### Added
