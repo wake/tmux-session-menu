@@ -2,6 +2,14 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.44.1] - 2026-03-14
+
+### Fixed
+- 非 agent session（如 `_normal`）StatusIcon 一律顯示 `❯`，修正誤顯示 `○` 的問題
+- `styledStatusIcon` 非 agent session 跳過呼吸動畫，避免 `❯` 閃爍
+- `[i]` 面板移除 `@tsm_hub_socket` 覆寫：該選項由 hub 端 `SetHubSocket` 管理，避免 hub 主機誤變 spoke
+- 刪除 `types_test.go` 重複測試，`session_test.go` 已完整覆蓋
+
 ## [0.44.0] - 2026-03-14
 
 ### Changed
