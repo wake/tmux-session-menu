@@ -64,9 +64,17 @@ func TestAttachShellCommand_Format(t *testing.T) {
 	assert.Contains(t, cmd, "my-session")
 }
 
-func TestAttachShellCommand_EscapesQuotes(t *testing.T) {
+func TestAttachShellCommand_EscapesDoubleQuotes(t *testing.T) {
 	cmd := AttachShellCommand("host", `my"session`)
-	assert.Contains(t, cmd, `\"my\"session\"`)
+	// shellEscape 不動雙引號，但雙引號在單引號內是安全的
+	assert.Contains(t, cmd, `my"session`)
+}
+
+func TestAttachShellCommand_EscapesSingleQuotes(t *testing.T) {
+	cmd := AttachShellCommand("host", "it's-session")
+	// 單引號經 shellEscape 變為 '\''
+	assert.NotContains(t, cmd, "it's-session")
+	assert.Contains(t, cmd, `it'\''s-session`)
 }
 
 func TestClearHubSocket_CallsSSHWithUnsetFlag(t *testing.T) {

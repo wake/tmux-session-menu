@@ -1141,7 +1141,9 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			// 不能在 popup 內跑 SSH，否則遠端 session 會渲染在 popup 視窗裡。
 			applyHostBar()
 			cmd := remote.AttachShellCommand(hostEntry.Address, selected)
-			_ = osexec.Command("tmux", "new-window", "-n", selected, cmd).Run()
+			if err := osexec.Command("tmux", "new-window", "-n", selected, cmd).Run(); err != nil {
+				_ = tmux.ApplyStatusBar(exec, cfg.Local)
+			}
 			return hubResultExit
 		}
 
@@ -1162,6 +1164,13 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 						return hubResultExit
 					}
 					continue
+				}
+				// 遠端 spoke → popup 模式走 new-window
+				if cfg.InPopup {
+					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
+					cmd := remote.AttachShellCommand(pHost.Address, pSession)
+					_ = osexec.Command("tmux", "new-window", "-n", pSession, cmd).Run()
+					return hubResultExit
 				}
 				// 遠端 spoke → 直接 attach
 				pApply := func() {
@@ -1205,6 +1214,13 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 						return hubResultExit
 					}
 					continue
+				}
+				// 遠端 spoke → popup 模式走 new-window
+				if cfg.InPopup {
+					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
+					cmd := remote.AttachShellCommand(pHost.Address, pSession)
+					_ = osexec.Command("tmux", "new-window", "-n", pSession, cmd).Run()
+					return hubResultExit
 				}
 				// 遠端 spoke → 直接 attach
 				pApply := func() {

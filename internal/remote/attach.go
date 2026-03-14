@@ -94,12 +94,12 @@ func ClearHubSelf(host string) error {
 
 // AttachShellCommand 回傳 SSH attach 的完整 shell 命令字串。
 // 用於 tmux new-window 等需要 shell 命令字串的場景（例如 popup 模式）。
+// host 與 sessionName 皆用 shellEscape 跳脫，防止 shell injection。
 func AttachShellCommand(host, sessionName string) string {
-	// 使用雙引號包裹遠端命令，避免 session name 中的特殊字元問題
-	escapedName := strings.ReplaceAll(sessionName, `"`, `\"`)
 	return fmt.Sprintf(
-		`ssh -t -o ServerAliveInterval=5 -o ServerAliveCountMax=3 %s 'exec $SHELL -lc "tmux attach-session -t \"%s\""'`,
-		host, escapedName,
+		"ssh -t -o ServerAliveInterval=5 -o ServerAliveCountMax=3 '%s' "+
+			`'exec $SHELL -lc '"'"'tmux attach-session -t "%s"'"'"''`,
+		shellEscape(host), shellEscape(sessionName),
 	)
 }
 
