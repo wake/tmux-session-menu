@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.42.2] - 2026-03-14
+
+### Fixed
+- Reverse tunnel socket 從 `/tmp` 遷移到 `~/.config/tsm/`：修正 macOS `tmp_cleaner` 每日清理導致 hub-socket 被刪除的問題
+- Spoke 端 hub socket 連線失敗時自動清除 stale `@tsm_hub_socket` tmux 選項
+
 ## [0.42.1] - 2026-03-14
 
 ### Fixed
