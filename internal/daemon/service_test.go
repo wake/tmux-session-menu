@@ -404,6 +404,45 @@ func TestService_GetUploadTarget_AiType(t *testing.T) {
 	assert.Equal(t, "dev", resp.SessionName)
 }
 
+func TestGetHostsConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	cfg.Local = config.ColorConfig{BarBG: "#111", BarFG: "#222", BadgeBG: "#333", BadgeFG: "#444"}
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#00ff00", Enabled: true, SortOrder: 0, BarBG: "#111", BarFG: "#222", BadgeBG: "#333", BadgeFG: "#444"},
+		{Name: "mlab", Address: "mlab", Color: "#ff0000", Enabled: true, SortOrder: 1, Archived: false},
+		{Name: "old", Address: "old", Color: "#888", Enabled: false, SortOrder: 2, Archived: true},
+	}
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	exec := &fakeExecutor{listOutput: ""}
+	client, _, cleanup := setupTestService(t, exec)
+	defer cleanup()
+
+	resp, err := client.GetHostsConfig(context.Background(), &tsmv1.GetHostsConfigRequest{})
+	require.NoError(t, err)
+	require.Len(t, resp.Hosts, 3)
+
+	assert.Equal(t, "local", resp.Hosts[0].Name)
+	assert.Equal(t, "", resp.Hosts[0].Address)
+	assert.Equal(t, "#00ff00", resp.Hosts[0].Color)
+	assert.True(t, resp.Hosts[0].Enabled)
+	assert.Equal(t, "#111", resp.Hosts[0].BarBg)
+	assert.Equal(t, "#222", resp.Hosts[0].BarFg)
+	assert.Equal(t, "#333", resp.Hosts[0].BadgeBg)
+	assert.Equal(t, "#444", resp.Hosts[0].BadgeFg)
+
+	assert.Equal(t, "mlab", resp.Hosts[1].Name)
+	assert.Equal(t, "mlab", resp.Hosts[1].Address)
+	assert.True(t, resp.Hosts[1].Enabled)
+
+	assert.Equal(t, "old", resp.Hosts[2].Name)
+	assert.True(t, resp.Hosts[2].Archived)
+	assert.False(t, resp.Hosts[2].Enabled)
+}
+
 // TestService_GetUploadTarget_NoAiType 驗證：無 hook 狀態時，IsClaudeActive 應為 false。
 func TestService_GetUploadTarget_NoAiType(t *testing.T) {
 	now := time.Now().Unix()

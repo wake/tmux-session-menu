@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -30,6 +31,7 @@ type Service struct {
 	hubMgr    *HubManager   // nil = 非 hub 模式
 	state     *StateManager
 	startedAt time.Time
+	cfgMu     sync.Mutex
 }
 
 // NewService 建立新的 gRPC service。
@@ -303,16 +305,59 @@ func (s *Service) ProxyMutation(
 	return s.hubMgr.ProxyMutation(ctx, req)
 }
 
+// loadServerConfigPath 回傳 config.toml 路徑，優先使用 TSM_CONFIG_PATH 環境變數。
+func loadServerConfigPath() string {
+	if p := os.Getenv("TSM_CONFIG_PATH"); p != "" {
+		return p
+	}
+	return config.ExpandPath("~/.config/tsm/config.toml")
+}
+
 // loadServerConfig 讀取伺服器端的 config.toml，讀取失敗時回傳預設值。
 func loadServerConfig() config.Config {
 	cfg := config.Default()
-	cfgPath := config.ExpandPath("~/.config/tsm/config.toml")
+	cfgPath := loadServerConfigPath()
 	if data, err := os.ReadFile(cfgPath); err == nil {
 		if loaded, err := config.LoadFromString(string(data)); err == nil {
 			cfg = loaded
 		}
 	}
 	return cfg
+}
+
+// hostEntryToProto 將 config.HostEntry 轉換為 proto HostConfigEntry。
+func hostEntryToProto(h config.HostEntry) *tsmv1.HostConfigEntry {
+	return &tsmv1.HostConfigEntry{
+		Name:      h.Name,
+		Address:   h.Address,
+		Color:     h.Color,
+		Enabled:   h.Enabled,
+		SortOrder: int32(h.SortOrder),
+		BarBg:     h.BarBG,
+		BarFg:     h.BarFG,
+		BadgeBg:   h.BadgeBG,
+		BadgeFg:   h.BadgeFG,
+		Archived:  h.Archived,
+	}
+}
+
+// hostEntriesToProto 批次轉換 HostEntry 切片。
+func hostEntriesToProto(hosts []config.HostEntry) []*tsmv1.HostConfigEntry {
+	result := make([]*tsmv1.HostConfigEntry, len(hosts))
+	for i, h := range hosts {
+		result[i] = hostEntryToProto(h)
+	}
+	return result
+}
+
+// GetHostsConfig 取得 daemon 所在主機的 hosts 設定清單。
+func (s *Service) GetHostsConfig(_ context.Context, _ *tsmv1.GetHostsConfigRequest) (*tsmv1.GetHostsConfigResponse, error) {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	cfg := loadServerConfig()
+	return &tsmv1.GetHostsConfigResponse{
+		Hosts: hostEntriesToProto(cfg.Hosts),
+	}, nil
 }
 
 // GetConfig 取得 daemon 所在主機的設定。
