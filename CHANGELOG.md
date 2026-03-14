@@ -2,6 +2,14 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.44.2] - 2026-03-15
+
+### Fixed
+- Popup（Ctrl+Q）選擇遠端 session 改用 `tmux new-window` 執行 SSH attach，修正遠端 session 渲染在 popup 視窗內的問題
+- `AttachShellCommand` 對 host/sessionName 做 shell escape 防止 injection
+- Pending cross-host attach 路徑加入 popup 模式判斷
+- `new-window` 失敗時恢復 status bar 顏色
+
 ## [0.44.1] - 2026-03-14
 
 ### Fixed
