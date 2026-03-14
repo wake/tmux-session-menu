@@ -156,7 +156,8 @@ func TestModel_View_TreeAndLineNumbers(t *testing.T) {
 	lines := strings.Split(view, "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "backend-api") {
-			iconIdx := strings.Index(line, "●")
+			// backend-api 無 AiType，StatusIcon 回傳 ❯
+			iconIdx := strings.Index(line, "❯")
 			nameIdx := strings.Index(line, "backend-api")
 			if iconIdx >= 0 && nameIdx >= 0 {
 				assert.Less(t, iconIdx, nameIdx, "圖示應在名稱前面")
