@@ -18,7 +18,7 @@ func TestStyles_ClaudeCodeDarkMode(t *testing.T) {
 		{"dim: #888888", dimStyle, "#888888"},
 		{"running: #91E200", statusRunningStyle, "#91E200"},
 		{"waiting: #E8D969", statusWaitingStyle, "#E8D969"},
-		{"idle: #888888", statusIdleStyle, "#888888"},
+		{"idle: #AAAAAA", statusIdleStyle, "#AAAAAA"},
 		{"error: error red", statusErrorStyle, "#FF6B80"},
 		{"sessionName: bright white", sessionNameStyle, "#FFFFFF"},
 		{"groupName: #F1E174", groupNameStyle, "#F1E174"},

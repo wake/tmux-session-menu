@@ -55,15 +55,23 @@ func (s Session) RelativeTime() string {
 }
 
 // StatusIcon 回傳對應狀態的圖示字元。
-// ai_type 非空時用實心燈，空時用空心。
+// agent session（AiType 非空）：running 用 ●，waiting 用 ◐，idle 用 ●，error 用 ✗
+// 一般 session：idle 用 ○（空心），其餘用 ❯（shell prompt）
 func (s Session) StatusIcon() string {
 	if s.AiType != "" {
-		if s.Status == StatusError {
+		switch s.Status {
+		case StatusError:
 			return "✗"
+		case StatusWaiting:
+			return "◐"
+		default:
+			return "●"
 		}
-		return "●"
 	}
-	return "○"
+	if s.Status == StatusIdle {
+		return "○"
+	}
+	return "❯"
 }
 
 // Executor 定義 tmux 指令的執行介面（方便測試 mock）。
