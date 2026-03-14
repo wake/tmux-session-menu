@@ -2,6 +2,16 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.44.4] - 2026-03-15
+
+### Fixed
+- 巢狀 tmux remote attach 時隱藏 local status bar，避免雙層 status bar 同時顯示
+- Remote attach 前 `set status off`，detach 後 `set status on` + 恢復 local 配色
+- Popup 模式（Ctrl+Q）SSH 結束後由 `__restore-bar` 子命令自動恢復
+- HostManager 遠端 attach 補上 popup 路徑（popupRemoteAttach）
+- `ensureLocalStatusBar` 啟動時恢復 `status on`，防止異常結束後殘留 `status off`
+- 移除已無呼叫者的 `findHostEntryByAddr`
+
 ## [0.44.3] - 2026-03-15
 
 ### Fixed
