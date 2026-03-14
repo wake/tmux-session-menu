@@ -2377,6 +2377,9 @@ func (m *Model) SetItems(items []ListItem) {
 	}
 }
 
+// SetHubHosts 設定 hub-socket 模式的主機清單（供測試使用）。
+func (m *Model) SetHubHosts(hosts []config.HostEntry) { m.hubHosts = hosts }
+
 // Cursor 回傳目前游標位置。
 func (m Model) Cursor() int {
 	return m.cursor
