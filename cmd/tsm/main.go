@@ -447,6 +447,12 @@ func runTUI() {
 
 		// 遠端 session — attach
 		hostCfg := host.Config()
+
+		if cfg.InPopup {
+			popupRemoteAttach(exec, hostCfg.Address, selected, cfg.Local)
+			return
+		}
+
 		applyHostBar := func() {
 			hideStatusBar(exec)
 		}
@@ -927,6 +933,8 @@ func runRestoreBar() {
 }
 
 // hideStatusBar 隱藏 local tmux status bar，避免巢狀 tmux 雙層 bar。
+// 使用 session-level set-option（不加 -g），僅影響目前 session，
+// 其他 session 的 status bar 不受影響。
 func hideStatusBar(exec tmux.Executor) {
 	_, _ = exec.Execute("set-option", "status", "off")
 }
@@ -939,7 +947,7 @@ func restoreStatusBar(exec tmux.Executor, localColors config.ColorConfig) {
 
 // popupRemoteAttach 在 popup 模式建立新 tmux window 執行 remote attach。
 // 隱藏 local status bar，SSH 結束後由 __restore-bar 子命令自動恢復。
-func popupRemoteAttach(exec tmux.Executor, host, session string) {
+func popupRemoteAttach(exec tmux.Executor, host, session string, localColors config.ColorConfig) {
 	hideStatusBar(exec)
 	sshCmd := remote.AttachShellCommand(host, session)
 	tsmExe, _ := os.Executable()
@@ -948,7 +956,7 @@ func popupRemoteAttach(exec tmux.Executor, host, session string) {
 	}
 	wrapCmd := fmt.Sprintf("%s; '%s' __restore-bar", sshCmd, tsmExe)
 	if err := osexec.Command("tmux", "new-window", "-n", session, wrapCmd).Run(); err != nil {
-		restoreStatusBar(exec, loadConfig().Local)
+		restoreStatusBar(exec, localColors)
 	}
 }
 
@@ -1184,7 +1192,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 		if cfg.InPopup {
 			// Popup 模式：在新 tmux window 執行 remote attach，popup 自行關閉。
 			// 隱藏 local status bar + SSH 結束後由 __restore-bar 恢復。
-			popupRemoteAttach(exec, hostEntry.Address, selected)
+			popupRemoteAttach(exec, hostEntry.Address, selected, cfg.Local)
 			return hubResultExit
 		}
 
@@ -1208,7 +1216,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 				}
 				// 遠端 spoke → popup 模式走 new-window
 				if cfg.InPopup {
-					popupRemoteAttach(exec, pHost.Address, pSession)
+					popupRemoteAttach(exec, pHost.Address, pSession, cfg.Local)
 					return hubResultExit
 				}
 				// 遠端 spoke → 直接 attach
@@ -1256,7 +1264,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 				}
 				// 遠端 spoke → popup 模式走 new-window
 				if cfg.InPopup {
-					popupRemoteAttach(exec, pHost.Address, pSession)
+					popupRemoteAttach(exec, pHost.Address, pSession, cfg.Local)
 					return hubResultExit
 				}
 				// 遠端 spoke → 直接 attach
@@ -1294,17 +1302,6 @@ func findHostEntry(hosts []config.HostEntry, hostID string) *config.HostEntry {
 		}
 	}
 	return nil
-}
-
-// findHostEntryByAddr 從 host 清單中依位址查找 HostEntry（用於 runRemote 等以位址識別主機的場景）。
-// 找不到時回傳空 HostEntry（ToColorConfig 會產生空 ColorConfig）。
-func findHostEntryByAddr(hosts []config.HostEntry, addr string) config.HostEntry {
-	for _, h := range hosts {
-		if h.Address == addr {
-			return h
-		}
-	}
-	return config.HostEntry{}
 }
 
 func switchToSession(name string, readOnly bool) {
