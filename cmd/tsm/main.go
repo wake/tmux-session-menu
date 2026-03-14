@@ -329,6 +329,11 @@ func runTUI() {
 			if result == hubResultExit || result == hubResultDegraded || result == hubResultError {
 				return
 			}
+		} else {
+			// hub socket 不可用（tunnel 斷線、socket 殘留）→ 清除 stale tmux 選項
+			// 避免下次 Ctrl+Q 再走已失效的 hub-socket 路徑
+			tmuxExecFn("set-option", "-gu", "@tsm_hub_socket")
+			tmuxExecFn("set-option", "-gu", "@tsm_hub_self")
 		}
 		// graceful degradation: hub socket 不可用 → local 模式
 		// fall through to normal mode

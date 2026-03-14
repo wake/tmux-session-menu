@@ -115,7 +115,7 @@ func TestTunnelArgs_WithReverse(t *testing.T) {
 func TestReverseSocketPath(t *testing.T) {
 	path := ReverseSocketPath("mlab")
 	assert.Contains(t, path, "tsm-hub-")
-	assert.True(t, strings.HasPrefix(path, "/tmp/"))
+	assert.Contains(t, path, ".config/tsm/tsm-hub-")
 	assert.Equal(t, path, ReverseSocketPath("mlab"))
 	assert.NotEqual(t, path, ReverseSocketPath("air"))
 }
