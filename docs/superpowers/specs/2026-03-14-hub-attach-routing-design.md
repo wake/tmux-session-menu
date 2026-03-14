@@ -87,15 +87,39 @@ func (c *Client) TakePendingAttach(ctx context.Context) (hostID, sessionName str
 
 spoke 不再呼叫 `remote.Attach`，不再呼叫 `resolveHubHost`。
 
+**detach 失敗處理**：`tmux detach-client` 失敗（極罕見）時，spoke 忽略錯誤並仍 return `hubResultExit`。pending 已存入 daemon，hub 會在下次 attach 返回時消費。
+
 ### 5. Hub 端消費（runHubTUI without hctx）
 
-`remote.Attach` 返回 `AttachDetached` 後，新增 pending 檢查：
+`remote.Attach` 返回 `AttachDetached` 後，新增 pending 檢查。**`hubReconnectLoop` 中的 re-attach 返回後也需相同檢查**：
 
-1. `CheckAndClearExitRequested` → 若 true → exit（現有行為）
-2. `client.TakePendingAttach()`
-   - 有 pending 且 hostID 是 hub local → `switchToSession`
-   - 有 pending 且 hostID 是遠端 → `findHostEntry` → `remote.Attach(address, session)`
-   - 無 pending → `continue`（回到 TUI，現有行為）
+```go
+if result == remote.AttachDetached {
+    if remote.CheckAndClearExitRequested(hostEntry.Address) {
+        return hubResultExit  // ctrl+e 退出（現有行為）
+    }
+    // 檢查 spoke 是否請求了跨主機切換
+    if pendingHostID, pendingSession, _ := c.TakePendingAttach(ctx); pendingHostID != "" {
+        pendingHost := findHostEntry(cfg.Hosts, pendingHostID)
+        if pendingHost == nil || pendingHost.IsLocal() {
+            // hub local session
+            switchToSession(pendingSession, false)
+            if cfg.InPopup { return hubResultExit }
+        } else {
+            // 遠端 spoke session — 由 hub SSH 過去
+            // 更新 hostEntry 讓外層迴圈用新目標繼續 attach + reconnect
+            hostEntry = pendingHost
+            selected = pendingSession
+            goto attachRemote  // 或重構為函式呼叫
+        }
+    }
+    continue  // 無 pending → 回到 TUI（現有行為）
+}
+```
+
+**「hub local」判斷**：使用 `findHostEntry(cfg.Hosts, hostID)` 取得 entry，再以 `entry.IsLocal()`（即 `Address == ""`）判斷。
+
+**ctrl+e 退出路徑不受影響**：spoke 的 ctrl+e 只寫 exit marker + detach，不呼叫 RequestAttach，hub 在步驟 1 就會 return exit。
 
 ### 6. 清理
 
@@ -104,6 +128,7 @@ spoke 不再呼叫 `remote.Attach`，不再呼叫 `resolveHubHost`。
 - `resolveHubHost()`
 - `@tsm_hub_host` tmux 選項相關：`SetHubHost`/`ClearHubHost`、`readHubContext` 中的 hubHost
 - `hubContext.HubHost` 欄位
+- `readHubContext()` 中讀取 `@tsm_hub_host` 的邏輯（簡化為只讀 `@tsm_hub_self`）
 - `net` import
 
 **保留**：
@@ -118,6 +143,12 @@ spoke 不再呼叫 `remote.Attach`，不再呼叫 `resolveHubHost`。
 | spoke 發 RequestAttach 後 hub daemon 重啟 | pending 丟失（記憶體），hub 回到 TUI，使用者重選 |
 | 連續快速切換 | 後寫覆蓋，只執行最後一次 |
 | pending hostID 對應的 spoke 已斷線 | remote.Attach 失敗 → 進入重連 modal（現有行為） |
+| detach-client 失敗 | spoke 忽略錯誤並退出 popup，pending 已存，hub 下次消費 |
+| ctrl+e 退出（不選 session） | 只寫 exit marker + detach，不觸發 RequestAttach，hub 走現有 exit 路徑 |
+
+## 已知限制
+
+- **單 slot pending**：多 spoke 同時發 RequestAttach 時 last-write-wins，僅保留最後一筆。單一使用者場景下不成問題。
 
 ## 不受影響
 
@@ -125,3 +156,4 @@ spoke 不再呼叫 `remote.Attach`，不再呼叫 `resolveHubHost`。
 - direct / daemon 單機模式
 - ProxyMutation（session 建立/刪除/改名等操作）
 - hub-socket config unification（GetHostsConfig / UpdateHostConfig）
+- hub 端直接選擇 local / remote session 的現有路徑（`hctx == nil` 時不經過 RequestAttach）
