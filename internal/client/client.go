@@ -161,6 +161,31 @@ func (c *Client) ProxyMutation(
 	return nil
 }
 
+// RequestAttach 請求 hub 切換到指定主機的 session。
+func (c *Client) RequestAttach(ctx context.Context, hostID, sessionName string) error {
+	resp, err := c.rpc.RequestAttach(ctx, &tsmv1.RequestAttachRequest{
+		HostId:      hostID,
+		SessionName: sessionName,
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("request attach failed")
+	}
+	return nil
+}
+
+// TakePendingAttach 取得並清除 hub daemon 的 pending attach。
+// 回傳空 hostID 表示無 pending。
+func (c *Client) TakePendingAttach(ctx context.Context) (hostID, sessionName string, err error) {
+	resp, err := c.rpc.TakePendingAttach(ctx, &tsmv1.TakePendingAttachRequest{})
+	if err != nil {
+		return "", "", err
+	}
+	return resp.HostId, resp.SessionName, nil
+}
+
 // CreateSession 建立新的 tmux session。command 為可選的啟動指令（空字串表示不執行）。
 func (c *Client) CreateSession(ctx context.Context, name, path, command string) error {
 	_, err := c.rpc.CreateSession(ctx, &tsmv1.CreateSessionRequest{Name: name, Path: path, Command: command})
