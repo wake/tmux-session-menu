@@ -1127,6 +1127,38 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			if remote.CheckAndClearExitRequested(hostEntry.Address) {
 				return hubResultExit
 			}
+			// 檢查 spoke 是否請求了跨主機切換
+			if pHostID, pSession, _ := c.TakePendingAttach(context.Background()); pHostID != "" {
+				pHost := findHostEntry(cfg.Hosts, pHostID)
+				if pHost == nil || pHost.IsLocal() {
+					switchToSession(pSession, false)
+					if cfg.InPopup {
+						return hubResultExit
+					}
+					continue
+				}
+				// 遠端 spoke → 直接 attach
+				pApply := func() {
+					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
+				}
+				pApply()
+				pResult := remote.Attach(pHost.Address, pSession)
+				_ = tmux.ApplyStatusBar(exec, cfg.Local)
+				if pResult == remote.AttachDetached {
+					if remote.CheckAndClearExitRequested(pHost.Address) {
+						return hubResultExit
+					}
+				} else {
+					newC, newCtx, newCancel := hubReconnectLoop(cfg, pHost, pSession, hubSocket, pApply, exec, cfg.Local)
+					if newC != nil {
+						hubCancel()
+						c.Close()
+						c = newC
+						hubCtx = newCtx
+						hubCancel = newCancel
+					}
+				}
+			}
 			continue
 		}
 
@@ -1138,6 +1170,38 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			c = newC
 			hubCtx = newCtx
 			hubCancel = newCancel
+			// reconnect 成功後檢查 pending attach
+			if pHostID, pSession, _ := c.TakePendingAttach(context.Background()); pHostID != "" {
+				pHost := findHostEntry(cfg.Hosts, pHostID)
+				if pHost == nil || pHost.IsLocal() {
+					switchToSession(pSession, false)
+					if cfg.InPopup {
+						return hubResultExit
+					}
+					continue
+				}
+				// 遠端 spoke → 直接 attach
+				pApply := func() {
+					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
+				}
+				pApply()
+				pResult := remote.Attach(pHost.Address, pSession)
+				_ = tmux.ApplyStatusBar(exec, cfg.Local)
+				if pResult == remote.AttachDetached {
+					if remote.CheckAndClearExitRequested(pHost.Address) {
+						return hubResultExit
+					}
+				} else {
+					newC2, newCtx2, newCancel2 := hubReconnectLoop(cfg, pHost, pSession, hubSocket, pApply, exec, cfg.Local)
+					if newC2 != nil {
+						hubCancel()
+						c.Close()
+						c = newC2
+						hubCtx = newCtx2
+						hubCancel = newCancel2
+					}
+				}
+			}
 		}
 		continue
 	}
