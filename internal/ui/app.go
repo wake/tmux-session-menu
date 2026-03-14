@@ -877,7 +877,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 	case hubHostsConfigMsg:
-		if msg.Err == nil {
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else {
 			m.hubHosts = msg.Hosts
 			if m.hubHostSnap != nil {
 				m.rebuildHubItems()
@@ -885,7 +887,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case hubHostConfigUpdatedMsg:
-		if msg.Err == nil && msg.Hosts != nil {
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else if msg.Hosts != nil {
 			m.hubHosts = msg.Hosts
 			m.rebuildHubItems()
 			visible := m.visibleHubHosts()

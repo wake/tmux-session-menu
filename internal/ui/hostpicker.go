@@ -777,7 +777,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.hostSavedMsg = "已儲存"
 			return m, func() tea.Msg {
 				var updated []config.HostEntry
-				var lastErr error
+				var firstErr error
 				for hostName, draft := range drafts {
 					result, err := c.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
 						HostName: hostName,
@@ -789,12 +789,14 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						Color:    draft.Color,
 					})
 					if err != nil {
-						lastErr = err
+						if firstErr == nil {
+							firstErr = err
+						}
 					} else {
 						updated = result
 					}
 				}
-				return hubHostConfigUpdatedMsg{Hosts: updated, Err: lastErr}
+				return hubHostConfigUpdatedMsg{Hosts: updated, Err: firstErr}
 			}
 		}
 		m.applyHubHostDrafts()
