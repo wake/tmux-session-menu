@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
+	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/ui"
@@ -1197,6 +1198,51 @@ func TestApplyCurrentStatusBarCmd_HubMode(t *testing.T) {
 	m := ui.NewModel(deps)
 	cmd := m.ApplyCurrentStatusBarCmd()
 	assert.NotNil(t, cmd, "Hub mode 有 local host 時應回傳非 nil cmd")
+}
+
+// TestApplyCurrentStatusBarCmd_HubSocketMode 驗證 hub-socket 模式從 hubHosts 找 self host。
+func TestApplyCurrentStatusBarCmd_HubSocketMode(t *testing.T) {
+	deps := ui.Deps{
+		HubMode: true,
+		Client:  &client.Client{}, // isHubSocketMode: HubMode && HostMgr==nil && Client!=nil
+		HubSelf: "mlab",
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", BarBG: "#old111"},
+			},
+		},
+	}
+	m := ui.NewModel(deps)
+	m.SetHubHosts([]config.HostEntry{
+		{Name: "mac-air", BarBG: "#aaa"},
+		{Name: "mlab", BarBG: "#new222", BarFG: "#fff", BadgeBG: "#bbb", BadgeFG: "#000"},
+	})
+
+	cmd := m.ApplyCurrentStatusBarCmd()
+	assert.NotNil(t, cmd, "hub-socket 模式有 HubSelf 匹配時應回傳非 nil cmd")
+}
+
+// TestApplyCurrentStatusBarCmd_HubSocketMode_NoMatch 驗證 hubHosts 中無 self 時 fallback。
+func TestApplyCurrentStatusBarCmd_HubSocketMode_NoMatch(t *testing.T) {
+	deps := ui.Deps{
+		HubMode: true,
+		Client:  &client.Client{},
+		HubSelf: "unknown-host",
+		Cfg: config.Config{
+			Hosts: []config.HostEntry{
+				{Name: "local", BarBG: "#fallback"},
+			},
+		},
+	}
+	m := ui.NewModel(deps)
+	m.SetHubHosts([]config.HostEntry{
+		{Name: "mac-air"},
+		{Name: "mlab"},
+	})
+
+	cmd := m.ApplyCurrentStatusBarCmd()
+	// HubSelf 找不到匹配 → fallback 到 deps.Cfg.Hosts 的 local host
+	assert.NotNil(t, cmd, "HubSelf 無匹配時應 fallback 到 Cfg.Hosts local")
 }
 
 // TestApplyCurrentStatusBarCmd_NoLocal 驗證無 local host 時回傳 nil。
