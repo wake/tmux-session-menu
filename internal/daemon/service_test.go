@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -441,6 +443,261 @@ func TestGetHostsConfig(t *testing.T) {
 	assert.Equal(t, "old", resp.Hosts[2].Name)
 	assert.True(t, resp.Hosts[2].Archived)
 	assert.False(t, resp.Hosts[2].Enabled)
+}
+
+// loadTestConfig 從指定路徑讀取並解析 config。
+func loadTestConfig(t *testing.T, path string) config.Config {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	cfg, err := config.LoadFromString(string(data))
+	require.NoError(t, err)
+	return cfg
+}
+
+// TestUpdateHostConfig_Enable 驗證：停用主機 → ENABLE → Enabled=true。
+func TestUpdateHostConfig_Enable(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "remote1", Address: "remote1.example.com", Color: "#ff0000", Enabled: false, SortOrder: 1},
+	}
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	client, _, cleanup := setupTestService(t, &fakeExecutor{listOutput: ""})
+	defer cleanup()
+
+	resp, err := client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+		HostName: "remote1",
+		Action:   tsmv1.HostConfigAction_HOST_CONFIG_ENABLE,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// 確認回傳的清單中 remote1 已啟用
+	var found bool
+	for _, h := range resp.Hosts {
+		if h.Name == "remote1" {
+			assert.True(t, h.Enabled, "remote1 應為 Enabled=true")
+			found = true
+		}
+	}
+	assert.True(t, found, "回傳清單應包含 remote1")
+
+	// 確認檔案已寫回
+	saved := loadTestConfig(t, cfgPath)
+	for _, h := range saved.Hosts {
+		if h.Name == "remote1" {
+			assert.True(t, h.Enabled, "存檔後 remote1 應為 Enabled=true")
+		}
+	}
+}
+
+// TestUpdateHostConfig_Disable 驗證：啟用主機 → DISABLE → Enabled=false。
+func TestUpdateHostConfig_Disable(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "remote1", Address: "remote1.example.com", Color: "#ff0000", Enabled: true, SortOrder: 1},
+	}
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	client, _, cleanup := setupTestService(t, &fakeExecutor{listOutput: ""})
+	defer cleanup()
+
+	resp, err := client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+		HostName: "remote1",
+		Action:   tsmv1.HostConfigAction_HOST_CONFIG_DISABLE,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	for _, h := range resp.Hosts {
+		if h.Name == "remote1" {
+			assert.False(t, h.Enabled, "remote1 應為 Enabled=false")
+		}
+	}
+}
+
+// TestUpdateHostConfig_Archive 驗證：啟用主機 → ARCHIVE → Archived=true, Enabled=false。
+func TestUpdateHostConfig_Archive(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "remote1", Address: "remote1.example.com", Color: "#ff0000", Enabled: true, SortOrder: 1},
+	}
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	client, _, cleanup := setupTestService(t, &fakeExecutor{listOutput: ""})
+	defer cleanup()
+
+	resp, err := client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+		HostName: "remote1",
+		Action:   tsmv1.HostConfigAction_HOST_CONFIG_ARCHIVE,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	for _, h := range resp.Hosts {
+		if h.Name == "remote1" {
+			assert.True(t, h.Archived, "remote1 應為 Archived=true")
+			assert.False(t, h.Enabled, "remote1 應為 Enabled=false")
+		}
+	}
+}
+
+// TestUpdateHostConfig_Unarchive 驗證：封存主機 → UNARCHIVE → Archived=false, Enabled=true。
+func TestUpdateHostConfig_Unarchive(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "remote1", Address: "remote1.example.com", Color: "#ff0000", Enabled: false, Archived: true, SortOrder: 1},
+	}
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	client, _, cleanup := setupTestService(t, &fakeExecutor{listOutput: ""})
+	defer cleanup()
+
+	resp, err := client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+		HostName: "remote1",
+		Action:   tsmv1.HostConfigAction_HOST_CONFIG_UNARCHIVE,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	for _, h := range resp.Hosts {
+		if h.Name == "remote1" {
+			assert.False(t, h.Archived, "remote1 應為 Archived=false")
+			assert.True(t, h.Enabled, "remote1 應為 Enabled=true")
+		}
+	}
+}
+
+// TestUpdateHostConfig_UpdateColors 驗證：UPDATE_COLORS → 四色 + color 正確更新。
+func TestUpdateHostConfig_UpdateColors(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "remote1", Address: "remote1.example.com", Color: "#ff0000", Enabled: true, SortOrder: 1},
+	}
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	client, _, cleanup := setupTestService(t, &fakeExecutor{listOutput: ""})
+	defer cleanup()
+
+	resp, err := client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+		HostName: "remote1",
+		Action:   tsmv1.HostConfigAction_HOST_CONFIG_UPDATE_COLORS,
+		BarBg:    "#aabbcc",
+		BarFg:    "#112233",
+		BadgeBg:  "#445566",
+		BadgeFg:  "#778899",
+		Color:    "#001122",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	for _, h := range resp.Hosts {
+		if h.Name == "remote1" {
+			assert.Equal(t, "#aabbcc", h.BarBg)
+			assert.Equal(t, "#112233", h.BarFg)
+			assert.Equal(t, "#445566", h.BadgeBg)
+			assert.Equal(t, "#778899", h.BadgeFg)
+			assert.Equal(t, "#001122", h.Color)
+		}
+	}
+}
+
+// TestUpdateHostConfig_Reorder 驗證：REORDER → 三台主機依 ordered_hosts 更新 sort_order。
+func TestUpdateHostConfig_Reorder(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	cfg.Hosts = []config.HostEntry{
+		{Name: "local", Address: "", Color: "#5f8787", Enabled: true, SortOrder: 0},
+		{Name: "alpha", Address: "alpha.example.com", Color: "#aaaaaa", Enabled: true, SortOrder: 1},
+		{Name: "beta", Address: "beta.example.com", Color: "#bbbbbb", Enabled: true, SortOrder: 2},
+	}
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	client, _, cleanup := setupTestService(t, &fakeExecutor{listOutput: ""})
+	defer cleanup()
+
+	// 重排順序：beta(0), local(1), alpha(2)
+	resp, err := client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+		Action:       tsmv1.HostConfigAction_HOST_CONFIG_REORDER,
+		OrderedHosts: []string{"beta", "local", "alpha"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	sortOrders := make(map[string]int32)
+	for _, h := range resp.Hosts {
+		sortOrders[h.Name] = h.SortOrder
+	}
+	assert.Equal(t, int32(0), sortOrders["beta"])
+	assert.Equal(t, int32(1), sortOrders["local"])
+	assert.Equal(t, int32(2), sortOrders["alpha"])
+}
+
+// TestUpdateHostConfig_NotFound 驗證：未知主機名稱 → codes.NotFound 錯誤。
+func TestUpdateHostConfig_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	client, _, cleanup := setupTestService(t, &fakeExecutor{listOutput: ""})
+	defer cleanup()
+
+	_, err := client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+		HostName: "nonexistent",
+		Action:   tsmv1.HostConfigAction_HOST_CONFIG_ENABLE,
+	})
+	require.Error(t, err)
+
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+// TestUpdateHostConfig_Unspecified 驗證：ACTION_UNSPECIFIED → codes.InvalidArgument 錯誤。
+func TestUpdateHostConfig_Unspecified(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	cfg := config.Default()
+	require.NoError(t, config.SaveConfig(cfgPath, cfg))
+	t.Setenv("TSM_CONFIG_PATH", cfgPath)
+
+	client, _, cleanup := setupTestService(t, &fakeExecutor{listOutput: ""})
+	defer cleanup()
+
+	_, err := client.UpdateHostConfig(context.Background(), &tsmv1.UpdateHostConfigRequest{
+		HostName: "local",
+		Action:   tsmv1.HostConfigAction_HOST_CONFIG_ACTION_UNSPECIFIED,
+	})
+	require.Error(t, err)
+
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
 }
 
 // TestService_GetUploadTarget_NoAiType 驗證：無 hook 狀態時，IsClaudeActive 應為 false。
