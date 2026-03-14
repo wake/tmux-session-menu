@@ -793,7 +793,7 @@ func doHubReconnect(cfg config.Config, host, session, hubSocket string) *client.
 	case <-time.After(2 * time.Second):
 	}
 
-	if rfm.Quit() {
+	if rfm.Quit() || rfm.BackToMenu() {
 		if newC != nil {
 			newC.Close()
 		}
@@ -801,6 +801,48 @@ func doHubReconnect(cfg config.Config, host, session, hubSocket string) *client.
 	}
 
 	return newC
+}
+
+// hubReconnectLoop 封裝 hub 模式的斷線重連迴圈。
+// 反覆嘗試 doHubReconnect → WatchMultiHost → re-attach，直到成功或使用者放棄。
+// 成功時回傳新的 client 與 context/cancel；使用者放棄時回傳 nil。
+func hubReconnectLoop(
+	cfg config.Config, hostEntry *config.HostEntry, session, hubSocket string,
+	applyHostBar func(), exec tmux.Executor, localColors config.ColorConfig,
+) (*client.Client, context.Context, context.CancelFunc) {
+	for {
+		newC := doHubReconnect(cfg, hostEntry.Address, session, hubSocket)
+		if newC == nil {
+			return nil, nil, nil
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		if wErr := newC.WatchMultiHost(ctx); wErr != nil {
+			cancel()
+			newC.Close()
+			continue
+		}
+
+		// re-attach 同一 session
+		applyHostBar()
+		reResult := remote.Attach(hostEntry.Address, session)
+		_ = tmux.ApplyStatusBar(exec, localColors)
+
+		if reResult == remote.AttachDetached {
+			if remote.CheckAndClearExitRequested(hostEntry.Address) {
+				// 使用者按 ctrl+e 退出 → 回傳 client 讓外層做 hubResultExit
+				// 但這裡沒辦法直接 return hubResultExit，改由外層 defer 處理
+				cancel()
+				newC.Close()
+				return nil, nil, nil
+			}
+			return newC, ctx, cancel
+		}
+
+		// 又斷線 → cancel + close → 繼續重連
+		cancel()
+		newC.Close()
+	}
 }
 
 // runStatusName 輸出當前 session 的自訂名稱，供 tmux status bar 使用。
@@ -1082,35 +1124,13 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 		}
 
 		// 斷線 → 顯示重連 modal，嘗試重建 daemon 連線後 re-attach 同一 session
-		for {
-			newC := doHubReconnect(cfg, hostEntry.Address, selected, hubSocket)
-			if newC == nil {
-				// 使用者放棄 → 回到 TUI 選單
-				break
-			}
+		newC, newCtx, newCancel := hubReconnectLoop(cfg, hostEntry, selected, hubSocket, applyHostBar, exec, cfg.Local)
+		if newC != nil {
 			hubCancel()
 			c.Close()
 			c = newC
-
-			// 重建 WatchMultiHost stream
-			hubCtx, hubCancel = context.WithCancel(context.Background())
-			if wErr := c.WatchMultiHost(hubCtx); wErr != nil {
-				// stream 建立失敗 → 再次重連
-				continue
-			}
-
-			// re-attach 同一 session
-			applyHostBar()
-			reResult := remote.Attach(hostEntry.Address, selected)
-			_ = tmux.ApplyStatusBar(exec, cfg.Local)
-
-			if reResult == remote.AttachDetached {
-				if remote.CheckAndClearExitRequested(hostEntry.Address) {
-					return hubResultExit
-				}
-				break // 正常 detach → 回到 TUI 選單
-			}
-			// 又斷線 → 繼續重連迴圈
+			hubCtx = newCtx
+			hubCancel = newCancel
 		}
 		continue
 	}
