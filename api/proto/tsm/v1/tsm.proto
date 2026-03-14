@@ -95,6 +95,27 @@ message ProxyMutationResponse {
   string error = 2;
 }
 
+// RequestAttachRequest 由 spoke 端發送，請求 hub 切換到指定主機的 session。
+message RequestAttachRequest {
+  string host_id = 1;       // 目標主機 ID
+  string session_name = 2;  // 目標 session 名稱
+}
+
+// RequestAttachResponse 回傳 RequestAttach 操作結果。
+message RequestAttachResponse {
+  bool success = 1;
+}
+
+// TakePendingAttachRequest 由 hub 端呼叫，取得並清除 pending attach。
+message TakePendingAttachRequest {}
+
+// TakePendingAttachResponse 回傳 pending attach 資訊。
+// host_id 為空字串表示無 pending。
+message TakePendingAttachResponse {
+  string host_id = 1;
+  string session_name = 2;
+}
+
 // HostConfigEntry 描述一台主機的完整設定（對應 config.HostEntry）。
 message HostConfigEntry {
   string name = 1;
@@ -320,6 +341,11 @@ service SessionManager {
 
   // ProxyMutation 將操作代理到目標主機的 daemon（hub 模式專用）。
   rpc ProxyMutation(ProxyMutationRequest) returns (ProxyMutationResponse);
+
+  // RequestAttach 由 spoke 發送，請求 hub 切換到指定主機的 session（hub-socket 模式專用）。
+  rpc RequestAttach(RequestAttachRequest) returns (RequestAttachResponse);
+  // TakePendingAttach 由 hub 呼叫，取得並清除 pending attach（read-and-clear 語意）。
+  rpc TakePendingAttach(TakePendingAttachRequest) returns (TakePendingAttachResponse);
 
   // GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
   rpc GetHostsConfig(GetHostsConfigRequest) returns (GetHostsConfigResponse);

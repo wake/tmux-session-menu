@@ -80,18 +80,6 @@ func ClearHubSocket(host string) error {
 	return sshRunFn("ssh", host, "bash", "-lc", "tmux set-option -gu @tsm_hub_socket")
 }
 
-// SetHubHost 在遠端主機的 tmux 設定 hub 的 SSH 地址。
-// spoke 端據此得知如何 SSH 回到 hub。
-func SetHubHost(host, hubHost string) error {
-	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_host '%s'", shellEscape(hubHost))
-	return sshRunFn("ssh", host, "bash", "-lc", cmd)
-}
-
-// ClearHubHost 清除遠端主機的 hub host 設定。
-func ClearHubHost(host string) error {
-	return sshRunFn("ssh", host, "bash", "-lc", "tmux set-option -gu @tsm_hub_host")
-}
-
 // SetHubSelf 在遠端主機的 tmux 設定其在 hub 中的 host ID。
 // spoke 端據此判斷 MultiHostSnapshot 中哪些 session 是自己的。
 func SetHubSelf(host, selfID string) error {
