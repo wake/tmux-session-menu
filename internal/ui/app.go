@@ -122,6 +122,7 @@ type Model struct {
 	// HostPicker mode（主機管理面板）
 	hostPickerCursor int
 	hubHostSnap      *tsmv1.MultiHostSnapshot // hub 模式：最新的主機快照（供 host picker 使用）
+	hubHosts         []config.HostEntry       // hub-socket 模式：從 hub daemon 取得的主機設定
 
 	// host picker 右側面板
 	hostPanelOpen    bool
@@ -733,11 +734,35 @@ func (m Model) pollInterval() time.Duration {
 	return interval
 }
 
+// isHubSocketMode 判斷是否為 hub-socket 模式（spoke 透過 reverse tunnel 連到 hub daemon）。
+// 此模式下 hosts 設定從 hub daemon 讀取，而非本地 config。
+func (m Model) isHubSocketMode() bool {
+	return m.deps.HubMode && m.deps.HostMgr == nil
+}
+
+// hubHostsConfigMsg 攜帶從 hub daemon 取得的主機設定。
+type hubHostsConfigMsg struct {
+	Hosts []config.HostEntry
+	Err   error
+}
+
+// fetchHubHostsCmd 從 hub daemon 非同步載入主機設定。
+func fetchHubHostsCmd(c *client.Client) tea.Cmd {
+	return func() tea.Msg {
+		hosts, err := c.GetHostsConfig(context.Background())
+		return hubHostsConfigMsg{Hosts: hosts, Err: err}
+	}
+}
+
 // Init 實作 tea.Model 介面。
 func (m Model) Init() tea.Cmd {
 	if m.deps.HubMode && m.deps.Client != nil {
 		// Hub 模式：透過 WatchMultiHost stream 接收多主機聚合快照
-		return watchHubCmd(m.deps.Client)
+		cmds := []tea.Cmd{watchHubCmd(m.deps.Client)}
+		if m.isHubSocketMode() {
+			cmds = append(cmds, fetchHubHostsCmd(m.deps.Client))
+		}
+		return tea.Batch(cmds...)
 	}
 	if m.deps.HostMgr != nil {
 		// 多主機模式（主要路徑）：立即送出目前快照，再等待後續通知
@@ -823,9 +848,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.hubHostSnap = msg.Snapshot
-		m.syncHubHostsToConfig()
+		if !m.isHubSocketMode() {
+			m.syncHubHostsToConfig()
+		}
 		inputs := ConvertMultiHostSnapshot(msg.Snapshot)
-		inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
+		if m.isHubSocketMode() {
+			inputs = FilterActiveHosts(inputs, m.hubHosts)
+		} else {
+			inputs = FilterActiveHosts(inputs, m.deps.Cfg.Hosts)
+		}
 		m.items = FlattenMultiHost(inputs)
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
@@ -838,6 +869,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, animTickCmd())
 		}
 		return m, tea.Batch(cmds...)
+	case hubHostsConfigMsg:
+		if msg.Err == nil {
+			m.hubHosts = msg.Hosts
+			if m.hubHostSnap != nil {
+				m.rebuildHubItems()
+			}
+		}
+		return m, nil
 	case MultiHostSnapshotMsg:
 		filtered := FilterActiveHosts(msg.Snapshots, m.deps.Cfg.Hosts)
 		m.items = FlattenMultiHost(filtered)
