@@ -2,6 +2,14 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.43.0] - 2026-03-14
+
+### Added
+- `[i]` 連線資訊面板：顯示目前連線模式、版本、socket 路徑
+- Hub 重連功能：在 info 面板輸入 hub socket 路徑後按 Enter，自動從 Daemon 模式切換到 Hub 模式
+- Hub socket 自動偵測：依序查找 `Deps.HubSocket` → tmux `@tsm_hub_socket` → `~/.config/tsm/tsm-hub-*.sock`
+- `Deps.HubSocket` 欄位：hub-socket 模式傳遞 socket 路徑供 info 面板顯示
+
 ## [0.42.2] - 2026-03-14
 
 ### Fixed
