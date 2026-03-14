@@ -2,6 +2,14 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.40.0] - 2026-03-14
+
+### Added
+- Hub 模式斷線重連 modal：遠端 session 斷線時顯示重連介面（倒數 60 秒、自動重試），取代直接回到選單
+- 重連成功後自動 re-attach 同一 session，維持 iTerm tab 對應關係
+- 支援 local daemon（含 auto-start）與 hub-socket 兩種重連路徑
+- 提取可測試的 `reconnLoop` 重試核心邏輯
+
 ## [0.39.0] - 2026-03-14
 
 ### Fixed
