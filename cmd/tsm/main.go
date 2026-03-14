@@ -1042,6 +1042,11 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 		c.Close()
 	}()
 
+	hubSelf := ""
+	if hctx != nil {
+		hubSelf = hctx.HubSelf
+	}
+
 	for {
 		deps := ui.Deps{
 			Client:     c,
@@ -1050,6 +1055,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			HubMode:    true,
 			Upgrader:   upgrader,
 			HubSocket:  hubSocket,
+			HubSelf:    hubSelf,
 		}
 		p := tea.NewProgram(ui.NewModel(deps), tea.WithAltScreen())
 		finalModel, runErr := p.Run()

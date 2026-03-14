@@ -402,7 +402,20 @@ func (m Model) applyCurrentStatusBarCmd() tea.Cmd {
 		}
 		return nil
 	}
-	// Hub mode：從 deps.Cfg.Hosts 找 local host
+	// Hub-socket 模式：從 hubHosts 找 self host（HubSelf = spoke 的 host name）
+	if m.isHubSocketMode() && m.deps.HubSelf != "" && len(m.hubHosts) > 0 {
+		for _, h := range m.hubHosts {
+			if h.Name == m.deps.HubSelf {
+				cc := h.ToColorConfig()
+				return func() tea.Msg {
+					exec := tmux.NewRealExecutor()
+					_ = tmux.ApplyStatusBar(exec, cc)
+					return nil
+				}
+			}
+		}
+	}
+	// Hub mode fallback：從 deps.Cfg.Hosts 找 local host
 	for _, h := range m.deps.Cfg.Hosts {
 		if h.IsLocal() {
 			cc := h.ToColorConfig()
