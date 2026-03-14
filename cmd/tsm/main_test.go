@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
@@ -96,10 +97,11 @@ func TestDetectLocalAddr_StripUser(t *testing.T) {
 }
 
 func TestDetectLocalAddr_Unreachable(t *testing.T) {
-	// 無法路由的位址應回傳空字串
-	got := detectLocalAddr("192.0.2.1") // TEST-NET-1, RFC 5737
-	// 即使不可達，OS 仍可能選擇預設路由的出口 IP，所以只驗證不 panic
-	_ = got
+	// TEST-NET-1 (RFC 5737)：OS 可能透過預設路由回傳出口 IP，也可能失敗
+	got := detectLocalAddr("192.0.2.1")
+	if got != "" {
+		assert.NotNil(t, net.ParseIP(got), "should be empty or a valid IP")
+	}
 }
 
 func TestParseRunMode(t *testing.T) {

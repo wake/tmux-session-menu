@@ -1804,7 +1804,11 @@ func detectLocalAddr(remoteHost string) string {
 		return ""
 	}
 	defer conn.Close()
-	return conn.LocalAddr().(*net.UDPAddr).IP.String()
+	udpAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return ""
+	}
+	return udpAddr.IP.String()
 }
 
 // makeHubDialFn 建立 daemon hub 模式的遠端 dial 函式。
