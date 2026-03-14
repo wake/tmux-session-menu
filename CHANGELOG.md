@@ -2,6 +2,18 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.42.0] - 2026-03-14
+
+### Changed
+- Hub-socket 模式跨主機 attach 路由重構：所有跨主機 session attach 統一由 hub 端發起，spoke 只負責選擇目標
+- 新增 `RequestAttach` / `TakePendingAttach` RPC，spoke 透過 RPC 通知 hub 切換目標後 detach 回到 hub
+- Hub 端在 `remote.Attach` 返回後消費 pending attach，自動路由到 local `switchToSession` 或 remote `Attach`
+
+### Removed
+- 移除 `detectLocalAddr`、`resolveSSHHostname`、`resolveHubHost` 函式
+- 移除 `@tsm_hub_host` tmux 選項及相關 `SetHubHost` / `ClearHubHost`
+- 移除 `hubContext.HubHost` 欄位，簡化為僅保留 `HubSelf`
+
 ## [0.41.1] - 2026-03-14
 
 ### Fixed
