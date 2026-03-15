@@ -1139,6 +1139,28 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			if cfg.InPopup {
 				return hubResultExit
 			}
+			// 檢查 popup 是否在 local tmux 內發了跨主機切換請求
+			if p := takePendingTarget(c, cfg); p != nil {
+				if p.Host.IsLocal() {
+					switchToSession(p.SessionName, false)
+				} else {
+					_ = tmux.ApplyStatusBar(exec, p.Host.ToColorConfig())
+					pResult := remote.Attach(p.Host.Address, p.SessionName)
+					_ = tmux.ApplyStatusBar(exec, cfg.Local)
+					if pResult == remote.AttachDisconnected {
+						newC, newCtx, newCancel := hubReconnectLoop(cfg, p.Host, p.SessionName, hubSocket, func() {
+							_ = tmux.ApplyStatusBar(exec, p.Host.ToColorConfig())
+						}, exec, cfg.Local)
+						if newC != nil {
+							hubCancel()
+							c.Close()
+							c = newC
+							hubCtx = newCtx
+							hubCancel = newCancel
+						}
+					}
+				}
+			}
 			continue
 		}
 
@@ -1166,36 +1188,26 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			if remote.CheckAndClearExitRequested(hostEntry.Address) {
 				return hubResultExit
 			}
-			// 檢查 spoke 是否請求了跨主機切換
-			if pHostID, pSession, _ := c.TakePendingAttach(context.Background()); pHostID != "" {
-				pHost := findHostEntry(cfg.Hosts, pHostID)
-				if pHost == nil || pHost.IsLocal() {
-					switchToSession(pSession, false)
-					if cfg.InPopup {
-						return hubResultExit
-					}
+			// 檢查 spoke 或 popup 是否請求了跨主機切換
+			// （popup 模式現在走 RequestAttach+detach，不會到達此處的遠端路徑）
+			if p := takePendingTarget(c, cfg); p != nil {
+				if p.Host.IsLocal() {
+					switchToSession(p.SessionName, false)
 					continue
-				}
-				// 遠端 spoke → popup 模式走 new-window
-				if cfg.InPopup {
-					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
-					cmd := remote.AttachShellCommand(pHost.Address, pSession)
-					_ = osexec.Command("tmux", "new-window", "-n", pSession, cmd).Run()
-					return hubResultExit
 				}
 				// 遠端 spoke → 直接 attach
 				pApply := func() {
-					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
+					_ = tmux.ApplyStatusBar(exec, p.Host.ToColorConfig())
 				}
 				pApply()
-				pResult := remote.Attach(pHost.Address, pSession)
+				pResult := remote.Attach(p.Host.Address, p.SessionName)
 				_ = tmux.ApplyStatusBar(exec, cfg.Local)
 				if pResult == remote.AttachDetached {
-					if remote.CheckAndClearExitRequested(pHost.Address) {
+					if remote.CheckAndClearExitRequested(p.Host.Address) {
 						return hubResultExit
 					}
 				} else {
-					newC, newCtx, newCancel := hubReconnectLoop(cfg, pHost, pSession, hubSocket, pApply, exec, cfg.Local)
+					newC, newCtx, newCancel := hubReconnectLoop(cfg, p.Host, p.SessionName, hubSocket, pApply, exec, cfg.Local)
 					if newC != nil {
 						hubCancel()
 						c.Close()
@@ -1217,35 +1229,25 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			hubCtx = newCtx
 			hubCancel = newCancel
 			// reconnect 成功後檢查 pending attach
-			if pHostID, pSession, _ := c.TakePendingAttach(context.Background()); pHostID != "" {
-				pHost := findHostEntry(cfg.Hosts, pHostID)
-				if pHost == nil || pHost.IsLocal() {
-					switchToSession(pSession, false)
-					if cfg.InPopup {
-						return hubResultExit
-					}
+			// （popup 模式現在走 RequestAttach+detach，不會到達此處的遠端路徑）
+			if p := takePendingTarget(c, cfg); p != nil {
+				if p.Host.IsLocal() {
+					switchToSession(p.SessionName, false)
 					continue
-				}
-				// 遠端 spoke → popup 模式走 new-window
-				if cfg.InPopup {
-					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
-					cmd := remote.AttachShellCommand(pHost.Address, pSession)
-					_ = osexec.Command("tmux", "new-window", "-n", pSession, cmd).Run()
-					return hubResultExit
 				}
 				// 遠端 spoke → 直接 attach
 				pApply := func() {
-					_ = tmux.ApplyStatusBar(exec, pHost.ToColorConfig())
+					_ = tmux.ApplyStatusBar(exec, p.Host.ToColorConfig())
 				}
 				pApply()
-				pResult := remote.Attach(pHost.Address, pSession)
+				pResult := remote.Attach(p.Host.Address, p.SessionName)
 				_ = tmux.ApplyStatusBar(exec, cfg.Local)
 				if pResult == remote.AttachDetached {
-					if remote.CheckAndClearExitRequested(pHost.Address) {
+					if remote.CheckAndClearExitRequested(p.Host.Address) {
 						return hubResultExit
 					}
 				} else {
-					newC2, newCtx2, newCancel2 := hubReconnectLoop(cfg, pHost, pSession, hubSocket, pApply, exec, cfg.Local)
+					newC2, newCtx2, newCancel2 := hubReconnectLoop(cfg, p.Host, p.SessionName, hubSocket, pApply, exec, cfg.Local)
 					if newC2 != nil {
 						hubCancel()
 						c.Close()
@@ -1268,6 +1270,26 @@ func findHostEntry(hosts []config.HostEntry, hostID string) *config.HostEntry {
 		}
 	}
 	return nil
+}
+
+// pendingTarget 記錄已驗證的 pending attach 目標。
+type pendingTarget struct {
+	HostID      string
+	SessionName string
+	Host        *config.HostEntry
+}
+
+// takePendingTarget 讀取並驗證 pending attach。回傳 nil 表示無有效 pending。
+func takePendingTarget(c *client.Client, cfg config.Config) *pendingTarget {
+	pHostID, pSession, err := c.TakePendingAttach(context.Background())
+	if err != nil || pHostID == "" {
+		return nil
+	}
+	pHost := findHostEntry(cfg.Hosts, pHostID)
+	if pHost == nil {
+		return nil // 主機不存在或已停用，忽略
+	}
+	return &pendingTarget{HostID: pHostID, SessionName: pSession, Host: pHost}
 }
 
 // findHostEntryByAddr 從 host 清單中依位址查找 HostEntry（用於 runRemote 等以位址識別主機的場景）。
