@@ -110,8 +110,17 @@ func (m Model) infoConnect() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// 只影響當前 session 的重連，不設定 @tsm_hub_socket
-	// （@tsm_hub_socket 由 hub 端 SetHubSocket 管理，不應從 UI 覆寫）
+	// 持久化到 tmux 選項，讓下次 Ctrl+Q 自動走 hub-socket 模式
+	// （反轉 0.44.1 的決定：實務上 hub 未正確設定時使用者需要手動指定，
+	//   且手動設定的路徑反覆遺失體驗很差。hub 端 SetHubSocket 仍可覆寫。）
+	if m.deps.Cfg.InTmux {
+		execFn := m.deps.TmuxExecFn
+		if execFn == nil {
+			exec := tmux.NewRealExecutor()
+			execFn = exec.Execute
+		}
+		execFn("set-option", "-g", "@tsm_hub_socket", sockPath)
+	}
 	m.hubReconnectSock = sockPath
 	m.quitting = true
 	return m, tea.Quit
