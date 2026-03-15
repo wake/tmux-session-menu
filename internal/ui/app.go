@@ -46,7 +46,8 @@ type Deps struct {
 	Upgrader  *upgrade.Upgrader // nil 時 ctrl+u 無效
 	HubMode   bool              // true = 使用 WatchMultiHost（hub 模式）
 	HubSocket string            // hub-socket 模式的 socket 路徑（供 info 顯示）
-	HubSelf   string            // hub-socket 模式：spoke 在 hub 中的 host name（用於 status bar 套色）
+	HubSelf    string                              // hub-socket 模式：spoke 在 hub 中的 host name（用於 status bar 套色）
+	TmuxExecFn func(args ...string) (string, error) // 可注入的 tmux 執行函式（測試用）
 }
 
 // persistHosts 將 HostManager 的主機清單寫回 config.toml。

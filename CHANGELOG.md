@@ -2,6 +2,19 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.45.0] - 2026-03-15
+
+### Added
+- 消除 tmux 嵌套：popup 跨主機切換改用 `RequestAttach + tmux detach-client`，委託外層 tsm for loop 處理，不再使用 `tmux new-window "ssh ..."`
+- 新增 `internal/hostcheck/` 模組：主機依賴檢測（local tmux、remote SSH + tmux），支援並行檢測含 semaphore 上限
+- 新增 `CancelPendingAttach` RPC：popup 異常關閉時清除殘留的 pending attach
+- Pending attach TTL：超過 60 秒的 pending 自動過期丟棄
+- 新增 `takePendingTarget` helper：統一讀取 + 驗證 pending attach 目標，減少 `runHubTUI` 中的重複程式碼
+- Local attach 返回後檢查 pending：支援從 local tmux 內 Ctrl+Q 跨主機切換
+
+### Fixed
+- `[i]` 面板持久化 hub socket 到 `@tsm_hub_socket`（Bug 2）：手動設定不再遺失，反轉 0.44.1 的決定
+
 ## [0.44.3] - 2026-03-15
 
 ### Fixed

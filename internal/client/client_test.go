@@ -168,6 +168,15 @@ func TestClient_RecvWithoutWatch(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestCancelPendingAttach(t *testing.T) {
+	exec := &fakeExecutor{}
+	c, cleanup := setupTestClient(t, exec)
+	defer cleanup()
+
+	err := c.CancelPendingAttach(context.Background())
+	assert.NoError(t, err)
+}
+
 func TestClient_DialSocket_InvalidPath(t *testing.T) {
 	_, err := DialSocket("/nonexistent/path/tsm.sock")
 	assert.Error(t, err)

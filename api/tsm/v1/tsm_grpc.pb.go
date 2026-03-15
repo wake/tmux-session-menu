@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v6.33.4
-// source: api/proto/tsm/v1/tsm.proto
+// source: tsm/v1/tsm.proto
 
 package tsmv1
 
@@ -20,27 +20,28 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SessionManager_Watch_FullMethodName              = "/tsm.v1.SessionManager/Watch"
-	SessionManager_CreateSession_FullMethodName      = "/tsm.v1.SessionManager/CreateSession"
-	SessionManager_KillSession_FullMethodName        = "/tsm.v1.SessionManager/KillSession"
-	SessionManager_RenameSession_FullMethodName      = "/tsm.v1.SessionManager/RenameSession"
-	SessionManager_CreateGroup_FullMethodName        = "/tsm.v1.SessionManager/CreateGroup"
-	SessionManager_RenameGroup_FullMethodName        = "/tsm.v1.SessionManager/RenameGroup"
-	SessionManager_MoveSession_FullMethodName        = "/tsm.v1.SessionManager/MoveSession"
-	SessionManager_Reorder_FullMethodName            = "/tsm.v1.SessionManager/Reorder"
-	SessionManager_ToggleCollapse_FullMethodName     = "/tsm.v1.SessionManager/ToggleCollapse"
-	SessionManager_DaemonStatus_FullMethodName       = "/tsm.v1.SessionManager/DaemonStatus"
-	SessionManager_GetConfig_FullMethodName          = "/tsm.v1.SessionManager/GetConfig"
-	SessionManager_SetConfig_FullMethodName          = "/tsm.v1.SessionManager/SetConfig"
-	SessionManager_GetUploadTarget_FullMethodName    = "/tsm.v1.SessionManager/GetUploadTarget"
-	SessionManager_SetUploadMode_FullMethodName      = "/tsm.v1.SessionManager/SetUploadMode"
-	SessionManager_ReportUploadResult_FullMethodName = "/tsm.v1.SessionManager/ReportUploadResult"
-	SessionManager_WatchMultiHost_FullMethodName     = "/tsm.v1.SessionManager/WatchMultiHost"
-	SessionManager_ProxyMutation_FullMethodName      = "/tsm.v1.SessionManager/ProxyMutation"
-	SessionManager_RequestAttach_FullMethodName      = "/tsm.v1.SessionManager/RequestAttach"
-	SessionManager_TakePendingAttach_FullMethodName  = "/tsm.v1.SessionManager/TakePendingAttach"
-	SessionManager_GetHostsConfig_FullMethodName     = "/tsm.v1.SessionManager/GetHostsConfig"
-	SessionManager_UpdateHostConfig_FullMethodName   = "/tsm.v1.SessionManager/UpdateHostConfig"
+	SessionManager_Watch_FullMethodName               = "/tsm.v1.SessionManager/Watch"
+	SessionManager_CreateSession_FullMethodName       = "/tsm.v1.SessionManager/CreateSession"
+	SessionManager_KillSession_FullMethodName         = "/tsm.v1.SessionManager/KillSession"
+	SessionManager_RenameSession_FullMethodName       = "/tsm.v1.SessionManager/RenameSession"
+	SessionManager_CreateGroup_FullMethodName         = "/tsm.v1.SessionManager/CreateGroup"
+	SessionManager_RenameGroup_FullMethodName         = "/tsm.v1.SessionManager/RenameGroup"
+	SessionManager_MoveSession_FullMethodName         = "/tsm.v1.SessionManager/MoveSession"
+	SessionManager_Reorder_FullMethodName             = "/tsm.v1.SessionManager/Reorder"
+	SessionManager_ToggleCollapse_FullMethodName      = "/tsm.v1.SessionManager/ToggleCollapse"
+	SessionManager_DaemonStatus_FullMethodName        = "/tsm.v1.SessionManager/DaemonStatus"
+	SessionManager_GetConfig_FullMethodName           = "/tsm.v1.SessionManager/GetConfig"
+	SessionManager_SetConfig_FullMethodName           = "/tsm.v1.SessionManager/SetConfig"
+	SessionManager_GetUploadTarget_FullMethodName     = "/tsm.v1.SessionManager/GetUploadTarget"
+	SessionManager_SetUploadMode_FullMethodName       = "/tsm.v1.SessionManager/SetUploadMode"
+	SessionManager_ReportUploadResult_FullMethodName  = "/tsm.v1.SessionManager/ReportUploadResult"
+	SessionManager_WatchMultiHost_FullMethodName      = "/tsm.v1.SessionManager/WatchMultiHost"
+	SessionManager_ProxyMutation_FullMethodName       = "/tsm.v1.SessionManager/ProxyMutation"
+	SessionManager_RequestAttach_FullMethodName       = "/tsm.v1.SessionManager/RequestAttach"
+	SessionManager_TakePendingAttach_FullMethodName   = "/tsm.v1.SessionManager/TakePendingAttach"
+	SessionManager_CancelPendingAttach_FullMethodName = "/tsm.v1.SessionManager/CancelPendingAttach"
+	SessionManager_GetHostsConfig_FullMethodName      = "/tsm.v1.SessionManager/GetHostsConfig"
+	SessionManager_UpdateHostConfig_FullMethodName    = "/tsm.v1.SessionManager/UpdateHostConfig"
 )
 
 // SessionManagerClient is the client API for SessionManager service.
@@ -81,6 +82,8 @@ type SessionManagerClient interface {
 	RequestAttach(ctx context.Context, in *RequestAttachRequest, opts ...grpc.CallOption) (*RequestAttachResponse, error)
 	// TakePendingAttach 由 hub 呼叫，取得並清除 pending attach（read-and-clear 語意）。
 	TakePendingAttach(ctx context.Context, in *TakePendingAttachRequest, opts ...grpc.CallOption) (*TakePendingAttachResponse, error)
+	// CancelPendingAttach 取消尚未消費的 pending attach（popup 異常關閉時呼叫）。
+	CancelPendingAttach(ctx context.Context, in *CancelPendingAttachRequest, opts ...grpc.CallOption) (*CancelPendingAttachResponse, error)
 	// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
 	GetHostsConfig(ctx context.Context, in *GetHostsConfigRequest, opts ...grpc.CallOption) (*GetHostsConfigResponse, error)
 	// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
@@ -303,6 +306,16 @@ func (c *sessionManagerClient) TakePendingAttach(ctx context.Context, in *TakePe
 	return out, nil
 }
 
+func (c *sessionManagerClient) CancelPendingAttach(ctx context.Context, in *CancelPendingAttachRequest, opts ...grpc.CallOption) (*CancelPendingAttachResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelPendingAttachResponse)
+	err := c.cc.Invoke(ctx, SessionManager_CancelPendingAttach_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *sessionManagerClient) GetHostsConfig(ctx context.Context, in *GetHostsConfigRequest, opts ...grpc.CallOption) (*GetHostsConfigResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetHostsConfigResponse)
@@ -361,6 +374,8 @@ type SessionManagerServer interface {
 	RequestAttach(context.Context, *RequestAttachRequest) (*RequestAttachResponse, error)
 	// TakePendingAttach 由 hub 呼叫，取得並清除 pending attach（read-and-clear 語意）。
 	TakePendingAttach(context.Context, *TakePendingAttachRequest) (*TakePendingAttachResponse, error)
+	// CancelPendingAttach 取消尚未消費的 pending attach（popup 異常關閉時呼叫）。
+	CancelPendingAttach(context.Context, *CancelPendingAttachRequest) (*CancelPendingAttachResponse, error)
 	// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
 	GetHostsConfig(context.Context, *GetHostsConfigRequest) (*GetHostsConfigResponse, error)
 	// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
@@ -431,6 +446,9 @@ func (UnimplementedSessionManagerServer) RequestAttach(context.Context, *Request
 }
 func (UnimplementedSessionManagerServer) TakePendingAttach(context.Context, *TakePendingAttachRequest) (*TakePendingAttachResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TakePendingAttach not implemented")
+}
+func (UnimplementedSessionManagerServer) CancelPendingAttach(context.Context, *CancelPendingAttachRequest) (*CancelPendingAttachResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelPendingAttach not implemented")
 }
 func (UnimplementedSessionManagerServer) GetHostsConfig(context.Context, *GetHostsConfigRequest) (*GetHostsConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHostsConfig not implemented")
@@ -787,6 +805,24 @@ func _SessionManager_TakePendingAttach_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SessionManager_CancelPendingAttach_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelPendingAttachRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).CancelPendingAttach(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_CancelPendingAttach_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).CancelPendingAttach(ctx, req.(*CancelPendingAttachRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SessionManager_GetHostsConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetHostsConfigRequest)
 	if err := dec(in); err != nil {
@@ -899,6 +935,10 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SessionManager_TakePendingAttach_Handler,
 		},
 		{
+			MethodName: "CancelPendingAttach",
+			Handler:    _SessionManager_CancelPendingAttach_Handler,
+		},
+		{
 			MethodName: "GetHostsConfig",
 			Handler:    _SessionManager_GetHostsConfig_Handler,
 		},
@@ -919,5 +959,5 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "api/proto/tsm/v1/tsm.proto",
+	Metadata: "tsm/v1/tsm.proto",
 }
