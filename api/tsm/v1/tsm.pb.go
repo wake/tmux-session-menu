@@ -519,7 +519,8 @@ type HostState struct {
 	Status        HostStatus             `protobuf:"varint,4,opt,name=status,proto3,enum=tsm.v1.HostStatus" json:"status,omitempty"`
 	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
 	Snapshot      *StateSnapshot         `protobuf:"bytes,6,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
-	Address       string                 `protobuf:"bytes,7,opt,name=address,proto3" json:"address,omitempty"` // SSH 地址（空字串 = hub 本機）
+	Address       string                 `protobuf:"bytes,7,opt,name=address,proto3" json:"address,omitempty"`                                  // SSH 地址（空字串 = hub 本機）
+	LastConnected *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=last_connected,json=lastConnected,proto3" json:"last_connected,omitempty"` // 最後連線時間
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -601,6 +602,13 @@ func (x *HostState) GetAddress() string {
 		return x.Address
 	}
 	return ""
+}
+
+func (x *HostState) GetLastConnected() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastConnected
+	}
+	return nil
 }
 
 // MultiHostSnapshot 聚合所有主機的狀態快照。
@@ -2701,7 +2709,7 @@ const file_tsm_v1_tsm_proto_rawDesc = "" +
 	"\rStateSnapshot\x12+\n" +
 	"\bsessions\x18\x01 \x03(\v2\x0f.tsm.v1.SessionR\bsessions\x12%\n" +
 	"\x06groups\x18\x02 \x03(\v2\r.tsm.v1.GroupR\x06groups\x128\n" +
-	"\rupload_events\x18\x03 \x03(\v2\x13.tsm.v1.UploadEventR\fuploadEvents\"\xdd\x01\n" +
+	"\rupload_events\x18\x03 \x03(\v2\x13.tsm.v1.UploadEventR\fuploadEvents\"\xa0\x02\n" +
 	"\tHostState\x12\x17\n" +
 	"\ahost_id\x18\x01 \x01(\tR\x06hostId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -2709,7 +2717,8 @@ const file_tsm_v1_tsm_proto_rawDesc = "" +
 	"\x06status\x18\x04 \x01(\x0e2\x12.tsm.v1.HostStatusR\x06status\x12\x14\n" +
 	"\x05error\x18\x05 \x01(\tR\x05error\x121\n" +
 	"\bsnapshot\x18\x06 \x01(\v2\x15.tsm.v1.StateSnapshotR\bsnapshot\x12\x18\n" +
-	"\aaddress\x18\a \x01(\tR\aaddress\"<\n" +
+	"\aaddress\x18\a \x01(\tR\aaddress\x12A\n" +
+	"\x0elast_connected\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\rlastConnected\"<\n" +
 	"\x11MultiHostSnapshot\x12'\n" +
 	"\x05hosts\x18\x01 \x03(\v2\x11.tsm.v1.HostStateR\x05hosts\"\xe0\x01\n" +
 	"\x14ProxyMutationRequest\x12\x17\n" +
@@ -2963,67 +2972,68 @@ var file_tsm_v1_tsm_proto_depIdxs = []int32{
 	40, // 4: tsm.v1.StateSnapshot.upload_events:type_name -> tsm.v1.UploadEvent
 	1,  // 5: tsm.v1.HostState.status:type_name -> tsm.v1.HostStatus
 	6,  // 6: tsm.v1.HostState.snapshot:type_name -> tsm.v1.StateSnapshot
-	7,  // 7: tsm.v1.MultiHostSnapshot.hosts:type_name -> tsm.v1.HostState
-	2,  // 8: tsm.v1.ProxyMutationRequest.type:type_name -> tsm.v1.MutationType
-	17, // 9: tsm.v1.GetHostsConfigResponse.hosts:type_name -> tsm.v1.HostConfigEntry
-	3,  // 10: tsm.v1.UpdateHostConfigRequest.action:type_name -> tsm.v1.HostConfigAction
-	17, // 11: tsm.v1.UpdateHostConfigResponse.hosts:type_name -> tsm.v1.HostConfigEntry
-	31, // 12: tsm.v1.ReorderRequest.group:type_name -> tsm.v1.GroupReorder
-	32, // 13: tsm.v1.ReorderRequest.session:type_name -> tsm.v1.SessionReorder
-	45, // 14: tsm.v1.DaemonStatusResponse.started_at:type_name -> google.protobuf.Timestamp
-	35, // 15: tsm.v1.GetConfigResponse.values:type_name -> tsm.v1.ConfigValue
-	35, // 16: tsm.v1.SetConfigRequest.values:type_name -> tsm.v1.ConfigValue
-	39, // 17: tsm.v1.UploadEvent.files:type_name -> tsm.v1.UploadedFile
-	39, // 18: tsm.v1.ReportUploadResultRequest.files:type_name -> tsm.v1.UploadedFile
-	22, // 19: tsm.v1.SessionManager.Watch:input_type -> tsm.v1.WatchRequest
-	24, // 20: tsm.v1.SessionManager.CreateSession:input_type -> tsm.v1.CreateSessionRequest
-	25, // 21: tsm.v1.SessionManager.KillSession:input_type -> tsm.v1.KillSessionRequest
-	26, // 22: tsm.v1.SessionManager.RenameSession:input_type -> tsm.v1.RenameSessionRequest
-	28, // 23: tsm.v1.SessionManager.CreateGroup:input_type -> tsm.v1.CreateGroupRequest
-	27, // 24: tsm.v1.SessionManager.RenameGroup:input_type -> tsm.v1.RenameGroupRequest
-	29, // 25: tsm.v1.SessionManager.MoveSession:input_type -> tsm.v1.MoveSessionRequest
-	30, // 26: tsm.v1.SessionManager.Reorder:input_type -> tsm.v1.ReorderRequest
-	33, // 27: tsm.v1.SessionManager.ToggleCollapse:input_type -> tsm.v1.ToggleCollapseRequest
-	46, // 28: tsm.v1.SessionManager.DaemonStatus:input_type -> google.protobuf.Empty
-	36, // 29: tsm.v1.SessionManager.GetConfig:input_type -> tsm.v1.GetConfigRequest
-	38, // 30: tsm.v1.SessionManager.SetConfig:input_type -> tsm.v1.SetConfigRequest
-	41, // 31: tsm.v1.SessionManager.GetUploadTarget:input_type -> tsm.v1.GetUploadTargetRequest
-	43, // 32: tsm.v1.SessionManager.SetUploadMode:input_type -> tsm.v1.SetUploadModeRequest
-	44, // 33: tsm.v1.SessionManager.ReportUploadResult:input_type -> tsm.v1.ReportUploadResultRequest
-	23, // 34: tsm.v1.SessionManager.WatchMultiHost:input_type -> tsm.v1.WatchMultiHostRequest
-	9,  // 35: tsm.v1.SessionManager.ProxyMutation:input_type -> tsm.v1.ProxyMutationRequest
-	11, // 36: tsm.v1.SessionManager.RequestAttach:input_type -> tsm.v1.RequestAttachRequest
-	13, // 37: tsm.v1.SessionManager.TakePendingAttach:input_type -> tsm.v1.TakePendingAttachRequest
-	15, // 38: tsm.v1.SessionManager.CancelPendingAttach:input_type -> tsm.v1.CancelPendingAttachRequest
-	18, // 39: tsm.v1.SessionManager.GetHostsConfig:input_type -> tsm.v1.GetHostsConfigRequest
-	20, // 40: tsm.v1.SessionManager.UpdateHostConfig:input_type -> tsm.v1.UpdateHostConfigRequest
-	6,  // 41: tsm.v1.SessionManager.Watch:output_type -> tsm.v1.StateSnapshot
-	46, // 42: tsm.v1.SessionManager.CreateSession:output_type -> google.protobuf.Empty
-	46, // 43: tsm.v1.SessionManager.KillSession:output_type -> google.protobuf.Empty
-	46, // 44: tsm.v1.SessionManager.RenameSession:output_type -> google.protobuf.Empty
-	46, // 45: tsm.v1.SessionManager.CreateGroup:output_type -> google.protobuf.Empty
-	46, // 46: tsm.v1.SessionManager.RenameGroup:output_type -> google.protobuf.Empty
-	46, // 47: tsm.v1.SessionManager.MoveSession:output_type -> google.protobuf.Empty
-	46, // 48: tsm.v1.SessionManager.Reorder:output_type -> google.protobuf.Empty
-	46, // 49: tsm.v1.SessionManager.ToggleCollapse:output_type -> google.protobuf.Empty
-	34, // 50: tsm.v1.SessionManager.DaemonStatus:output_type -> tsm.v1.DaemonStatusResponse
-	37, // 51: tsm.v1.SessionManager.GetConfig:output_type -> tsm.v1.GetConfigResponse
-	46, // 52: tsm.v1.SessionManager.SetConfig:output_type -> google.protobuf.Empty
-	42, // 53: tsm.v1.SessionManager.GetUploadTarget:output_type -> tsm.v1.GetUploadTargetResponse
-	46, // 54: tsm.v1.SessionManager.SetUploadMode:output_type -> google.protobuf.Empty
-	46, // 55: tsm.v1.SessionManager.ReportUploadResult:output_type -> google.protobuf.Empty
-	8,  // 56: tsm.v1.SessionManager.WatchMultiHost:output_type -> tsm.v1.MultiHostSnapshot
-	10, // 57: tsm.v1.SessionManager.ProxyMutation:output_type -> tsm.v1.ProxyMutationResponse
-	12, // 58: tsm.v1.SessionManager.RequestAttach:output_type -> tsm.v1.RequestAttachResponse
-	14, // 59: tsm.v1.SessionManager.TakePendingAttach:output_type -> tsm.v1.TakePendingAttachResponse
-	16, // 60: tsm.v1.SessionManager.CancelPendingAttach:output_type -> tsm.v1.CancelPendingAttachResponse
-	19, // 61: tsm.v1.SessionManager.GetHostsConfig:output_type -> tsm.v1.GetHostsConfigResponse
-	21, // 62: tsm.v1.SessionManager.UpdateHostConfig:output_type -> tsm.v1.UpdateHostConfigResponse
-	41, // [41:63] is the sub-list for method output_type
-	19, // [19:41] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	45, // 7: tsm.v1.HostState.last_connected:type_name -> google.protobuf.Timestamp
+	7,  // 8: tsm.v1.MultiHostSnapshot.hosts:type_name -> tsm.v1.HostState
+	2,  // 9: tsm.v1.ProxyMutationRequest.type:type_name -> tsm.v1.MutationType
+	17, // 10: tsm.v1.GetHostsConfigResponse.hosts:type_name -> tsm.v1.HostConfigEntry
+	3,  // 11: tsm.v1.UpdateHostConfigRequest.action:type_name -> tsm.v1.HostConfigAction
+	17, // 12: tsm.v1.UpdateHostConfigResponse.hosts:type_name -> tsm.v1.HostConfigEntry
+	31, // 13: tsm.v1.ReorderRequest.group:type_name -> tsm.v1.GroupReorder
+	32, // 14: tsm.v1.ReorderRequest.session:type_name -> tsm.v1.SessionReorder
+	45, // 15: tsm.v1.DaemonStatusResponse.started_at:type_name -> google.protobuf.Timestamp
+	35, // 16: tsm.v1.GetConfigResponse.values:type_name -> tsm.v1.ConfigValue
+	35, // 17: tsm.v1.SetConfigRequest.values:type_name -> tsm.v1.ConfigValue
+	39, // 18: tsm.v1.UploadEvent.files:type_name -> tsm.v1.UploadedFile
+	39, // 19: tsm.v1.ReportUploadResultRequest.files:type_name -> tsm.v1.UploadedFile
+	22, // 20: tsm.v1.SessionManager.Watch:input_type -> tsm.v1.WatchRequest
+	24, // 21: tsm.v1.SessionManager.CreateSession:input_type -> tsm.v1.CreateSessionRequest
+	25, // 22: tsm.v1.SessionManager.KillSession:input_type -> tsm.v1.KillSessionRequest
+	26, // 23: tsm.v1.SessionManager.RenameSession:input_type -> tsm.v1.RenameSessionRequest
+	28, // 24: tsm.v1.SessionManager.CreateGroup:input_type -> tsm.v1.CreateGroupRequest
+	27, // 25: tsm.v1.SessionManager.RenameGroup:input_type -> tsm.v1.RenameGroupRequest
+	29, // 26: tsm.v1.SessionManager.MoveSession:input_type -> tsm.v1.MoveSessionRequest
+	30, // 27: tsm.v1.SessionManager.Reorder:input_type -> tsm.v1.ReorderRequest
+	33, // 28: tsm.v1.SessionManager.ToggleCollapse:input_type -> tsm.v1.ToggleCollapseRequest
+	46, // 29: tsm.v1.SessionManager.DaemonStatus:input_type -> google.protobuf.Empty
+	36, // 30: tsm.v1.SessionManager.GetConfig:input_type -> tsm.v1.GetConfigRequest
+	38, // 31: tsm.v1.SessionManager.SetConfig:input_type -> tsm.v1.SetConfigRequest
+	41, // 32: tsm.v1.SessionManager.GetUploadTarget:input_type -> tsm.v1.GetUploadTargetRequest
+	43, // 33: tsm.v1.SessionManager.SetUploadMode:input_type -> tsm.v1.SetUploadModeRequest
+	44, // 34: tsm.v1.SessionManager.ReportUploadResult:input_type -> tsm.v1.ReportUploadResultRequest
+	23, // 35: tsm.v1.SessionManager.WatchMultiHost:input_type -> tsm.v1.WatchMultiHostRequest
+	9,  // 36: tsm.v1.SessionManager.ProxyMutation:input_type -> tsm.v1.ProxyMutationRequest
+	11, // 37: tsm.v1.SessionManager.RequestAttach:input_type -> tsm.v1.RequestAttachRequest
+	13, // 38: tsm.v1.SessionManager.TakePendingAttach:input_type -> tsm.v1.TakePendingAttachRequest
+	15, // 39: tsm.v1.SessionManager.CancelPendingAttach:input_type -> tsm.v1.CancelPendingAttachRequest
+	18, // 40: tsm.v1.SessionManager.GetHostsConfig:input_type -> tsm.v1.GetHostsConfigRequest
+	20, // 41: tsm.v1.SessionManager.UpdateHostConfig:input_type -> tsm.v1.UpdateHostConfigRequest
+	6,  // 42: tsm.v1.SessionManager.Watch:output_type -> tsm.v1.StateSnapshot
+	46, // 43: tsm.v1.SessionManager.CreateSession:output_type -> google.protobuf.Empty
+	46, // 44: tsm.v1.SessionManager.KillSession:output_type -> google.protobuf.Empty
+	46, // 45: tsm.v1.SessionManager.RenameSession:output_type -> google.protobuf.Empty
+	46, // 46: tsm.v1.SessionManager.CreateGroup:output_type -> google.protobuf.Empty
+	46, // 47: tsm.v1.SessionManager.RenameGroup:output_type -> google.protobuf.Empty
+	46, // 48: tsm.v1.SessionManager.MoveSession:output_type -> google.protobuf.Empty
+	46, // 49: tsm.v1.SessionManager.Reorder:output_type -> google.protobuf.Empty
+	46, // 50: tsm.v1.SessionManager.ToggleCollapse:output_type -> google.protobuf.Empty
+	34, // 51: tsm.v1.SessionManager.DaemonStatus:output_type -> tsm.v1.DaemonStatusResponse
+	37, // 52: tsm.v1.SessionManager.GetConfig:output_type -> tsm.v1.GetConfigResponse
+	46, // 53: tsm.v1.SessionManager.SetConfig:output_type -> google.protobuf.Empty
+	42, // 54: tsm.v1.SessionManager.GetUploadTarget:output_type -> tsm.v1.GetUploadTargetResponse
+	46, // 55: tsm.v1.SessionManager.SetUploadMode:output_type -> google.protobuf.Empty
+	46, // 56: tsm.v1.SessionManager.ReportUploadResult:output_type -> google.protobuf.Empty
+	8,  // 57: tsm.v1.SessionManager.WatchMultiHost:output_type -> tsm.v1.MultiHostSnapshot
+	10, // 58: tsm.v1.SessionManager.ProxyMutation:output_type -> tsm.v1.ProxyMutationResponse
+	12, // 59: tsm.v1.SessionManager.RequestAttach:output_type -> tsm.v1.RequestAttachResponse
+	14, // 60: tsm.v1.SessionManager.TakePendingAttach:output_type -> tsm.v1.TakePendingAttachResponse
+	16, // 61: tsm.v1.SessionManager.CancelPendingAttach:output_type -> tsm.v1.CancelPendingAttachResponse
+	19, // 62: tsm.v1.SessionManager.GetHostsConfig:output_type -> tsm.v1.GetHostsConfigResponse
+	21, // 63: tsm.v1.SessionManager.UpdateHostConfig:output_type -> tsm.v1.UpdateHostConfigResponse
+	42, // [42:64] is the sub-list for method output_type
+	20, // [20:42] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_tsm_v1_tsm_proto_init() }

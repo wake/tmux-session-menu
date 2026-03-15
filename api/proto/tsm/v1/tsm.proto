@@ -63,6 +63,7 @@ message HostState {
   string error = 5;
   StateSnapshot snapshot = 6;
   string address = 7;  // SSH 地址（空字串 = hub 本機）
+  google.protobuf.Timestamp last_connected = 8;  // 最後連線時間
 }
 
 // MultiHostSnapshot 聚合所有主機的狀態快照。

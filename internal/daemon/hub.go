@@ -9,6 +9,7 @@ import (
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // MutationClient 定義代理 mutation 需要的 client 介面。
@@ -70,6 +71,7 @@ type hubHost struct {
 	status       tsmv1.HostStatus
 	snapshot     *tsmv1.StateSnapshot
 	lastErr      string
+	connectedAt  time.Time       // 最後連線時間
 	isLocal      bool
 	client       MutationClient  // 遠端主機的 mutation client，本機為 nil
 	remoteClient HubRemoteClient // 遠端主機的完整 client（含 Close），用於清理
@@ -133,6 +135,9 @@ func (m *HubManager) Snapshot() *tsmv1.MultiHostSnapshot {
 			Error:    h.lastErr,
 			Snapshot: h.snapshot,
 			Address:  h.config.Address,
+		}
+		if !h.connectedAt.IsZero() {
+			hs.LastConnected = timestamppb.New(h.connectedAt)
 		}
 		snap.Hosts = append(snap.Hosts, hs)
 	}
@@ -350,6 +355,7 @@ func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn
 		if h, ok := m.hosts[hostID]; ok {
 			h.client = rc
 			h.remoteClient = rc
+			h.connectedAt = time.Now()
 		}
 		m.mu.Unlock()
 
