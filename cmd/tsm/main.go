@@ -1037,7 +1037,11 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 	exec := tmux.NewRealExecutor()
 	upgrader := upgrade.DefaultUpgrader()
 
+	pendingRequested := false
 	defer func() {
+		if pendingRequested {
+			_ = c.CancelPendingAttach(context.Background())
+		}
 		hubCancel()
 		c.Close()
 	}()
@@ -1124,6 +1128,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 				fmt.Fprintf(os.Stderr, "request attach: %v\n", err)
 				continue
 			}
+			pendingRequested = true
 			_ = osexec.Command("tmux", "detach-client").Run()
 			return hubResultExit
 		}
@@ -1143,13 +1148,13 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 		}
 
 		if cfg.InPopup {
-			// Popup 模式：在新 tmux window 執行 remote attach，popup 自行關閉。
-			// 不能在 popup 內跑 SSH，否則遠端 session 會渲染在 popup 視窗裡。
-			applyHostBar()
-			cmd := remote.AttachShellCommand(hostEntry.Address, selected)
-			if err := osexec.Command("tmux", "new-window", "-n", selected, cmd).Run(); err != nil {
-				_ = tmux.ApplyStatusBar(exec, cfg.Local)
+			// 跨主機切換：委託外層 tsm for loop 處理，避免 tmux 嵌套
+			if err := c.RequestAttach(context.Background(), item.HostID, selected); err != nil {
+				fmt.Fprintf(os.Stderr, "request attach: %v\n", err)
+				return hubResultExit
 			}
+			pendingRequested = true
+			_ = osexec.Command("tmux", "detach-client").Run()
 			return hubResultExit
 		}
 
