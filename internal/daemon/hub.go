@@ -9,6 +9,7 @@ import (
 
 	tsmv1 "github.com/wake/tmux-session-menu/api/tsm/v1"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // MutationClient 定義代理 mutation 需要的 client 介面。
@@ -70,9 +71,12 @@ type hubHost struct {
 	status       tsmv1.HostStatus
 	snapshot     *tsmv1.StateSnapshot
 	lastErr      string
+	connectedAt  time.Time           // 最後連線時間
 	isLocal      bool
-	client       MutationClient  // 遠端主機的 mutation client，本機為 nil
-	remoteClient HubRemoteClient // 遠端主機的完整 client（含 Close），用於清理
+	client       MutationClient      // 遠端主機的 mutation client，本機為 nil
+	remoteClient HubRemoteClient     // 遠端主機的完整 client（含 Close），用於清理
+	cancel       context.CancelFunc  // per-host cancel（遠端主機用）
+	done         chan struct{}        // goroutine 結束信號（遠端主機用）
 }
 
 // NewHubManager 建立新的 HubManager。
@@ -133,6 +137,9 @@ func (m *HubManager) Snapshot() *tsmv1.MultiHostSnapshot {
 			Error:    h.lastErr,
 			Snapshot: h.snapshot,
 			Address:  h.config.Address,
+		}
+		if !h.connectedAt.IsZero() {
+			hs.LastConnected = timestamppb.New(h.connectedAt)
 		}
 		snap.Hosts = append(snap.Hosts, hs)
 	}
@@ -275,6 +282,58 @@ func (m *HubManager) CancelPendingAttach() {
 	m.pending = nil
 }
 
+// ReconnectHost 強制重建指定主機的連線。
+// cancel 現有 goroutine → 等待結束 → 重新啟動。
+func (m *HubManager) ReconnectHost(ctx context.Context, hostID string) error {
+	m.mu.Lock()
+	h, ok := m.hosts[hostID]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("unknown host: %s", hostID)
+	}
+	if h.isLocal {
+		m.mu.Unlock()
+		return fmt.Errorf("local 主機不需要重連")
+	}
+	if m.dialFn == nil {
+		m.mu.Unlock()
+		return fmt.Errorf("dial function not configured")
+	}
+	dialFn := m.dialFn
+
+	// Cancel 現有 goroutine
+	if h.cancel != nil {
+		h.cancel()
+	}
+	done := h.done
+	m.mu.Unlock()
+
+	// 等待 goroutine 結束
+	if done != nil {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	// 重新啟動
+	m.mu.Lock()
+	cfg := h.config
+	hctx, hcancel := context.WithCancel(context.Background())
+	h.cancel = hcancel
+	h.done = make(chan struct{})
+	h.status = tsmv1.HostStatus_HOST_STATUS_CONNECTING
+	h.lastErr = ""
+	m.remoteWg.Add(1)
+	newDone := h.done
+	m.mu.Unlock()
+
+	go m.runRemote(hctx, newDone, cfg, dialFn)
+
+	return nil
+}
+
 // StartRemoteHosts 為每台已啟用的非 local 主機啟動連線 goroutine。
 func (m *HubManager) StartRemoteHosts(ctx context.Context) {
 	m.mu.Lock()
@@ -295,14 +354,18 @@ func (m *HubManager) StartRemoteHosts(ctx context.Context) {
 			continue
 		}
 		cfg := h.config
+		hctx, hcancel := context.WithCancel(rctx)
+		h.cancel = hcancel
+		h.done = make(chan struct{})
 		m.remoteWg.Add(1)
-		go m.runRemote(rctx, cfg, dialFn)
+		go m.runRemote(hctx, h.done, cfg, dialFn)
 	}
 }
 
 // runRemote 是單台遠端主機的連線迴圈：dial → watchRemote → 斷線重連。
-func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn HubDialFn) {
+func (m *HubManager) runRemote(ctx context.Context, done chan struct{}, cfg config.HostEntry, dialFn HubDialFn) {
 	defer m.remoteWg.Done()
+	defer close(done)
 	hostID := cfg.Name
 	backoff := remoteInitialBackoff
 
@@ -350,6 +413,7 @@ func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn
 		if h, ok := m.hosts[hostID]; ok {
 			h.client = rc
 			h.remoteClient = rc
+			h.connectedAt = time.Now()
 		}
 		m.mu.Unlock()
 

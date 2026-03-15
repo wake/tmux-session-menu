@@ -177,6 +177,16 @@ func TestCancelPendingAttach(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestReconnectHost(t *testing.T) {
+	exec := &fakeExecutor{}
+	c, cleanup := setupTestClient(t, exec)
+	defer cleanup()
+
+	// nil hubMgr → gRPC Unavailable error
+	err := c.ReconnectHost(context.Background(), "mlab")
+	assert.Error(t, err)
+}
+
 func TestClient_DialSocket_InvalidPath(t *testing.T) {
 	_, err := DialSocket("/nonexistent/path/tsm.sock")
 	assert.Error(t, err)

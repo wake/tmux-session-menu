@@ -419,3 +419,49 @@ func TestHubManager_CancelPendingAttach_NoPanic(t *testing.T) {
 	mgr := NewHubManager(mhub)
 	mgr.CancelPendingAttach()
 }
+
+func TestHubManager_ReconnectHost_Local(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "local", Enabled: true})
+
+	err := mgr.ReconnectHost(context.Background(), "local")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "local")
+}
+
+func TestHubManager_ReconnectHost_Unknown(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+
+	err := mgr.ReconnectHost(context.Background(), "nonexistent")
+	assert.Error(t, err)
+}
+
+func TestHubManager_ReconnectHost_NoDialFn(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	err := mgr.ReconnectHost(context.Background(), "mlab")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dial")
+}
+
+func TestHubManager_Snapshot_LastConnected(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	now := time.Now()
+	mgr.mu.Lock()
+	mgr.hosts["mlab"].connectedAt = now
+	mgr.hosts["mlab"].status = tsmv1.HostStatus_HOST_STATUS_CONNECTED
+	mgr.mu.Unlock()
+
+	snap := mgr.Snapshot()
+	require.NotNil(t, snap)
+	require.Len(t, snap.Hosts, 1)
+	assert.NotNil(t, snap.Hosts[0].LastConnected)
+	assert.Equal(t, now.Unix(), snap.Hosts[0].LastConnected.AsTime().Unix())
+}

@@ -345,6 +345,21 @@ func (s *Service) CancelPendingAttach(
 	return &tsmv1.CancelPendingAttachResponse{}, nil
 }
 
+// ReconnectHost 強制重建指定主機的連線。
+func (s *Service) ReconnectHost(
+	ctx context.Context, req *tsmv1.ReconnectHostRequest,
+) (*tsmv1.ReconnectHostResponse, error) {
+	if s.hubMgr == nil {
+		return nil, status.Error(codes.Unavailable, "not in hub mode")
+	}
+	if err := s.hubMgr.ReconnectHost(ctx, req.HostId); err != nil {
+		return &tsmv1.ReconnectHostResponse{
+			Success: false, Error: err.Error(),
+		}, nil
+	}
+	return &tsmv1.ReconnectHostResponse{Success: true}, nil
+}
+
 // loadServerConfigPath 回傳 config.toml 路徑，優先使用 TSM_CONFIG_PATH 環境變數。
 func loadServerConfigPath() string {
 	if p := os.Getenv("TSM_CONFIG_PATH"); p != "" {

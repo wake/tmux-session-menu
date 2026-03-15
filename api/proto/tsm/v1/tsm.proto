@@ -63,6 +63,7 @@ message HostState {
   string error = 5;
   StateSnapshot snapshot = 6;
   string address = 7;  // SSH 地址（空字串 = hub 本機）
+  google.protobuf.Timestamp last_connected = 8;  // 最後連線時間
 }
 
 // MultiHostSnapshot 聚合所有主機的狀態快照。
@@ -122,6 +123,17 @@ message CancelPendingAttachRequest {}
 
 // CancelPendingAttachResponse 回傳取消結果。
 message CancelPendingAttachResponse {}
+
+// ReconnectHostRequest 強制重建指定主機的連線。
+message ReconnectHostRequest {
+  string host_id = 1;
+}
+
+// ReconnectHostResponse 回傳重建結果。
+message ReconnectHostResponse {
+  bool success = 1;
+  string error = 2;
+}
 
 // HostConfigEntry 描述一台主機的完整設定（對應 config.HostEntry）。
 message HostConfigEntry {
@@ -355,6 +367,9 @@ service SessionManager {
   rpc TakePendingAttach(TakePendingAttachRequest) returns (TakePendingAttachResponse);
   // CancelPendingAttach 取消尚未消費的 pending attach（popup 異常關閉時呼叫）。
   rpc CancelPendingAttach(CancelPendingAttachRequest) returns (CancelPendingAttachResponse);
+
+  // ReconnectHost 強制重建指定主機的 SSH tunnel（hub 模式專用）。
+  rpc ReconnectHost(ReconnectHostRequest) returns (ReconnectHostResponse);
 
   // GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
   rpc GetHostsConfig(GetHostsConfigRequest) returns (GetHostsConfigResponse);

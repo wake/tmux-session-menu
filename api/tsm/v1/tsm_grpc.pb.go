@@ -40,6 +40,7 @@ const (
 	SessionManager_RequestAttach_FullMethodName       = "/tsm.v1.SessionManager/RequestAttach"
 	SessionManager_TakePendingAttach_FullMethodName   = "/tsm.v1.SessionManager/TakePendingAttach"
 	SessionManager_CancelPendingAttach_FullMethodName = "/tsm.v1.SessionManager/CancelPendingAttach"
+	SessionManager_ReconnectHost_FullMethodName       = "/tsm.v1.SessionManager/ReconnectHost"
 	SessionManager_GetHostsConfig_FullMethodName      = "/tsm.v1.SessionManager/GetHostsConfig"
 	SessionManager_UpdateHostConfig_FullMethodName    = "/tsm.v1.SessionManager/UpdateHostConfig"
 )
@@ -84,6 +85,8 @@ type SessionManagerClient interface {
 	TakePendingAttach(ctx context.Context, in *TakePendingAttachRequest, opts ...grpc.CallOption) (*TakePendingAttachResponse, error)
 	// CancelPendingAttach 取消尚未消費的 pending attach（popup 異常關閉時呼叫）。
 	CancelPendingAttach(ctx context.Context, in *CancelPendingAttachRequest, opts ...grpc.CallOption) (*CancelPendingAttachResponse, error)
+	// ReconnectHost 強制重建指定主機的 SSH tunnel（hub 模式專用）。
+	ReconnectHost(ctx context.Context, in *ReconnectHostRequest, opts ...grpc.CallOption) (*ReconnectHostResponse, error)
 	// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
 	GetHostsConfig(ctx context.Context, in *GetHostsConfigRequest, opts ...grpc.CallOption) (*GetHostsConfigResponse, error)
 	// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
@@ -316,6 +319,16 @@ func (c *sessionManagerClient) CancelPendingAttach(ctx context.Context, in *Canc
 	return out, nil
 }
 
+func (c *sessionManagerClient) ReconnectHost(ctx context.Context, in *ReconnectHostRequest, opts ...grpc.CallOption) (*ReconnectHostResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReconnectHostResponse)
+	err := c.cc.Invoke(ctx, SessionManager_ReconnectHost_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *sessionManagerClient) GetHostsConfig(ctx context.Context, in *GetHostsConfigRequest, opts ...grpc.CallOption) (*GetHostsConfigResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetHostsConfigResponse)
@@ -376,6 +389,8 @@ type SessionManagerServer interface {
 	TakePendingAttach(context.Context, *TakePendingAttachRequest) (*TakePendingAttachResponse, error)
 	// CancelPendingAttach 取消尚未消費的 pending attach（popup 異常關閉時呼叫）。
 	CancelPendingAttach(context.Context, *CancelPendingAttachRequest) (*CancelPendingAttachResponse, error)
+	// ReconnectHost 強制重建指定主機的 SSH tunnel（hub 模式專用）。
+	ReconnectHost(context.Context, *ReconnectHostRequest) (*ReconnectHostResponse, error)
 	// GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
 	GetHostsConfig(context.Context, *GetHostsConfigRequest) (*GetHostsConfigResponse, error)
 	// UpdateHostConfig 更新 daemon 所在主機的 hosts 設定。
@@ -449,6 +464,9 @@ func (UnimplementedSessionManagerServer) TakePendingAttach(context.Context, *Tak
 }
 func (UnimplementedSessionManagerServer) CancelPendingAttach(context.Context, *CancelPendingAttachRequest) (*CancelPendingAttachResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelPendingAttach not implemented")
+}
+func (UnimplementedSessionManagerServer) ReconnectHost(context.Context, *ReconnectHostRequest) (*ReconnectHostResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReconnectHost not implemented")
 }
 func (UnimplementedSessionManagerServer) GetHostsConfig(context.Context, *GetHostsConfigRequest) (*GetHostsConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHostsConfig not implemented")
@@ -823,6 +841,24 @@ func _SessionManager_CancelPendingAttach_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SessionManager_ReconnectHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconnectHostRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).ReconnectHost(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_ReconnectHost_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).ReconnectHost(ctx, req.(*ReconnectHostRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SessionManager_GetHostsConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetHostsConfigRequest)
 	if err := dec(in); err != nil {
@@ -937,6 +973,10 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelPendingAttach",
 			Handler:    _SessionManager_CancelPendingAttach_Handler,
+		},
+		{
+			MethodName: "ReconnectHost",
+			Handler:    _SessionManager_ReconnectHost_Handler,
 		},
 		{
 			MethodName: "GetHostsConfig",
