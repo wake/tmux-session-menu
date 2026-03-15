@@ -2,6 +2,11 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.45.2] - 2026-03-15
+
+### Fixed
+- `[i]` 面板只持久化 hub socket（`tsm-hub-*` pattern）到 `@tsm_hub_socket`，避免本機 daemon socket 覆蓋正確的 reverse tunnel 路徑
+
 ## [0.45.1] - 2026-03-15
 
 ### Fixed

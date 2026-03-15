@@ -119,8 +119,9 @@ func TestInfoMode_DetectHubSocket(t *testing.T) {
 }
 
 func TestInfoMode_PersistsHubSocket(t *testing.T) {
-	tmpDir := t.TempDir()
-	sockPath := filepath.Join(tmpDir, "test.sock")
+	// 使用 /tmp 以避免路徑超過 Unix socket 108 字元限制
+	sockPath := filepath.Join("/tmp", fmt.Sprintf("tsm-hub-test-%d.sock", os.Getpid()))
+	t.Cleanup(func() { os.Remove(sockPath) })
 
 	ln, err := createTestSocket(sockPath)
 	if err != nil {
@@ -188,6 +189,44 @@ func TestInfoMode_NoPersistOutsideTmux(t *testing.T) {
 	_ = updated
 
 	assert.Empty(t, tmuxCalls, "should not call tmux outside tmux")
+}
+
+func TestInfoMode_NoPersistNonHubSocket(t *testing.T) {
+	// 非 hub socket（tsm.sock）即使在 tmux 內也不應持久化到 @tsm_hub_socket
+	sockPath := filepath.Join("/tmp", fmt.Sprintf("tsm-test-%d.sock", os.Getpid()))
+	t.Cleanup(func() { os.Remove(sockPath) })
+
+	ln, err := createTestSocket(sockPath)
+	if err != nil {
+		t.Skip("cannot create test socket:", err)
+	}
+	defer ln.Close()
+
+	var tmuxCalls [][]string
+	deps := ui.Deps{
+		Cfg: func() config.Config {
+			c := config.Default()
+			c.InTmux = true // 在 tmux 內
+			return c
+		}(),
+		HubSocket: sockPath,
+		TmuxExecFn: func(args ...string) (string, error) {
+			tmuxCalls = append(tmuxCalls, args)
+			return "", nil
+		},
+	}
+	m := ui.NewModel(deps)
+
+	m, _ = infoApplyKey(m, "i")
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_ = updated
+
+	// socket 名稱不含 tsm-hub-，不應呼叫 set-option
+	for _, call := range tmuxCalls {
+		if len(call) >= 3 && call[0] == "set-option" && call[2] == "@tsm_hub_socket" {
+			t.Error("should not persist non-hub socket to @tsm_hub_socket")
+		}
+	}
 }
 
 func TestInfoMode_RenderContainsMode(t *testing.T) {

@@ -110,10 +110,10 @@ func (m Model) infoConnect() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// 持久化到 tmux 選項，讓下次 Ctrl+Q 自動走 hub-socket 模式
-	// （反轉 0.44.1 的決定：實務上 hub 未正確設定時使用者需要手動指定，
-	//   且手動設定的路徑反覆遺失體驗很差。hub 端 SetHubSocket 仍可覆寫。）
-	if m.deps.Cfg.InTmux {
+	// 持久化到 tmux 選項，讓下次 Ctrl+Q 自動走 hub-socket 模式。
+	// 只持久化 hub socket（tsm-hub-* pattern），避免把本機 daemon socket
+	// 誤寫入 @tsm_hub_socket 造成 Ctrl+Q 連到自己而非 hub。
+	if m.deps.Cfg.InTmux && strings.Contains(filepath.Base(sockPath), "tsm-hub-") {
 		execFn := m.deps.TmuxExecFn
 		if execFn == nil {
 			exec := tmux.NewRealExecutor()
