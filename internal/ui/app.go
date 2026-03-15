@@ -16,6 +16,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/ai"
 	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/hostcheck"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/selfinstall"
 	"github.com/wake/tmux-session-menu/internal/store"
@@ -43,10 +44,10 @@ type Deps struct {
 	StatusDir  string
 	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
 
-	Upgrader  *upgrade.Upgrader // nil 時 ctrl+u 無效
-	HubMode   bool              // true = 使用 WatchMultiHost（hub 模式）
-	HubSocket string            // hub-socket 模式的 socket 路徑（供 info 顯示）
-	HubSelf    string                              // hub-socket 模式：spoke 在 hub 中的 host name（用於 status bar 套色）
+	Upgrader   *upgrade.Upgrader                    // nil 時 ctrl+u 無效
+	HubMode    bool                                 // true = 使用 WatchMultiHost（hub 模式）
+	HubSocket  string                               // hub-socket 模式的 socket 路徑（供 info 顯示）
+	HubSelf    string                               // hub-socket 模式：spoke 在 hub 中的 host name（用於 status bar 套色）
 	TmuxExecFn func(args ...string) (string, error) // 可注入的 tmux 執行函式（測試用）
 }
 
@@ -128,7 +129,7 @@ type Model struct {
 	hubHosts         []config.HostEntry       // hub-socket 模式：從 hub daemon 取得的主機設定
 
 	// host picker 右側面板
-	hostPanelOpen    bool
+	hostFocusCol     int                       // 0=左欄, 1=中欄(連線), 2=右欄(設定)
 	hostPanelCursor  int                       // 0=[x]啟用, 1=bar_bg, 2=bar_fg, 3=badge_bg, 4=badge_fg
 	hostPanelEditing bool                      // 正在編輯某個色彩欄位
 	hostPanelDraft   map[string]hostDraftEntry // hostID → draft copy of color edits
@@ -156,9 +157,9 @@ type Model struct {
 	// 上傳模式
 	uploadModal uploadModal
 
-	// Info 模式（連線資訊 + Hub 重連）
-	infoHubInput     textinput.Model // hub socket 路徑輸入
-	hubReconnectSock string          // 非空時表示要重連到此 hub socket
+	// 連線欄 hostcheck 相關
+	hostCheckResults map[string]hostcheck.Result // hostID → 最新檢測結果
+	hostConnEditing  bool                        // 連線欄是否在編輯 hub-socket 路徑
 }
 
 // NewModel 建立初始 Model。
@@ -176,7 +177,12 @@ func NewModel(deps Deps) Model {
 		tis[i].Cursor.Style = selectedStyle
 	}
 
-	return Model{deps: deps, textInput: ti, textInputs: tis}
+	return Model{
+		deps:             deps,
+		textInput:        ti,
+		textInputs:       tis,
+		hostCheckResults: make(map[string]hostcheck.Result),
+	}
 }
 
 // SessionsMsg 是 loadSessions 完成後的回傳訊息。
@@ -345,6 +351,11 @@ func (m Model) HostPickerCursor() int {
 	return m.hostPickerCursor
 }
 
+// HostFocusCol 回傳主機管理面板的焦點欄位（0=左, 1=中, 2=右）（主要用於測試）。
+func (m Model) HostFocusCol() int {
+	return m.hostFocusCol
+}
+
 // HostSavedMsg 回傳主機儲存的 flash message（主要用於測試）。
 func (m Model) HostSavedMsg() string {
 	return m.hostSavedMsg
@@ -403,9 +414,6 @@ func (m Model) UpgradeInfo() (tmpPath, version string) { return m.upgradeTmpPath
 
 // UpgradeBinPath 回傳 restart-only 時已安裝 binary 的路徑（無需下載）。
 func (m Model) UpgradeBinPath() string { return m.upgradeBinPath }
-
-// HubReconnect 回傳使用者要求重連的 hub socket 路徑（空字串表示不需重連）。
-func (m Model) HubReconnect() string { return m.hubReconnectSock }
 
 // ConfirmPrompt 回傳目前確認對話框的提示文字。
 func (m Model) ConfirmPrompt() string { return m.confirmPrompt }
@@ -1035,6 +1043,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RemoteUpgradeMsg:
 		m, cmd := m.handleRemoteUpgrade(msg)
 		return m, cmd
+	case hostCheckMsg:
+		m.hostCheckResults[msg.HostID] = msg.Result
+		return m, nil
+	case reconnectHostMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		}
+		return m, nil
+	case setHubSocketMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		}
+		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
 		case ModeInput:

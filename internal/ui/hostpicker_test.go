@@ -573,8 +573,10 @@ func TestHostPicker_PanelNavigation(t *testing.T) {
 	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
 	m, _ = hpApplyKey(m, "h")
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 面板內 j 向下
@@ -595,8 +597,10 @@ func TestHostPicker_PanelToggleEnabled(t *testing.T) {
 	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
 	m, _ = hpApplyKey(m, "h")
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 游標在第 0 個（啟用 toggle），按空白鍵切換
@@ -614,8 +618,10 @@ func TestHostPicker_PanelEditColor(t *testing.T) {
 	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
 	m, _ = hpApplyKey(m, "h")
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 bar_bg（index 1）
@@ -648,8 +654,10 @@ func TestHostPicker_CtrlS_SaveDrafts(t *testing.T) {
 	m, _ = hpApplyKey(m, "h")
 	m, _ = hpApplyKey(m, "j") // 移到 mlab1
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 bar_bg 並編輯
@@ -708,8 +716,10 @@ func TestHostPicker_CtrlS_SyncsLocalToConfig(t *testing.T) {
 	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: cfgPath})
 	m, _ = hpApplyKey(m, "h")
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 badge_bg（index 3）並編輯
@@ -900,8 +910,10 @@ func TestHubMode_HostPicker_OpenPanel(t *testing.T) {
 func TestHubMode_HostPicker_PanelEditColor(t *testing.T) {
 	m := newHubTestModel(t)
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 bar_bg（index 1）
@@ -947,9 +959,11 @@ func TestHubMode_HostPicker_CtrlS_Save(t *testing.T) {
 	m = updated.(ui.Model)
 	m, _ = hpApplyKey(m, "h")
 
-	// 移到 mlab 並開啟面板
+	// 移到 mlab，Enter 進入中欄，再 → 進入右欄（設定面板）
 	m, _ = hpApplyKey(m, "j")
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 bar_bg 並編輯
@@ -1258,4 +1272,141 @@ func TestApplyCurrentStatusBarCmd_NoLocal(t *testing.T) {
 	m := ui.NewModel(deps)
 	cmd := m.ApplyCurrentStatusBarCmd()
 	assert.Nil(t, cmd, "無 local host 時應回傳 nil")
+}
+
+// --- 三欄焦點切換測試 ---
+
+func TestHostPicker_ThreeColumnFocus(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5B9BD5", Enabled: true})
+	mgr.AddHost(config.HostEntry{Name: "dev", Address: "dev.example.com", Color: "#70AD47", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+
+	// 按 h 進入 ModeHostPicker
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, ui.ModeHostPicker, m.Mode(), "應進入 ModeHostPicker")
+
+	// 初始狀態：hostFocusCol == 0（左欄）
+	assert.Equal(t, 0, m.HostFocusCol(), "初始應在左欄 (col=0)")
+	assert.False(t, m.HostPanelOpen(), "左欄時面板不應開啟")
+
+	// Enter → hostFocusCol == 1（中欄）
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostFocusCol(), "Enter 後應進入中欄 (col=1)")
+	assert.True(t, m.HostPanelOpen(), "中欄時 HostPanelOpen 應為 true")
+
+	// → → hostFocusCol == 2（右欄/設定）
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(ui.Model)
+	assert.Equal(t, 2, m.HostFocusCol(), "→ 後應進入右欄 (col=2)")
+
+	// ← → hostFocusCol == 1（回到中欄）
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostFocusCol(), "← 後應回到中欄 (col=1)")
+
+	// ← → hostFocusCol == 0（回到左欄，面板關閉）
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.HostFocusCol(), "← 後應回到左欄 (col=0)")
+	assert.False(t, m.HostPanelOpen(), "回到左欄後面板應關閉")
+
+	// 重新開啟：Enter → 中欄
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostFocusCol(), "Enter 再次應進入中欄")
+
+	// Esc 從中欄直接關閉
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.HostFocusCol(), "Esc 從中欄應回到左欄 (col=0)")
+	assert.False(t, m.HostPanelOpen(), "Esc 後面板應關閉")
+
+	// 重新開啟到右欄：Enter → →
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(ui.Model)
+	assert.Equal(t, 2, m.HostFocusCol(), "應到右欄 (col=2)")
+
+	// Esc 從右欄直接關閉全部
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.HostFocusCol(), "Esc 從右欄應回到左欄 (col=0)")
+	assert.False(t, m.HostPanelOpen(), "Esc 後面板應關閉")
+}
+
+func TestHostPicker_ThreeColumnFocus_VimKeys(t *testing.T) {
+	mgr := hostmgr.New()
+	mgr.AddHost(config.HostEntry{Name: "local", Color: "#5B9BD5", Enabled: true})
+
+	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
+
+	// 進入 HostPicker
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, 0, m.HostFocusCol())
+
+	// l → 中欄
+	m, _ = hpApplyKey(m, "l")
+	assert.Equal(t, 1, m.HostFocusCol(), "l 鍵應進入中欄")
+
+	// l → 右欄
+	m, _ = hpApplyKey(m, "l")
+	assert.Equal(t, 2, m.HostFocusCol(), "l 鍵應進入右欄")
+
+	// h → 回中欄
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, 1, m.HostFocusCol(), "h 鍵應回到中欄")
+
+	// h → 回左欄
+	m, _ = hpApplyKey(m, "h")
+	assert.Equal(t, 0, m.HostFocusCol(), "h 鍵應回到左欄")
+}
+
+func TestHubMode_ThreeColumnFocus(t *testing.T) {
+	m := newHubTestModel(t)
+	assert.Equal(t, ui.ModeHostPicker, m.Mode())
+
+	// 初始：左欄
+	assert.Equal(t, 0, m.HostFocusCol(), "初始應在左欄 (col=0)")
+
+	// Enter → 中欄
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostFocusCol(), "Enter 後應進入中欄 (col=1)")
+
+	// → → 右欄
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(ui.Model)
+	assert.Equal(t, 2, m.HostFocusCol(), "→ 後應進入右欄 (col=2)")
+
+	// ← → 中欄
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostFocusCol(), "← 後應回到中欄 (col=1)")
+
+	// ← → 左欄
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.HostFocusCol(), "← 後應回到左欄 (col=0)")
+
+	// Enter → 中欄 → Esc → 左欄
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	assert.Equal(t, 1, m.HostFocusCol())
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.HostFocusCol(), "Esc 從中欄應回到左欄")
+
+	// Enter → → → Esc → 左欄
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(ui.Model)
+	assert.Equal(t, 2, m.HostFocusCol())
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(ui.Model)
+	assert.Equal(t, 0, m.HostFocusCol(), "Esc 從右欄應回到左欄")
 }

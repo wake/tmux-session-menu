@@ -343,15 +343,7 @@ func runTUI() {
 
 	// tsm 無參數 → Daemon 模式（純 Watch stream，不經多主機架構）
 	if !hostMode {
-		if hubSock := runDaemonTUI(cfg, cfgPath); hubSock != "" {
-			// 使用者在 info 面板要求重連到 hub socket
-			if hc, err := client.DialSocket(hubSock); err == nil {
-				hctx := readHubContext()
-				runHubTUI(hc, cfg, cfgPath, hubSock, hctx)
-			} else {
-				fmt.Fprintf(os.Stderr, "Hub 連線失敗: %v\n", err)
-			}
-		}
+		runDaemonTUI(cfg, cfgPath)
 		return
 	}
 
@@ -961,9 +953,7 @@ type hubContext struct {
 
 // runDaemonTUI 執行 Daemon 模式的 TUI 迴圈（tsm 無參數，只看本機）。
 // 透過 gRPC Watch stream 接收本機快照，不經過多主機架構。
-// runDaemonTUI 執行 Daemon 模式的 TUI 迴圈。
-// 回傳非空字串時，表示使用者要求重連到指定的 hub socket。
-func runDaemonTUI(cfg config.Config, cfgPath string) string {
+func runDaemonTUI(cfg config.Config, cfgPath string) {
 	c, err := client.Dial(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: 無法連線到 daemon: %v\n", err)
@@ -989,17 +979,13 @@ func runDaemonTUI(cfg config.Config, cfgPath string) string {
 
 		fm, ok := finalModel.(ui.Model)
 		if !ok {
-			return ""
-		}
-
-		if hubSock := fm.HubReconnect(); hubSock != "" {
-			return hubSock
+			return
 		}
 
 		if fm.UpgradeReady() {
 			c.Close()
 			runPostUpgrade(fm, cfg)
-			return ""
+			return
 		}
 		if fm.OpenConfig() {
 			runConfig()
@@ -1015,12 +1001,12 @@ func runDaemonTUI(cfg config.Config, cfgPath string) string {
 				_ = remote.WriteExitMarker()
 				_ = osexec.Command("tmux", "detach-client").Run()
 			}
-			return ""
+			return
 		}
 
 		switchToSession(selected, fm.ReadOnly())
 		if cfg.InPopup {
-			return ""
+			return
 		}
 	}
 }

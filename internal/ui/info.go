@@ -6,37 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/tmux"
 	"github.com/wake/tmux-session-menu/internal/version"
 )
 
-// enterInfoMode 進入連線資訊模式，初始化 hub socket 輸入欄位。
+// enterInfoMode 進入連線資訊模式（唯讀）。
 func (m Model) enterInfoMode() Model {
 	m.mode = ModeInfo
 	m.err = nil
-
-	ti := textinput.New()
-	ti.PromptStyle = selectedStyle
-	ti.TextStyle = versionStyle
-	ti.Cursor.Style = selectedStyle
-	ti.CharLimit = 256
-	ti.Width = 60
-
-	// 預設值：Deps.HubSocket > tmux @tsm_hub_socket > 自動偵測
-	defaultSock := m.deps.HubSocket
-	if defaultSock == "" {
-		defaultSock = m.readTmuxHubSocket()
-	}
-	if defaultSock == "" {
-		defaultSock = m.detectHubSocket()
-	}
-	ti.SetValue(defaultSock)
-	ti.Focus()
-
-	m.infoHubInput = ti
 	return m
 }
 
@@ -80,63 +59,11 @@ func (m Model) updateInfo(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m.mode = ModeNormal
 		return m, nil
-	case tea.KeyEnter:
-		// Enter = 連線（同 c）
-		return m.infoConnect()
 	}
-
-	// 將按鍵轉發到 text input
-	var cmd tea.Cmd
-	m.infoHubInput, cmd = m.infoHubInput.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
-// isHubSocket 判斷路徑是否為 hub reverse tunnel socket（tsm-hub-* pattern）。
-func isHubSocket(sockPath string) bool {
-	return strings.Contains(filepath.Base(sockPath), "tsm-hub-")
-}
-
-// infoConnect 驗證並連線到使用者輸入的 hub socket。
-// 只接受 reverse tunnel socket（tsm-hub-*），拒絕本機 daemon socket。
-func (m Model) infoConnect() (tea.Model, tea.Cmd) {
-	sockPath := strings.TrimSpace(m.infoHubInput.Value())
-	if sockPath == "" {
-		m.err = fmt.Errorf("hub socket 路徑不可為空")
-		return m, nil
-	}
-
-	// 驗證必須是 hub reverse tunnel socket
-	if !isHubSocket(sockPath) {
-		m.err = fmt.Errorf("必須是 hub socket（tsm-hub-*.sock），不可使用本機 daemon socket")
-		return m, nil
-	}
-
-	// 檢查 socket 檔案是否存在
-	info, err := os.Stat(sockPath)
-	if err != nil {
-		m.err = fmt.Errorf("socket 不存在: %s", sockPath)
-		return m, nil
-	}
-	if info.Mode()&os.ModeSocket == 0 {
-		m.err = fmt.Errorf("不是 socket 檔案: %s", sockPath)
-		return m, nil
-	}
-
-	// 持久化到 tmux 選項，讓下次 Ctrl+Q 自動走 hub-socket 模式
-	if m.deps.Cfg.InTmux {
-		execFn := m.deps.TmuxExecFn
-		if execFn == nil {
-			exec := tmux.NewRealExecutor()
-			execFn = exec.Execute
-		}
-		execFn("set-option", "-g", "@tsm_hub_socket", sockPath)
-	}
-	m.hubReconnectSock = sockPath
-	m.quitting = true
-	return m, tea.Quit
-}
-
-// renderInfo 渲染連線資訊面板。
+// renderInfo 渲染連線資訊面板（唯讀）。
 func (m Model) renderInfo() string {
 	var b strings.Builder
 	render := func(key, desc string) string {
@@ -160,22 +87,11 @@ func (m Model) renderInfo() string {
 		b.WriteString(fmt.Sprintf("  %s  %s\n", label("Hub:"), dimStyle.Render("(未偵測到 reverse tunnel)")))
 	}
 	b.WriteString(fmt.Sprintf("  %s  %s\n", label("連線:"), val(m.currentSocketPath())))
-	b.WriteString("\n")
-	b.WriteString("  " + selectedStyle.Render("── Hub 連線 ──") + "\n")
-	b.WriteString(fmt.Sprintf("  %s  %s\n", label("路徑:"), m.infoHubInput.View()))
 
-	b.WriteString(fmt.Sprintf("\n  %s  %s\n",
-		render("[Enter]", "連線"),
-		render("[Esc]", "返回")))
+	b.WriteString(fmt.Sprintf("\n  %s\n", render("[Esc]", "返回")))
 
 	return b.String()
 }
-
-// InfoHubInputValue 回傳 hub socket 輸入欄位的目前值（供測試使用）。
-func (m Model) InfoHubInputValue() string { return m.infoHubInput.Value() }
-
-// SetInfoHubInput 設定 hub socket 輸入欄位的值（供測試使用）。
-func (m *Model) SetInfoHubInput(v string) { m.infoHubInput.SetValue(v) }
 
 // currentSocketPath 回傳目前連線使用的 socket 路徑。
 func (m Model) currentSocketPath() string {
