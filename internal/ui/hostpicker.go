@@ -92,18 +92,20 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.applyCurrentStatusBarCmd()
 	}
 
-	// 正在編輯色彩欄位：委派給 textInput
-	if m.hostPanelEditing {
-		return m.updateHostPanelEditing(msg)
-	}
-
-	// 右側面板開啟時
-	if m.hostPanelOpen() {
+	// 依焦點欄位分派按鍵
+	switch m.hostFocusCol {
+	case 0:
+		return m.updateHostPickerLeft(msg, hosts)
+	case 1:
+		return m.updateHostConnection(msg)
+	case 2:
+		if m.hostPanelEditing {
+			return m.updateHostPanelEditing(msg)
+		}
 		return m.updateHostPanelOpen(msg, hosts)
+	default:
+		return m, nil
 	}
-
-	// 左側（主機列表）
-	return m.updateHostPickerLeft(msg, hosts)
 }
 
 // updateHostPickerLeft 處理左側主機列表的按鍵。
@@ -113,11 +115,11 @@ func (m Model) updateHostPickerLeft(msg tea.KeyMsg, hosts []*hostmgr.Host) (tea.
 		m.mode = ModeNormal
 		return m, nil
 	case "enter", "right", "l":
-		// 開啟右側面板
+		// 進入中欄（連線設定）
 		if m.hostPickerCursor < len(hosts) {
 			h := hosts[m.hostPickerCursor]
 			m.ensureDraft(h.ID())
-			m.hostFocusCol = 2
+			m.hostFocusCol = 1
 			m.hostPanelCursor = 0
 			m.hostPanelEditing = false
 			m.hostSavedMsg = "" // 清除舊的 flash
@@ -259,11 +261,19 @@ func (m Model) renderHostPicker() string {
 		return leftPanel
 	}
 
-	// 渲染右側設定面板
-	rightPanel := m.renderHostPickerRight(hosts)
+	// 取得當前選中主機的資訊
+	hostName := ""
+	isLocal := true
+	if m.hostPickerCursor < len(hosts) {
+		h := hosts[m.hostPickerCursor]
+		hostName = h.Config().Name
+		isLocal = h.Config().IsLocal()
+	}
 
-	// 左右並排
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+	// 三欄並排：左側列表 + 中欄連線 + 右側設定
+	midPanel := m.renderHostConnection(hostName, isLocal)
+	rightPanel := m.renderHostPickerRight(hosts)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, midPanel, rightPanel)
 }
 
 // renderHostPickerLeft 渲染左側主機列表。
@@ -493,27 +503,28 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.applyCurrentStatusBarCmd()
 	}
 
-	// 正在編輯色彩欄位：委派給 hub panel editing handler
-	if m.hostPanelEditing {
-		return m.updateHubHostPanelEditing(msg)
-	}
-
-	// 右側面板開啟時
-	if m.hostPanelOpen() {
+	// 依焦點欄位分派按鍵
+	switch m.hostFocusCol {
+	case 1:
+		return m.updateHubHostConnection(msg)
+	case 2:
+		if m.hostPanelEditing {
+			return m.updateHubHostPanelEditing(msg)
+		}
 		return m.updateHubHostPanelOpen(msg, hosts)
 	}
 
-	// 左側主機列表
+	// 左側主機列表（hostFocusCol == 0）
 	switch msg.String() {
 	case "esc", "h", "q":
 		m.mode = ModeNormal
 		return m, nil
 	case "enter", "right", "l":
-		// 開啟右側面板
+		// 進入中欄（連線設定）
 		if m.hostPickerCursor < len(hosts) {
 			h := hosts[m.hostPickerCursor]
 			m.ensureDraftFromEntry(h)
-			m.hostFocusCol = 2
+			m.hostFocusCol = 1
 			m.hostPanelCursor = 0
 			m.hostPanelEditing = false
 			m.hostSavedMsg = ""
@@ -673,8 +684,18 @@ func (m Model) renderHubHostPicker() string {
 		return leftPanel
 	}
 
+	// 取得當前選中主機的資訊
+	hostName := ""
+	isLocal := true
+	if m.hostPickerCursor < len(hosts) {
+		hostName = hosts[m.hostPickerCursor].Name
+		isLocal = hosts[m.hostPickerCursor].IsLocal()
+	}
+
+	// 三欄並排：左側列表 + 中欄連線 + 右側設定
+	midPanel := m.renderHostConnection(hostName, isLocal)
 	rightPanel := m.renderHubHostPickerRight(hosts)
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, midPanel, rightPanel)
 }
 
 // renderHubHostPickerLeft 渲染 hub 模式左側主機列表。

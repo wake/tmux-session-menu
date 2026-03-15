@@ -573,8 +573,10 @@ func TestHostPicker_PanelNavigation(t *testing.T) {
 	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
 	m, _ = hpApplyKey(m, "h")
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 面板內 j 向下
@@ -595,8 +597,10 @@ func TestHostPicker_PanelToggleEnabled(t *testing.T) {
 	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
 	m, _ = hpApplyKey(m, "h")
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 游標在第 0 個（啟用 toggle），按空白鍵切換
@@ -614,8 +618,10 @@ func TestHostPicker_PanelEditColor(t *testing.T) {
 	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: config.Default()})
 	m, _ = hpApplyKey(m, "h")
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 bar_bg（index 1）
@@ -648,8 +654,10 @@ func TestHostPicker_CtrlS_SaveDrafts(t *testing.T) {
 	m, _ = hpApplyKey(m, "h")
 	m, _ = hpApplyKey(m, "j") // 移到 mlab1
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 bar_bg 並編輯
@@ -708,8 +716,10 @@ func TestHostPicker_CtrlS_SyncsLocalToConfig(t *testing.T) {
 	m := ui.NewModel(ui.Deps{HostMgr: mgr, Cfg: cfg, ConfigPath: cfgPath})
 	m, _ = hpApplyKey(m, "h")
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 badge_bg（index 3）並編輯
@@ -900,8 +910,10 @@ func TestHubMode_HostPicker_OpenPanel(t *testing.T) {
 func TestHubMode_HostPicker_PanelEditColor(t *testing.T) {
 	m := newHubTestModel(t)
 
-	// 開啟面板
+	// Enter 進入中欄，再 → 進入右欄（設定面板）
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 bar_bg（index 1）
@@ -947,9 +959,11 @@ func TestHubMode_HostPicker_CtrlS_Save(t *testing.T) {
 	m = updated.(ui.Model)
 	m, _ = hpApplyKey(m, "h")
 
-	// 移到 mlab 並開啟面板
+	// 移到 mlab，Enter 進入中欄，再 → 進入右欄（設定面板）
 	m, _ = hpApplyKey(m, "j")
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(ui.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = updated.(ui.Model)
 
 	// 移到 bar_bg 並編輯

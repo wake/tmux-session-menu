@@ -77,9 +77,13 @@ func setDraftField(d *hostDraftEntry, field int, val string) {
 // updateHostPanelOpen 處理右側面板開啟時的按鍵。
 func (m Model) updateHostPanelOpen(msg tea.KeyMsg, hosts []*hostmgr.Host) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc", "left", "h":
-		// 關閉面板（不儲存）
+	case "esc":
+		// Esc 收合所有面板
 		m.hostFocusCol = 0
+		return m, nil
+	case "left", "h":
+		// 回到中欄
+		m.hostFocusCol = 1
 		return m, nil
 	case "j", "down":
 		if m.hostPanelCursor < hostPanelFieldCount-1 {
@@ -316,8 +320,13 @@ func renderColorPreview(name string, draft hostDraftEntry, color string) string 
 // updateHubHostPanelOpen 處理 hub 模式右側面板開啟時的按鍵。
 func (m Model) updateHubHostPanelOpen(msg tea.KeyMsg, hosts []config.HostEntry) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc", "left", "h":
+	case "esc":
+		// Esc 收合所有面板
 		m.hostFocusCol = 0
+		return m, nil
+	case "left", "h":
+		// 回到中欄
+		m.hostFocusCol = 1
 		return m, nil
 	case "j", "down":
 		if m.hostPanelCursor < hostPanelFieldCount-1 {
