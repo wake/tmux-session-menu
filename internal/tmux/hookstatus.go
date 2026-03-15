@@ -9,7 +9,10 @@ import (
 )
 
 // hookStatusTTL 是 hook 狀態檔案的有效期限。
-const hookStatusTTL = 2 * time.Minute
+// 設為 1 小時：避免正常等待人類輸入（如 permission prompt、idle prompt）時
+// 因 TTL 過短導致 ai_type 被清除、燈號誤降為 shell。
+// 過期後進行降級掃描（HasStrongAiPresence），仍偵測到 AI 則保持，否則清除。
+const hookStatusTTL = 1 * time.Hour
 
 // HookStatus 代表從 hook 狀態檔案讀取的狀態資訊。
 type HookStatus struct {

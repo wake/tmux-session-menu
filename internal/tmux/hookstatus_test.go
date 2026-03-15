@@ -28,7 +28,7 @@ func TestReadHookStatus(t *testing.T) {
 func TestReadHookStatus_Expired(t *testing.T) {
 	dir := t.TempDir()
 	statusFile := filepath.Join(dir, "old-session")
-	content := fmt.Sprintf(`{"status":"running","timestamp":%d,"event":"UserPromptSubmit"}`, time.Now().Add(-3*time.Minute).Unix())
+	content := fmt.Sprintf(`{"status":"running","timestamp":%d,"event":"UserPromptSubmit"}`, time.Now().Add(-2*time.Hour).Unix())
 	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
 
 	hs, err := tmux.ReadHookStatus(dir, "old-session")

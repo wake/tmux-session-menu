@@ -56,7 +56,7 @@ func TestResolveStatus_AllEmpty(t *testing.T) {
 }
 
 func TestResolveStatus_ExpiredHook_Ignored(t *testing.T) {
-	expired := &tmux.HookStatus{Status: tmux.StatusRunning, Timestamp: timeNowUnix() - 180, RawStatus: "running"}
+	expired := &tmux.HookStatus{Status: tmux.StatusRunning, Timestamp: timeNowUnix() - 7200, RawStatus: "running"}
 	input := tmux.StatusInput{
 		HookStatus:  expired,
 		PaneTitle:   "",

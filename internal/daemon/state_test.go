@@ -282,7 +282,7 @@ func TestDetectStatus_AiType_FromHook(t *testing.T) {
 func TestDetectStatus_AiType_ExpiredWithPresence(t *testing.T) {
 	dir := t.TempDir()
 	statusFile := filepath.Join(dir, "cc-sess")
-	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, time.Now().Add(-3*time.Minute).Unix())
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, time.Now().Add(-2*time.Hour).Unix())
 	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
 
 	hub := NewWatcherHub()
@@ -295,7 +295,7 @@ func TestDetectStatus_AiType_ExpiredWithPresence(t *testing.T) {
 func TestDetectStatus_AiType_ExpiredNoPresence(t *testing.T) {
 	dir := t.TempDir()
 	statusFile := filepath.Join(dir, "cc-sess")
-	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, time.Now().Add(-3*time.Minute).Unix())
+	content := fmt.Sprintf(`{"status":"idle","timestamp":%d,"event":"Stop","ai_type":"claude"}`, time.Now().Add(-2*time.Hour).Unix())
 	require.NoError(t, os.WriteFile(statusFile, []byte(content), 0644))
 
 	hub := NewWatcherHub()

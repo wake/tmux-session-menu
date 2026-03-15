@@ -2,6 +2,12 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.45.4] - 2026-03-15
+
+### Fixed
+- AI 燈號誤降為 shell：Hook TTL 延長至 1 小時（原 2 分鐘），避免等待人類輸入時 ai_type 被清除
+- 新增 Claude Code 分隔線偵測（`────────` + `❯`），作為 `HasStrongAiPresence` 和 `DetectTool` 的強信號
+
 ## [0.45.3] - 2026-03-15
 
 ### Fixed
