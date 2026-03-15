@@ -71,10 +71,12 @@ type hubHost struct {
 	status       tsmv1.HostStatus
 	snapshot     *tsmv1.StateSnapshot
 	lastErr      string
-	connectedAt  time.Time       // 最後連線時間
+	connectedAt  time.Time           // 最後連線時間
 	isLocal      bool
-	client       MutationClient  // 遠端主機的 mutation client，本機為 nil
-	remoteClient HubRemoteClient // 遠端主機的完整 client（含 Close），用於清理
+	client       MutationClient      // 遠端主機的 mutation client，本機為 nil
+	remoteClient HubRemoteClient     // 遠端主機的完整 client（含 Close），用於清理
+	cancel       context.CancelFunc  // per-host cancel（遠端主機用）
+	done         chan struct{}        // goroutine 結束信號（遠端主機用）
 }
 
 // NewHubManager 建立新的 HubManager。
@@ -300,14 +302,18 @@ func (m *HubManager) StartRemoteHosts(ctx context.Context) {
 			continue
 		}
 		cfg := h.config
+		hctx, hcancel := context.WithCancel(rctx)
+		h.cancel = hcancel
+		h.done = make(chan struct{})
 		m.remoteWg.Add(1)
-		go m.runRemote(rctx, cfg, dialFn)
+		go m.runRemote(hctx, h.done, cfg, dialFn)
 	}
 }
 
 // runRemote 是單台遠端主機的連線迴圈：dial → watchRemote → 斷線重連。
-func (m *HubManager) runRemote(ctx context.Context, cfg config.HostEntry, dialFn HubDialFn) {
+func (m *HubManager) runRemote(ctx context.Context, done chan struct{}, cfg config.HostEntry, dialFn HubDialFn) {
 	defer m.remoteWg.Done()
+	defer close(done)
 	hostID := cfg.Name
 	backoff := remoteInitialBackoff
 
