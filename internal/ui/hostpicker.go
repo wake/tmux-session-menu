@@ -263,15 +263,17 @@ func (m Model) renderHostPicker() string {
 
 	// 取得當前選中主機的資訊
 	hostName := ""
+	hostAddr := ""
 	isLocal := true
 	if m.hostPickerCursor < len(hosts) {
 		h := hosts[m.hostPickerCursor]
 		hostName = h.Config().Name
+		hostAddr = h.Config().Address
 		isLocal = h.Config().IsLocal()
 	}
 
 	// 三欄並排：左側列表 + 中欄連線 + 右側設定
-	midPanel := m.renderHostConnection(hostName, isLocal)
+	midPanel := m.renderHostConnection(hostName, hostAddr, isLocal)
 	rightPanel := m.renderHostPickerRight(hosts)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, midPanel, rightPanel)
 }
@@ -686,14 +688,16 @@ func (m Model) renderHubHostPicker() string {
 
 	// 取得當前選中主機的資訊
 	hostName := ""
+	hostAddr := ""
 	isLocal := true
 	if m.hostPickerCursor < len(hosts) {
 		hostName = hosts[m.hostPickerCursor].Name
+		hostAddr = hosts[m.hostPickerCursor].Address
 		isLocal = hosts[m.hostPickerCursor].IsLocal()
 	}
 
 	// 三欄並排：左側列表 + 中欄連線 + 右側設定
-	midPanel := m.renderHostConnection(hostName, isLocal)
+	midPanel := m.renderHostConnection(hostName, hostAddr, isLocal)
 	rightPanel := m.renderHubHostPickerRight(hosts)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, midPanel, rightPanel)
 }

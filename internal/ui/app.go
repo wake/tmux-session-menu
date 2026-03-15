@@ -16,6 +16,7 @@ import (
 	"github.com/wake/tmux-session-menu/internal/ai"
 	"github.com/wake/tmux-session-menu/internal/client"
 	"github.com/wake/tmux-session-menu/internal/config"
+	"github.com/wake/tmux-session-menu/internal/hostcheck"
 	"github.com/wake/tmux-session-menu/internal/hostmgr"
 	"github.com/wake/tmux-session-menu/internal/selfinstall"
 	"github.com/wake/tmux-session-menu/internal/store"
@@ -43,10 +44,10 @@ type Deps struct {
 	StatusDir  string
 	RemoteMode bool // 遠端模式：Watch 錯誤時退出而非重試
 
-	Upgrader  *upgrade.Upgrader // nil 時 ctrl+u 無效
-	HubMode   bool              // true = 使用 WatchMultiHost（hub 模式）
-	HubSocket string            // hub-socket 模式的 socket 路徑（供 info 顯示）
-	HubSelf    string                              // hub-socket 模式：spoke 在 hub 中的 host name（用於 status bar 套色）
+	Upgrader   *upgrade.Upgrader                    // nil 時 ctrl+u 無效
+	HubMode    bool                                 // true = 使用 WatchMultiHost（hub 模式）
+	HubSocket  string                               // hub-socket 模式的 socket 路徑（供 info 顯示）
+	HubSelf    string                               // hub-socket 模式：spoke 在 hub 中的 host name（用於 status bar 套色）
 	TmuxExecFn func(args ...string) (string, error) // 可注入的 tmux 執行函式（測試用）
 }
 
@@ -128,7 +129,7 @@ type Model struct {
 	hubHosts         []config.HostEntry       // hub-socket 模式：從 hub daemon 取得的主機設定
 
 	// host picker 右側面板
-	hostFocusCol     int              // 0=左欄, 1=中欄(連線), 2=右欄(設定)
+	hostFocusCol     int                       // 0=左欄, 1=中欄(連線), 2=右欄(設定)
 	hostPanelCursor  int                       // 0=[x]啟用, 1=bar_bg, 2=bar_fg, 3=badge_bg, 4=badge_fg
 	hostPanelEditing bool                      // 正在編輯某個色彩欄位
 	hostPanelDraft   map[string]hostDraftEntry // hostID → draft copy of color edits
@@ -159,6 +160,9 @@ type Model struct {
 	// Info 模式（連線資訊 + Hub 重連）
 	infoHubInput     textinput.Model // hub socket 路徑輸入
 	hubReconnectSock string          // 非空時表示要重連到此 hub socket
+
+	// 連線欄 hostcheck 相關
+	hostCheckResults map[string]hostcheck.Result // hostID → 最新檢測結果
 }
 
 // NewModel 建立初始 Model。
@@ -176,7 +180,12 @@ func NewModel(deps Deps) Model {
 		tis[i].Cursor.Style = selectedStyle
 	}
 
-	return Model{deps: deps, textInput: ti, textInputs: tis}
+	return Model{
+		deps:             deps,
+		textInput:        ti,
+		textInputs:       tis,
+		hostCheckResults: make(map[string]hostcheck.Result),
+	}
 }
 
 // SessionsMsg 是 loadSessions 完成後的回傳訊息。
@@ -1040,6 +1049,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RemoteUpgradeMsg:
 		m, cmd := m.handleRemoteUpgrade(msg)
 		return m, cmd
+	case hostCheckMsg:
+		m.hostCheckResults[msg.HostID] = msg.Result
+		return m, nil
+	case reconnectHostMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		}
+		return m, nil
+	case setHubSocketMsg:
+		if msg.Err != nil {
+			m.err = msg.Err
+		}
+		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
 		case ModeInput:
