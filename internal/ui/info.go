@@ -91,11 +91,23 @@ func (m Model) updateInfo(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// infoConnect 嘗試連線到使用者輸入的 hub socket。
+// isHubSocket 判斷路徑是否為 hub reverse tunnel socket（tsm-hub-* pattern）。
+func isHubSocket(sockPath string) bool {
+	return strings.Contains(filepath.Base(sockPath), "tsm-hub-")
+}
+
+// infoConnect 驗證並連線到使用者輸入的 hub socket。
+// 只接受 reverse tunnel socket（tsm-hub-*），拒絕本機 daemon socket。
 func (m Model) infoConnect() (tea.Model, tea.Cmd) {
 	sockPath := strings.TrimSpace(m.infoHubInput.Value())
 	if sockPath == "" {
 		m.err = fmt.Errorf("hub socket 路徑不可為空")
+		return m, nil
+	}
+
+	// 驗證必須是 hub reverse tunnel socket
+	if !isHubSocket(sockPath) {
+		m.err = fmt.Errorf("必須是 hub socket（tsm-hub-*.sock），不可使用本機 daemon socket")
 		return m, nil
 	}
 
@@ -110,10 +122,8 @@ func (m Model) infoConnect() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// 持久化到 tmux 選項，讓下次 Ctrl+Q 自動走 hub-socket 模式。
-	// 只持久化 hub socket（tsm-hub-* pattern），避免把本機 daemon socket
-	// 誤寫入 @tsm_hub_socket 造成 Ctrl+Q 連到自己而非 hub。
-	if m.deps.Cfg.InTmux && strings.Contains(filepath.Base(sockPath), "tsm-hub-") {
+	// 持久化到 tmux 選項，讓下次 Ctrl+Q 自動走 hub-socket 模式
+	if m.deps.Cfg.InTmux {
 		execFn := m.deps.TmuxExecFn
 		if execFn == nil {
 			exec := tmux.NewRealExecutor()
@@ -143,7 +153,13 @@ func (m Model) renderInfo() string {
 	b.WriteString("  " + selectedStyle.Render("── 連線資訊 ──") + "\n")
 	b.WriteString(fmt.Sprintf("  %s  %s\n", label("模式:"), val(m.connectionMode())))
 	b.WriteString(fmt.Sprintf("  %s  %s\n", label("版本:"), val(version.String())))
-	b.WriteString(fmt.Sprintf("  %s  %s\n", label("Socket:"), val(m.currentSocketPath())))
+	b.WriteString(fmt.Sprintf("  %s  %s\n", label("Daemon:"), val(m.daemonSocketPath())))
+	if hubSock := m.detectHubSocket(); hubSock != "" {
+		b.WriteString(fmt.Sprintf("  %s  %s\n", label("Hub:"), val(hubSock)))
+	} else {
+		b.WriteString(fmt.Sprintf("  %s  %s\n", label("Hub:"), dimStyle.Render("(未偵測到 reverse tunnel)")))
+	}
+	b.WriteString(fmt.Sprintf("  %s  %s\n", label("連線:"), val(m.currentSocketPath())))
 	b.WriteString("\n")
 	b.WriteString("  " + selectedStyle.Render("── Hub 連線 ──") + "\n")
 	b.WriteString(fmt.Sprintf("  %s  %s\n", label("路徑:"), m.infoHubInput.View()))
