@@ -1,8 +1,6 @@
 package ui_test
 
 import (
-	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,11 +10,6 @@ import (
 	"github.com/wake/tmux-session-menu/internal/config"
 	"github.com/wake/tmux-session-menu/internal/ui"
 )
-
-// createTestSocket 建立測試用的 unix socket。
-func createTestSocket(path string) (net.Listener, error) {
-	return net.Listen("unix", path)
-}
 
 func infoApplyKey(m ui.Model, key string) (ui.Model, tea.Cmd) {
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
@@ -38,72 +31,8 @@ func TestInfoMode_EnterAndExit(t *testing.T) {
 	assert.Equal(t, ui.ModeNormal, m.Mode())
 }
 
-func TestInfoMode_HubReconnect(t *testing.T) {
-	// 使用 /tmp + tsm-hub-* pattern 以通過驗證和避免路徑過長
-	sockPath := filepath.Join("/tmp", fmt.Sprintf("tsm-hub-reconnect-%d.sock", os.Getpid()))
-	t.Cleanup(func() { os.Remove(sockPath) })
-
-	// 建立 unix socket（使用 net.Listen）
-	ln, err := createTestSocket(sockPath)
-	if err != nil {
-		t.Skip("cannot create test socket:", err)
-	}
-	defer ln.Close()
-
-	deps := ui.Deps{
-		Cfg:       config.Default(),
-		HubSocket: sockPath,
-	}
-	m := ui.NewModel(deps)
-
-	// 進入 info 模式
-	m, _ = infoApplyKey(m, "i")
-	assert.Equal(t, ui.ModeInfo, m.Mode())
-
-	// 按 Enter 觸發連線（textinput 已有預設值 = sockPath）
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(ui.Model)
-
-	assert.Equal(t, sockPath, m.HubReconnect(), "should set hub reconnect socket")
-	assert.NotNil(t, cmd, "should return tea.Quit")
-}
-
-func TestInfoMode_EmptyPath(t *testing.T) {
-	deps := ui.Deps{Cfg: config.Default()}
-	m := ui.NewModel(deps)
-
-	// 進入 info 模式
-	m, _ = infoApplyKey(m, "i")
-
-	// 清空輸入
-	m.SetInfoHubInput("")
-
-	// 按 Enter 應顯示錯誤，不退出
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(ui.Model)
-
-	assert.Equal(t, "", m.HubReconnect(), "should not reconnect with empty path")
-	assert.Nil(t, cmd, "should not quit")
-	assert.Equal(t, ui.ModeInfo, m.Mode(), "should stay in ModeInfo")
-}
-
-func TestInfoMode_NonexistentSocket(t *testing.T) {
-	deps := ui.Deps{Cfg: config.Default()}
-	m := ui.NewModel(deps)
-
-	m, _ = infoApplyKey(m, "i")
-	m.SetInfoHubInput("/nonexistent/path.sock")
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(ui.Model)
-
-	assert.Equal(t, "", m.HubReconnect())
-	assert.Nil(t, cmd)
-	assert.Equal(t, ui.ModeInfo, m.Mode())
-}
-
 func TestInfoMode_DetectHubSocket(t *testing.T) {
-	// 建立假的 hub socket 供偵測
+	// 檢查是否有 hub socket 存在供偵測
 	home, _ := os.UserHomeDir()
 	dir := filepath.Join(home, ".config", "tsm")
 	matches, _ := filepath.Glob(filepath.Join(dir, "tsm-hub-*.sock"))
@@ -112,119 +41,11 @@ func TestInfoMode_DetectHubSocket(t *testing.T) {
 	m := ui.NewModel(deps)
 	m, _ = infoApplyKey(m, "i")
 
-	// 如果有 hub socket 存在，info 應該偵測到
+	view := m.View()
+	// 如果有 hub socket 存在，info 面板應顯示 Hub 資訊
 	if len(matches) > 0 {
-		assert.NotEmpty(t, m.InfoHubInputValue(), "should auto-detect hub socket")
+		assert.Contains(t, view, "Hub:")
 	}
-}
-
-func TestInfoMode_PersistsHubSocket(t *testing.T) {
-	// 使用 /tmp 以避免路徑超過 Unix socket 108 字元限制
-	sockPath := filepath.Join("/tmp", fmt.Sprintf("tsm-hub-test-%d.sock", os.Getpid()))
-	t.Cleanup(func() { os.Remove(sockPath) })
-
-	ln, err := createTestSocket(sockPath)
-	if err != nil {
-		t.Skip("cannot create test socket:", err)
-	}
-	defer ln.Close()
-
-	var tmuxCalls [][]string
-	deps := ui.Deps{
-		Cfg: func() config.Config {
-			c := config.Default()
-			c.InTmux = true
-			return c
-		}(),
-		HubSocket: sockPath,
-		TmuxExecFn: func(args ...string) (string, error) {
-			tmuxCalls = append(tmuxCalls, args)
-			return "", nil
-		},
-	}
-	m := ui.NewModel(deps)
-
-	m, _ = infoApplyKey(m, "i")
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	_ = updated
-
-	found := false
-	for _, call := range tmuxCalls {
-		if len(call) >= 4 && call[0] == "set-option" && call[1] == "-g" && call[2] == "@tsm_hub_socket" {
-			found = true
-			assert.Equal(t, sockPath, call[3])
-		}
-	}
-	assert.True(t, found, "should persist hub socket to tmux option")
-}
-
-func TestInfoMode_RejectNonHubSocket(t *testing.T) {
-	// 非 hub socket（tsm.sock）應顯示錯誤，不進行任何處理
-	sockPath := filepath.Join("/tmp", fmt.Sprintf("tsm-test-%d.sock", os.Getpid()))
-	t.Cleanup(func() { os.Remove(sockPath) })
-
-	ln, err := createTestSocket(sockPath)
-	if err != nil {
-		t.Skip("cannot create test socket:", err)
-	}
-	defer ln.Close()
-
-	var tmuxCalls [][]string
-	deps := ui.Deps{
-		Cfg: func() config.Config {
-			c := config.Default()
-			c.InTmux = true
-			return c
-		}(),
-		HubSocket: sockPath,
-		TmuxExecFn: func(args ...string) (string, error) {
-			tmuxCalls = append(tmuxCalls, args)
-			return "", nil
-		},
-	}
-	m := ui.NewModel(deps)
-
-	m, _ = infoApplyKey(m, "i")
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(ui.Model)
-
-	assert.Equal(t, "", m.HubReconnect(), "should not reconnect with non-hub socket")
-	assert.Nil(t, cmd, "should not quit")
-	assert.Equal(t, ui.ModeInfo, m.Mode(), "should stay in ModeInfo")
-	assert.Empty(t, tmuxCalls, "should not call tmux for non-hub socket")
-}
-
-func TestInfoMode_NoPersistOutsideTmux(t *testing.T) {
-	// 使用 /tmp 以避免路徑超過 Unix socket 108 字元限制
-	sockPath := filepath.Join("/tmp", fmt.Sprintf("tsm-test-%d.sock", os.Getpid()))
-	t.Cleanup(func() { os.Remove(sockPath) })
-
-	ln, err := createTestSocket(sockPath)
-	if err != nil {
-		t.Skip("cannot create test socket:", err)
-	}
-	defer ln.Close()
-
-	var tmuxCalls [][]string
-	deps := ui.Deps{
-		Cfg: func() config.Config {
-			c := config.Default()
-			c.InTmux = false
-			return c
-		}(),
-		HubSocket: sockPath,
-		TmuxExecFn: func(args ...string) (string, error) {
-			tmuxCalls = append(tmuxCalls, args)
-			return "", nil
-		},
-	}
-	m := ui.NewModel(deps)
-
-	m, _ = infoApplyKey(m, "i")
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	_ = updated
-
-	assert.Empty(t, tmuxCalls, "should not call tmux outside tmux")
 }
 
 func TestInfoMode_RenderContainsMode(t *testing.T) {
@@ -234,5 +55,6 @@ func TestInfoMode_RenderContainsMode(t *testing.T) {
 
 	view := m.View()
 	assert.Contains(t, view, "連線資訊")
-	assert.Contains(t, view, "Hub 連線")
+	// Hub 連線區段已移除，不應出現
+	assert.NotContains(t, view, "Hub 連線")
 }

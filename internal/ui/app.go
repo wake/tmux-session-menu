@@ -157,10 +157,6 @@ type Model struct {
 	// 上傳模式
 	uploadModal uploadModal
 
-	// Info 模式（連線資訊 + Hub 重連）
-	infoHubInput     textinput.Model // hub socket 路徑輸入
-	hubReconnectSock string          // 非空時表示要重連到此 hub socket
-
 	// 連線欄 hostcheck 相關
 	hostCheckResults map[string]hostcheck.Result // hostID → 最新檢測結果
 	hostConnEditing  bool                        // 連線欄是否在編輯 hub-socket 路徑
@@ -418,9 +414,6 @@ func (m Model) UpgradeInfo() (tmpPath, version string) { return m.upgradeTmpPath
 
 // UpgradeBinPath 回傳 restart-only 時已安裝 binary 的路徑（無需下載）。
 func (m Model) UpgradeBinPath() string { return m.upgradeBinPath }
-
-// HubReconnect 回傳使用者要求重連的 hub socket 路徑（空字串表示不需重連）。
-func (m Model) HubReconnect() string { return m.hubReconnectSock }
 
 // ConfirmPrompt 回傳目前確認對話框的提示文字。
 func (m Model) ConfirmPrompt() string { return m.confirmPrompt }
