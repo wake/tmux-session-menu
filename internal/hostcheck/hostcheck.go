@@ -101,6 +101,12 @@ func (c *Checker) CheckRemote(host string) Result {
 // CheckAll 並行檢測多台主機。hosts 為 map[name]address，address 為空表示 local。
 // 最多 maxConcurrent 個並行。
 func (c *Checker) CheckAll(hosts map[string]string, maxConcurrent int) map[string]Result {
+	if maxConcurrent <= 0 {
+		maxConcurrent = len(hosts)
+	}
+	if maxConcurrent == 0 {
+		return nil // 無主機
+	}
 	results := make(map[string]Result, len(hosts))
 	var mu sync.Mutex
 	sem := make(chan struct{}, maxConcurrent)

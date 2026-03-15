@@ -1130,6 +1130,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			}
 			pendingRequested = true
 			_ = osexec.Command("tmux", "detach-client").Run()
+			pendingRequested = false // hub loop 會消費 pending，defer 不需 cancel
 			return hubResultExit
 		}
 
@@ -1147,7 +1148,11 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 					_ = tmux.ApplyStatusBar(exec, p.Host.ToColorConfig())
 					pResult := remote.Attach(p.Host.Address, p.SessionName)
 					_ = tmux.ApplyStatusBar(exec, cfg.Local)
-					if pResult == remote.AttachDisconnected {
+					if pResult == remote.AttachDetached {
+						if remote.CheckAndClearExitRequested(p.Host.Address) {
+							return hubResultExit
+						}
+					} else if pResult == remote.AttachDisconnected {
 						newC, newCtx, newCancel := hubReconnectLoop(cfg, p.Host, p.SessionName, hubSocket, func() {
 							_ = tmux.ApplyStatusBar(exec, p.Host.ToColorConfig())
 						}, exec, cfg.Local)
@@ -1177,6 +1182,7 @@ func runHubTUI(c *client.Client, cfg config.Config, cfgPath, hubSocket string, h
 			}
 			pendingRequested = true
 			_ = osexec.Command("tmux", "detach-client").Run()
+			pendingRequested = false // hub loop 會消費 pending，defer 不需 cancel
 			return hubResultExit
 		}
 
