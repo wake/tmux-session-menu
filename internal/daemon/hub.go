@@ -261,6 +261,13 @@ func (m *HubManager) TakePendingAttach() *pendingAttach {
 	return p
 }
 
+// CancelPendingAttach 清除 pending attach（popup 異常關閉時呼叫）。
+func (m *HubManager) CancelPendingAttach() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pending = nil
+}
+
 // StartRemoteHosts 為每台已啟用的非 local 主機啟動連線 goroutine。
 func (m *HubManager) StartRemoteHosts(ctx context.Context) {
 	m.mu.Lock()

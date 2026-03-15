@@ -116,6 +116,12 @@ message TakePendingAttachResponse {
   string session_name = 2;
 }
 
+// CancelPendingAttachRequest 取消尚未消費的 pending attach。
+message CancelPendingAttachRequest {}
+
+// CancelPendingAttachResponse 回傳取消結果。
+message CancelPendingAttachResponse {}
+
 // HostConfigEntry 描述一台主機的完整設定（對應 config.HostEntry）。
 message HostConfigEntry {
   string name = 1;
@@ -346,6 +352,8 @@ service SessionManager {
   rpc RequestAttach(RequestAttachRequest) returns (RequestAttachResponse);
   // TakePendingAttach 由 hub 呼叫，取得並清除 pending attach（read-and-clear 語意）。
   rpc TakePendingAttach(TakePendingAttachRequest) returns (TakePendingAttachResponse);
+  // CancelPendingAttach 取消尚未消費的 pending attach（popup 異常關閉時呼叫）。
+  rpc CancelPendingAttach(CancelPendingAttachRequest) returns (CancelPendingAttachResponse);
 
   // GetHostsConfig 取得 daemon 所在主機的 hosts 設定。
   rpc GetHostsConfig(GetHostsConfigRequest) returns (GetHostsConfigResponse);

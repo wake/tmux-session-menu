@@ -186,6 +186,12 @@ func (c *Client) TakePendingAttach(ctx context.Context) (hostID, sessionName str
 	return resp.HostId, resp.SessionName, nil
 }
 
+// CancelPendingAttach 取消尚未消費的 pending attach。
+func (c *Client) CancelPendingAttach(ctx context.Context) error {
+	_, err := c.rpc.CancelPendingAttach(ctx, &tsmv1.CancelPendingAttachRequest{})
+	return err
+}
+
 // CreateSession 建立新的 tmux session。command 為可選的啟動指令（空字串表示不執行）。
 func (c *Client) CreateSession(ctx context.Context, name, path, command string) error {
 	_, err := c.rpc.CreateSession(ctx, &tsmv1.CreateSessionRequest{Name: name, Path: path, Command: command})

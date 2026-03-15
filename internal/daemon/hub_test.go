@@ -394,3 +394,20 @@ func TestHubManager_PendingAttach_TTL_Fresh(t *testing.T) {
 	require.NotNil(t, got, "fresh pending should be returned")
 	assert.Equal(t, "mlab", got.HostID)
 }
+
+func TestHubManager_CancelPendingAttach(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	_ = mgr.SetPendingAttach("mlab", "dev")
+	mgr.CancelPendingAttach()
+	got := mgr.TakePendingAttach()
+	assert.Nil(t, got, "cancelled pending should be nil")
+}
+
+func TestHubManager_CancelPendingAttach_NoPanic(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.CancelPendingAttach()
+}

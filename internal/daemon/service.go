@@ -335,6 +335,16 @@ func (s *Service) TakePendingAttach(
 	}, nil
 }
 
+// CancelPendingAttach 取消尚未消費的 pending attach。
+func (s *Service) CancelPendingAttach(
+	ctx context.Context, req *tsmv1.CancelPendingAttachRequest,
+) (*tsmv1.CancelPendingAttachResponse, error) {
+	if s.hubMgr != nil {
+		s.hubMgr.CancelPendingAttach()
+	}
+	return &tsmv1.CancelPendingAttachResponse{}, nil
+}
+
 // loadServerConfigPath 回傳 config.toml 路徑，優先使用 TSM_CONFIG_PATH 環境變數。
 func loadServerConfigPath() string {
 	if p := os.Getenv("TSM_CONFIG_PATH"); p != "" {
