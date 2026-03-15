@@ -12,7 +12,7 @@
 - **外層 tsm 為 hub 協調者**：`tsm --host` 在裸 shell 運行，是所有跨主機連線的唯一入口
 - **popup 只做選擇，不做連線**：popup 選到跨主機 session 時，透過 daemon RPC 委託外層 tsm 處理
 
-## 兩種運行模式
+## 三種運行模式
 
 ### Hub Mode（裸 shell `tsm --host`）
 
@@ -67,25 +67,43 @@ popup TUI: 使用者選了不同主機的 session
       TakePendingAttach → 連到目標
 ```
 
+**Popup Hub Mode 的 daemon 連線**：Popup Hub Mode 的 `RequestAttach` 送到本機 daemon（透過 `client.Dial(cfg)`），與外層 tsm for loop 連到的是同一個 daemon。外層 tsm 的 `TakePendingAttach` 從同一個 `HubManager.pending` 讀取。
+
+**Spoke Mode 的 daemon 連線**：Spoke Mode 的 `RequestAttach` 透過 reverse tunnel 送到 hub daemon。
+
 ### Popup 異常關閉的清理
 
-popup TUI 用 `pendingRequested bool` 旗標追蹤。退出時（非 detach 路徑），如果旗標為 true，呼叫 `CancelPendingAttach` 清除。
+`pendingRequested` 旗標位於 `runHubTUI` 函式內（不在 Bubble Tea model 裡），在 `RequestAttach` 成功後設為 true。清理邏輯在 `runHubTUI` 的退出路徑（return 前）：如果 `pendingRequested == true` 且不是走 detach 路徑（即使用者 Esc/q 關閉 popup），呼叫 `CancelPendingAttach`。
 
 ### 外層 for loop 的 pending 檢查點
+
+**僅適用於非 popup Hub Mode**（裸 shell `tsm --host`）。popup 模式下 `switchToSession` 後程序直接退出（`return hubResultExit`），pending 由外層 tsm 消費。
 
 `TakePendingAttach` 檢查在兩個位置：
 
 1. **remote.Attach 返回後**（已存在，`main.go:1165`）
-2. **switchToSession 返回後**（新增）— local tmux detach 回來時檢查
+2. **switchToSession 返回後**（新增）— local tmux detach 回來時檢查（`main.go:1133` 之後、`continue` 之前）
 
 ```
-switchToSession 返回
+switchToSession 返回（非 popup Hub Mode）
   → TakePendingAttach
   ├─ 有 pending → 直接連到目標（不回 TUI）
   │   ├─ pending.IsLocal → tmux attach-session
   │   └─ pending.IsRemote → remote.Attach (ssh)
   └─ 無 pending → continue（回到 TUI）
 ```
+
+為避免程式碼重複（目前 `runHubTUI` 中 pending 處理邏輯已有兩處近乎相同的區塊），提取共用 helper：
+
+```go
+// handlePendingAttach 處理 spoke 委託的跨主機切換。
+// 回傳 true 表示已處理（呼叫者應 continue），false 表示無 pending。
+func handlePendingAttach(c *client.Client, cfg config.Config, exec tmux.Executor, ...) bool
+```
+
+### Pending Attach 過期機制
+
+`pendingAttach` 新增 `SetAt time.Time` 欄位。`TakePendingAttach` 取出時檢查，超過 60 秒的 pending 視為過期，丟棄並回傳 nil。避免使用者在 session 內工作數小時後 detach 時觸發早已無意義的跨主機切換。
 
 ### 程式碼改動點
 
@@ -95,6 +113,8 @@ switchToSession 返回
 - **新**：`RequestAttach + detach-client`（委託外層）
 
 同時，mac-air 本機 popup（`$TMUX != ""` + `--host`）的跨主機路徑也走相同邏輯。
+
+`@tsm_popup_args` 不受影響：此選項由外層 `tsm --host` 啟動時寫入（`main.go:322-323`），popup 內的跨主機切換不覆寫它。
 
 ## 新增 RPC
 
@@ -108,15 +128,16 @@ daemon 端：`HubManager.CancelPendingAttach()` 將 `pending` 設為 nil。
 
 | 情境 | 處理 |
 |------|------|
-| popup Esc/q 關閉，已發 RequestAttach | `CancelPendingAttach` 清除 |
-| RequestAttach 成功但 detach 失敗 | popup cleanup 統一處理 |
+| popup Esc/q 關閉，已發 RequestAttach | `runHubTUI` 退出路徑檢查 `pendingRequested`，呼叫 `CancelPendingAttach` |
+| RequestAttach 成功但 detach 失敗 | detach 失敗 = 外層 for loop 未返回（使用者仍在原 session）。popup 仍活著，走正常退出路徑，`CancelPendingAttach` 清除 |
 | 外層 tsm 不存在（daemon mode） | daemon mode 不顯示 hub menu，不會觸發跨主機 |
 | `@tsm_hub_socket` 存在但外層 tsm 已退出 | 外層 tsm 退出時 `ClearHubSocket`（已有此邏輯） |
 | 目標主機不可達 | 走現有 `hubReconnectLoop` 重連機制 |
-| 快速連續切換 | last-write-wins，每次 Attach 返回後檢查最新 pending |
+| 快速連續切換 | last-write-wins（後一個覆蓋前一個），每次 Attach 返回後檢查最新 pending。已知取捨：第一個請求被靜默丟棄，無回饋。MVP 可接受 |
 | daemon 重啟，pending 丟失 | for loop 無 pending → 回到 TUI 讓使用者重新選擇 |
 | SSH 在 popup 期間斷線 | 外層 remote.Attach 返回 Disconnected → reconnect 流程 |
 | pending 指向已停用/封存主機 | `findHostEntry` 找不到或已停用 → 忽略 pending，回到 menu |
+| pending 過期（使用者工作數小時後才 detach） | `SetAt` 超過 60 秒 → `TakePendingAttach` 丟棄，回到 menu |
 
 ## Host Preflight Check 系統
 
@@ -140,6 +161,8 @@ type Result struct {
 }
 ```
 
+hostcheck 模組有自己的可注入執行函式（`type ExecFn func(name string, args ...string) error`），不耦合到 `remote.sshRunFn`。
+
 ### 檢測項目
 
 | 主機類型 | 檢測內容 | 方法 |
@@ -150,13 +173,13 @@ type Result struct {
 
 ### 檢測時機
 
-1. `tsm --host` 啟動時 — 對所有 enabled 主機並行檢測
+1. `tsm --host` 啟動時 — 對所有 enabled 主機並行檢測（上限 5 個並行，semaphore 控制）
 2. [h] 面板新增主機後 — 立即檢測
 3. [h] 面板手動 [r] 觸發 — 重新檢測
 
 ### 啟用限制
 
-未通過檢測的主機可以新增、設定，但不能啟用。嘗試啟用時顯示錯誤訊息。
+未通過檢測的主機可以新增、設定，但不能直接啟用。嘗試啟用時顯示警告和確認提示（例如「SSH 連線失敗，確定要啟用？[y/n]」），允許使用者強制啟用。這保留了暫時離線主機（筆電休眠、VPN 未連線）的使用彈性。
 
 ### 檢測結果不持久化
 
@@ -177,7 +200,9 @@ type Result struct {
 
 ## [i] 面板持久化（Bug 2 修復）
 
-`infoConnect()` 成功連線後，額外寫入 `@tsm_hub_socket`：
+**Bug 2**：[i] 面板手動設定 hub socket 路徑後，重開 popup 設定遺失，因為 `infoConnect()` 只存 in-memory 不寫入 tmux option。
+
+**設計變更**：原程式碼（`info.go:113-114`）刻意不從 UI 覆寫 `@tsm_hub_socket`，理由是該選項應由 hub 端 `SetHubSocket` 管理。但實務上，hub 未正確設定時使用者需要手動指定，且手動設定的路徑反覆遺失體驗很差。改為：`infoConnect()` 成功連線後寫入 `@tsm_hub_socket`，讓手動設定也能持久。hub 端 `SetHubSocket` 仍可覆寫。
 
 ```go
 if m.deps.Cfg.InTmux {
@@ -192,16 +217,18 @@ if m.deps.Cfg.InTmux {
 
 bind block 本身不變。行為改動全在 tsm 內部的 `runHubTUI` 和模式判斷中。
 
+`@tsm_popup_args` 不受此變更影響。
+
 ## TDD 策略
 
 ### 測試分層
 
 **Unit Tests（hostcheck 模組）**：
 - local tmux 檢測（LookPath mock）
-- remote SSH 檢測（sshRunFn mock）
-- remote tmux 檢測（sshRunFn mock）
+- remote SSH 檢測（ExecFn mock）
+- remote tmux 檢測（ExecFn mock）
 - 逾時處理
-- 並行檢測多台主機
+- 並行檢測多台主機（含 semaphore 上限驗證）
 - 檢測結果模型
 
 **Unit Tests（CancelPendingAttach）**：
@@ -209,8 +236,12 @@ bind block 本身不變。行為改動全在 tsm 內部的 `runHubTUI` 和模式
 - Cancel 在無 pending 時不 panic
 - client RPC 呼叫正確性
 
+**Unit Tests（pending 過期）**：
+- SetPending(60 秒前) → TakePending 應為 nil
+- SetPending(剛剛) → TakePending 應有值
+
 **Unit Tests（popup 跨主機切換）**：
-- `pendingRequested` 旗標追蹤
+- `pendingRequested` 旗標追蹤（位於 runHubTUI）
 - 退出時 cleanup 呼叫 CancelPendingAttach
 - 跨主機選擇不再走 new-window
 
@@ -219,6 +250,9 @@ bind block 本身不變。行為改動全在 tsm 內部的 `runHubTUI` 和模式
 - local attach 返回後無 pending → 回到 menu
 - pending 指向無效主機 → 忽略
 
+**Unit Tests（handlePendingAttach helper）**：
+- 驗證提取的共用 helper 正確處理各種 pending 狀態
+
 **Unit Tests（[i] 面板）**：
 - 成功連線後 tmux option 被寫入（mock executor）
 - 不在 tmux 內時不寫入
@@ -226,5 +260,5 @@ bind block 本身不變。行為改動全在 tsm 內部的 `runHubTUI` 和模式
 ### 不測
 
 - tmux `display-popup`（外部 CLI）
-- 實際 SSH 連線（mock `sshRunFn`）
+- 實際 SSH 連線（mock ExecFn）
 - bind block（純 tmux config）
