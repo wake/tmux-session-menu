@@ -188,47 +188,49 @@ func (m Model) currentConnectionHost() (name, addr string, isLocal bool) {
 
 // renderHostConnection 渲染中欄（連線設定）。
 func (m Model) renderHostConnection(hostName string, hostAddr string, isLocal bool) string {
+	active := m.hostFocusCol == 1
 	var b strings.Builder
-	title := fmt.Sprintf("── %s 連線 ──", hostName)
+
+	// 標題：比照設定面板的樣式
 	b.WriteString("\n")
-	if m.hostFocusCol == 1 {
-		b.WriteString("  " + selectedStyle.Render(title) + "\n")
+	titleText := hostName + " 連線"
+	if active {
+		b.WriteString(fmt.Sprintf("  %s\n", selectedStyle.Render(titleText)))
 	} else {
-		b.WriteString("  " + dimStyle.Render(title) + "\n")
+		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render(titleText)))
 	}
 	b.WriteString("\n")
 
+	// 標籤和值的樣式：active 時正常顯色，非 active 時 dimmed
 	label := func(name string) string { return dimStyle.Render(name) }
+	val := func(s string) string {
+		if active {
+			return sessionNameStyle.Render(s)
+		}
+		return dimStyle.Render(s)
+	}
 
 	checkResult, hasCheck := m.hostCheckResults[hostName]
 
 	if !isLocal {
-		// SSH 檢測狀態
-		b.WriteString(fmt.Sprintf("  %s  %s\n", label("SSH:"), renderCheckBool(checkResult.SSH, hasCheck)))
+		b.WriteString(fmt.Sprintf("  %s  %s\n", label("SSH:"), renderCheckBoolStyled(checkResult.SSH, hasCheck, active)))
 	}
-	// tmux 檢測狀態
-	b.WriteString(fmt.Sprintf("  %s  %s\n", label("tmux:"), renderCheckBool(checkResult.Tmux, hasCheck)))
+	b.WriteString(fmt.Sprintf("  %s  %s\n", label("tmux:"), renderCheckBoolStyled(checkResult.Tmux, hasCheck, active)))
 
 	if !isLocal {
-		// tunnel 狀態（從 hub snapshot 或 HostMgr 取得）
 		tunnelStatus, tunnelErr := m.hostTunnelStatus(hostName)
-		b.WriteString(fmt.Sprintf("  %s  %s\n", label("tunnel:"), renderTunnelStatus(tunnelStatus)))
+		b.WriteString(fmt.Sprintf("  %s  %s\n", label("tunnel:"), renderTunnelStatusStyled(tunnelStatus, active)))
+		b.WriteString(fmt.Sprintf("  %s  %s\n", label("hub-sock:"), renderHubSockStatusStyled(tunnelStatus, active)))
 
-		// hub-socket 狀態
-		b.WriteString(fmt.Sprintf("  %s  %s\n", label("hub-sock:"), renderHubSockStatus(tunnelStatus)))
-
-		// 最後連線時間
 		if lc := m.hostLastConnected(hostName); lc != "" {
-			b.WriteString(fmt.Sprintf("  %s  %s\n", label("最後連線:"), versionStyle.Render(lc)))
+			b.WriteString(fmt.Sprintf("  %s  %s\n", label("最後連線:"), val(lc)))
 		}
 
-		// 錯誤訊息
 		if tunnelErr != "" {
 			b.WriteString(fmt.Sprintf("  %s  %s\n", label("錯誤:"), errorStyle.Render(tunnelErr)))
 		}
 	}
 
-	// hostcheck 失敗訊息
 	if hasCheck && checkResult.Message != "" {
 		b.WriteString(fmt.Sprintf("  %s  %s\n", label("訊息:"), dimStyle.Render(checkResult.Message)))
 	}
@@ -236,19 +238,18 @@ func (m Model) renderHostConnection(hostName string, hostAddr string, isLocal bo
 	b.WriteString("\n")
 
 	// hub-socket 路徑編輯模式
-	if m.hostConnEditing && m.hostFocusCol == 1 {
+	if m.hostConnEditing && active {
 		b.WriteString("  " + label("路徑:") + " " + m.textInput.View() + "\n")
 		b.WriteString("\n")
 	}
 
-	// 操作提示（只在焦點在中欄時顯示）
-	if m.hostFocusCol == 1 && !m.hostConnEditing {
-		hints := keyStyle.Render("[r]") + dimStyle.Render(" 檢測")
+	// 操作提示：每行一個，避免橫向過寬
+	if active && !m.hostConnEditing {
+		b.WriteString("  " + keyStyle.Render("[r]") + dimStyle.Render(" 檢測") + "\n")
 		if !isLocal {
-			hints += "  " + keyStyle.Render("[t]") + dimStyle.Render(" 重建 tunnel")
-			hints += "  " + keyStyle.Render("[s]") + dimStyle.Render(" 設定 hub-sock")
+			b.WriteString("  " + keyStyle.Render("[t]") + dimStyle.Render(" 重建 tunnel") + "\n")
+			b.WriteString("  " + keyStyle.Render("[s]") + dimStyle.Render(" 設定 hub-sock") + "\n")
 		}
-		b.WriteString("  " + hints + "\n")
 	}
 
 	return b.String()
@@ -258,25 +259,28 @@ func (m Model) renderHostConnection(hostName string, hostAddr string, isLocal bo
 // 渲染輔助函式
 // ---------------------------------------------------------------------------
 
-// renderCheckBool 渲染布林檢測結果。
-func renderCheckBool(val *bool, hasCheck bool) string {
-	if !hasCheck {
-		return dimStyle.Render("—")
-	}
-	if val == nil {
+// renderCheckBoolStyled 渲染布林檢測結果（active 時顯色，非 active 時 dim）。
+func renderCheckBoolStyled(val *bool, hasCheck, active bool) string {
+	if !hasCheck || val == nil {
 		return dimStyle.Render("—")
 	}
 	if *val {
-		return successStyle.Render("✓")
+		if active {
+			return successStyle.Render("✓")
+		}
+		return dimStyle.Render("✓")
 	}
 	return errorStyle.Render("✗")
 }
 
-// renderTunnelStatus 渲染 tunnel 連線狀態。
-func renderTunnelStatus(status tsmv1.HostStatus) string {
+// renderTunnelStatusStyled 渲染 tunnel 連線狀態（active 時顯色，非 active 時 dim）。
+func renderTunnelStatusStyled(status tsmv1.HostStatus, active bool) string {
 	switch status {
 	case tsmv1.HostStatus_HOST_STATUS_CONNECTED:
-		return successStyle.Render("✓ 已連線")
+		if active {
+			return successStyle.Render("✓ 已連線")
+		}
+		return dimStyle.Render("✓ 已連線")
 	case tsmv1.HostStatus_HOST_STATUS_CONNECTING:
 		return dimStyle.Render("⠋ 連線中...")
 	case tsmv1.HostStatus_HOST_STATUS_DISCONNECTED:
@@ -286,10 +290,13 @@ func renderTunnelStatus(status tsmv1.HostStatus) string {
 	}
 }
 
-// renderHubSockStatus 渲染 hub-socket 設定狀態。
-func renderHubSockStatus(status tsmv1.HostStatus) string {
+// renderHubSockStatusStyled 渲染 hub-socket 設定狀態（active 時顯色，非 active 時 dim）。
+func renderHubSockStatusStyled(status tsmv1.HostStatus, active bool) string {
 	if status == tsmv1.HostStatus_HOST_STATUS_CONNECTED {
-		return successStyle.Render("✓ 已設定")
+		if active {
+			return successStyle.Render("✓ 已設定")
+		}
+		return dimStyle.Render("✓ 已設定")
 	}
 	return dimStyle.Render("—")
 }

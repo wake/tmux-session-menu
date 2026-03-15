@@ -221,14 +221,20 @@ func (m Model) renderHostPickerRight(hosts []*hostmgr.Host) string {
 		return ""
 	}
 
+	settingsActive := m.hostFocusCol == 2
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  %s\n\n", selectedStyle.Render(h.Config().Name+" 設定")))
+	titleText := h.Config().Name + " 設定"
+	if settingsActive {
+		b.WriteString(fmt.Sprintf("  %s\n\n", selectedStyle.Render(titleText)))
+	} else {
+		b.WriteString(fmt.Sprintf("  %s\n\n", dimStyle.Render(titleText)))
+	}
 
 	// 五個欄位
 	for i := 0; i < hostPanelFieldCount; i++ {
 		cursor := "  "
-		if i == m.hostPanelCursor {
+		if settingsActive && i == m.hostPanelCursor {
 			cursor = selectedStyle.Render("► ")
 		}
 
@@ -244,14 +250,12 @@ func (m Model) renderHostPickerRight(hosts []*hostmgr.Host) string {
 			// 色彩欄位
 			val := draftFieldValue(draft, i)
 			if m.hostPanelEditing && i == m.hostPanelCursor {
-				// 編輯中顯示 textInput
 				line = fmt.Sprintf("  %s%-10s %s", cursor, hostPanelFieldLabels[i], m.textInput.View())
 			} else {
 				displayVal := val
 				if displayVal == "" {
 					displayVal = dimStyle.Render("（空）")
 				} else {
-					// 若為合法色碼，顯示一個色塊
 					if isValidHexColor(displayVal) {
 						swatch := lipgloss.NewStyle().
 							Background(lipgloss.Color(displayVal)).
@@ -260,14 +264,14 @@ func (m Model) renderHostPickerRight(hosts []*hostmgr.Host) string {
 					}
 				}
 				line = fmt.Sprintf("  %s%-10s %s", cursor, hostPanelFieldLabels[i], displayVal)
-				// bar_fg 空值提示
 				if i == 2 && val == "" {
 					line += " " + dimStyle.Render("（留空由 tmux 自行決定）")
 				}
 			}
 		}
 
-		if i == m.hostPanelCursor && !m.hostPanelEditing {
+		// 只在設定欄 active 時顯示游標底色
+		if settingsActive && i == m.hostPanelCursor && !m.hostPanelEditing {
 			line = m.cursorLine(line)
 		}
 		b.WriteString(line + "\n")
@@ -458,14 +462,20 @@ func (m Model) renderHubHostPickerRight(hosts []config.HostEntry) string {
 		return ""
 	}
 
+	settingsActive := m.hostFocusCol == 2
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  %s\n\n", selectedStyle.Render(h.Name+" 設定")))
+	titleText := h.Name + " 設定"
+	if settingsActive {
+		b.WriteString(fmt.Sprintf("  %s\n\n", selectedStyle.Render(titleText)))
+	} else {
+		b.WriteString(fmt.Sprintf("  %s\n\n", dimStyle.Render(titleText)))
+	}
 
 	// 五個欄位
 	for i := 0; i < hostPanelFieldCount; i++ {
 		cursor := "  "
-		if i == m.hostPanelCursor {
+		if settingsActive && i == m.hostPanelCursor {
 			cursor = selectedStyle.Render("► ")
 		}
 
@@ -499,7 +509,7 @@ func (m Model) renderHubHostPickerRight(hosts []config.HostEntry) string {
 			}
 		}
 
-		if i == m.hostPanelCursor && !m.hostPanelEditing {
+		if settingsActive && i == m.hostPanelCursor && !m.hostPanelEditing {
 			line = m.cursorLine(line)
 		}
 		b.WriteString(line + "\n")
