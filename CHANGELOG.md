@@ -2,6 +2,11 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.45.3] - 2026-03-15
+
+### Fixed
+- 裸 shell `tsm --host` 啟動時正確設定 `@tsm_popup_args`，修正 Ctrl+Q 只顯示 daemon mode 的問題
+
 ## [0.45.2] - 2026-03-15
 
 ### Fixed

@@ -316,10 +316,12 @@ func runTUI() {
 	// 連線失敗時 graceful degradation 到 local 模式
 	hubSocket := parseHubSocket(args)
 
-	// 同步 host 旗標到 tmux @tsm_popup_args，讓 Ctrl+Q 重現相同模式
+	// 同步 host 旗標到 tmux @tsm_popup_args，讓 Ctrl+Q 重現相同模式。
+	// 不需要 cfg.InTmux 條件：裸 shell 的 tsm --host 也需要設定，
+	// tmux set-option -g 只要 tmux server 在跑就能執行。
 	// hub-socket mode 不覆寫：避免清空 @tsm_popup_args，否則 tunnel 斷線時
 	// bind block fallback 會變成 tsm --inline（純 Daemon mode）
-	if cfg.InTmux && hubSocket == "" {
+	if hubSocket == "" {
 		syncPopupArgs(buildPopupHostArgs(args))
 	}
 	if hubSocket != "" {
