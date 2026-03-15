@@ -70,7 +70,7 @@ func flushStdin() {
 // SetHubSocket 在遠端主機的 tmux 設定 hub socket 路徑。
 // 使用 login shell 確保 PATH 包含 Homebrew 等非系統路徑。
 func SetHubSocket(host, socketPath string) error {
-	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_socket %s", socketPath)
+	cmd := fmt.Sprintf("tmux set-option -g @tsm_hub_socket '%s'", shellEscape(socketPath))
 	return sshRunFn("ssh", host, "bash", "-lc", cmd)
 }
 

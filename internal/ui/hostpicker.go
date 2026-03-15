@@ -88,6 +88,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.persistHostsWithSync()
 		m.hostFocusCol = 0
 		m.hostPanelEditing = false
+		m.hostConnEditing = false
 		m.hostSavedMsg = "已儲存"
 		return m, m.applyCurrentStatusBarCmd()
 	}
@@ -471,6 +472,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			c := m.deps.Client
 			m.hostFocusCol = 0
 			m.hostPanelEditing = false
+			m.hostConnEditing = false
 			m.hostSavedMsg = "已儲存"
 			return m, func() tea.Msg {
 				var updated []config.HostEntry
@@ -501,6 +503,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.rebuildHubItems()
 		m.hostFocusCol = 0
 		m.hostPanelEditing = false
+		m.hostConnEditing = false
 		m.hostSavedMsg = "已儲存"
 		return m, m.applyCurrentStatusBarCmd()
 	}
