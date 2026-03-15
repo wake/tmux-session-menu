@@ -2,6 +2,15 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.46.0] - 2026-03-16
+
+### Added
+- `HostState` 新增 `last_connected` 欄位：記錄每台遠端主機的最後連線時間
+- 新增 `ReconnectHost` RPC：強制重建指定主機的 SSH tunnel（hub 模式專用）
+
+### Changed
+- `hubHost` 改為 per-host context：每台遠端主機有獨立的 `cancel` 和 `done` channel，可單獨重連
+
 ## [0.45.4] - 2026-03-15
 
 ### Fixed
