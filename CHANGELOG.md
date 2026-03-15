@@ -2,6 +2,24 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.47.0] - 2026-03-16
+
+### Added
+- [h] 主機管理三欄佈局：主機列表 + 連線面板 + 設定面板
+- 連線面板顯示 SSH/tmux/tunnel/hub-socket 狀態、最後連線時間、錯誤訊息
+- [r] 重新檢測主機依賴（hostcheck 整合）
+- [t] 重建 tunnel（呼叫 ReconnectHost RPC）
+- [s] 手動設定 hub-socket 路徑（驗證 tsm-hub-* pattern）
+
+### Changed
+- `hostpicker.go`（1254 行）拆分為 `hostpicker.go` + `hostsettings.go` + `hostconnection.go`
+- `hostFocusCol int` 取代 `hostPanelOpen bool`（三欄焦點模型）
+- [i] 面板簡化為唯讀：hub 連線功能移至 [h] 連線欄
+
+### Removed
+- [i] 面板的 hub socket 文字輸入和 `infoConnect` 連線功能
+- `hubReconnectSock` 機制、`runDaemonTUI` 的 hub reconnect 回傳值
+
 ## [0.46.0] - 2026-03-16
 
 ### Added
