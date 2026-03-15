@@ -345,6 +345,11 @@ func (m Model) HostPickerCursor() int {
 	return m.hostPickerCursor
 }
 
+// HostFocusCol 回傳主機管理面板的焦點欄位（0=左, 1=中, 2=右）（主要用於測試）。
+func (m Model) HostFocusCol() int {
+	return m.hostFocusCol
+}
+
 // HostSavedMsg 回傳主機儲存的 flash message（主要用於測試）。
 func (m Model) HostSavedMsg() string {
 	return m.hostSavedMsg
