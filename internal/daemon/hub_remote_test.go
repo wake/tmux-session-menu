@@ -82,6 +82,10 @@ func (f *fakeRemoteClient) MoveSession(ctx context.Context, sessionName string, 
 	return nil
 }
 
+func (f *fakeRemoteClient) ToggleCollapse(_ context.Context, _ int64) error {
+	return nil
+}
+
 // --- 測試 ---
 
 // TestHubManager_StartRemoteHosts_SetsConnecting 驗證啟動後遠端主機進入 CONNECTING 狀態。

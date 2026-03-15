@@ -133,10 +133,11 @@ func (HostStatus) EnumDescriptor() ([]byte, []int) {
 type MutationType int32
 
 const (
-	MutationType_MUTATION_KILL_SESSION   MutationType = 0
-	MutationType_MUTATION_RENAME_SESSION MutationType = 1
-	MutationType_MUTATION_CREATE_SESSION MutationType = 2
-	MutationType_MUTATION_MOVE_SESSION   MutationType = 3
+	MutationType_MUTATION_KILL_SESSION    MutationType = 0
+	MutationType_MUTATION_RENAME_SESSION  MutationType = 1
+	MutationType_MUTATION_CREATE_SESSION  MutationType = 2
+	MutationType_MUTATION_MOVE_SESSION    MutationType = 3
+	MutationType_MUTATION_TOGGLE_COLLAPSE MutationType = 4
 )
 
 // Enum value maps for MutationType.
@@ -146,12 +147,14 @@ var (
 		1: "MUTATION_RENAME_SESSION",
 		2: "MUTATION_CREATE_SESSION",
 		3: "MUTATION_MOVE_SESSION",
+		4: "MUTATION_TOGGLE_COLLAPSE",
 	}
 	MutationType_value = map[string]int32{
-		"MUTATION_KILL_SESSION":   0,
-		"MUTATION_RENAME_SESSION": 1,
-		"MUTATION_CREATE_SESSION": 2,
-		"MUTATION_MOVE_SESSION":   3,
+		"MUTATION_KILL_SESSION":    0,
+		"MUTATION_RENAME_SESSION":  1,
+		"MUTATION_CREATE_SESSION":  2,
+		"MUTATION_MOVE_SESSION":    3,
+		"MUTATION_TOGGLE_COLLAPSE": 4,
 	}
 )
 
@@ -2850,12 +2853,13 @@ const file_tsm_v1_tsm_proto_rawDesc = "" +
 	"\x14HOST_STATUS_DISABLED\x10\x00\x12\x1a\n" +
 	"\x16HOST_STATUS_CONNECTING\x10\x01\x12\x19\n" +
 	"\x15HOST_STATUS_CONNECTED\x10\x02\x12\x1c\n" +
-	"\x18HOST_STATUS_DISCONNECTED\x10\x03*~\n" +
+	"\x18HOST_STATUS_DISCONNECTED\x10\x03*\x9c\x01\n" +
 	"\fMutationType\x12\x19\n" +
 	"\x15MUTATION_KILL_SESSION\x10\x00\x12\x1b\n" +
 	"\x17MUTATION_RENAME_SESSION\x10\x01\x12\x1b\n" +
 	"\x17MUTATION_CREATE_SESSION\x10\x02\x12\x19\n" +
-	"\x15MUTATION_MOVE_SESSION\x10\x03*\xd3\x01\n" +
+	"\x15MUTATION_MOVE_SESSION\x10\x03\x12\x1c\n" +
+	"\x18MUTATION_TOGGLE_COLLAPSE\x10\x04*\xd3\x01\n" +
 	"\x10HostConfigAction\x12\"\n" +
 	"\x1eHOST_CONFIG_ACTION_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12HOST_CONFIG_ENABLE\x10\x01\x12\x17\n" +

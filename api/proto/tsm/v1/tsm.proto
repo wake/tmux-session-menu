@@ -75,7 +75,8 @@ enum MutationType {
   MUTATION_KILL_SESSION   = 0;
   MUTATION_RENAME_SESSION = 1;
   MUTATION_CREATE_SESSION = 2;
-  MUTATION_MOVE_SESSION   = 3;
+  MUTATION_MOVE_SESSION      = 3;
+  MUTATION_TOGGLE_COLLAPSE  = 4;
 }
 
 // ProxyMutationRequest 由遠端 TUI 發送，透過 hub 代理到目標主機。

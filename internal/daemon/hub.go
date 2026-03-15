@@ -17,6 +17,7 @@ type MutationClient interface {
 	RenameSession(ctx context.Context, sessionName, customName, newSessionName string) error
 	CreateSession(ctx context.Context, name, path, command string) error
 	MoveSession(ctx context.Context, sessionName string, groupID int64, sortOrder int) error
+	ToggleCollapse(ctx context.Context, groupID int64) error
 }
 
 // HubRemoteClient 定義遠端主機連線需要的介面（Watch + Mutation + Close）。
@@ -228,6 +229,12 @@ func (m *HubManager) dispatchRemoteMutation(
 			return fmt.Errorf("invalid group_id %q: %w", req.GroupId, err)
 		}
 		return c.MoveSession(ctx, req.SessionName, gid, 0)
+	case tsmv1.MutationType_MUTATION_TOGGLE_COLLAPSE:
+		gid, err := strconv.ParseInt(req.GroupId, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid group_id %q: %w", req.GroupId, err)
+		}
+		return c.ToggleCollapse(ctx, gid)
 	default:
 		return fmt.Errorf("unsupported mutation type: %v", req.Type)
 	}

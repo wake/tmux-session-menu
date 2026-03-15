@@ -1688,7 +1688,16 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // toggleCollapse 切換群組的展開/收合狀態。
 func (m Model) toggleCollapse(item ListItem) (tea.Model, tea.Cmd) {
 	if c := m.clientForCursor(); c != nil {
-		if err := c.ToggleCollapse(context.Background(), item.Group.ID); err != nil {
+		var err error
+		if m.deps.HubMode {
+			// hub 模式：透過 ProxyMutation 路由到目標主機
+			err = c.ProxyMutation(context.Background(), item.HostID,
+				tsmv1.MutationType_MUTATION_TOGGLE_COLLAPSE, "", "",
+				fmt.Sprintf("%d", item.Group.ID), "", "")
+		} else {
+			err = c.ToggleCollapse(context.Background(), item.Group.ID)
+		}
+		if err != nil {
 			m.err = err
 		}
 		return m, nil // 變更透過 Watch/MultiHost stream 自動推送

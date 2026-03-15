@@ -15,10 +15,11 @@ import (
 
 // mockMutationClient 實作 MutationClient 介面供測試使用。
 type mockMutationClient struct {
-	killFn   func(ctx context.Context, name string) error
-	renameFn func(ctx context.Context, sessionName, customName, newSessionName string) error
-	createFn func(ctx context.Context, name, path, command string) error
-	moveFn   func(ctx context.Context, sessionName string, groupID int64, sortOrder int) error
+	killFn     func(ctx context.Context, name string) error
+	renameFn   func(ctx context.Context, sessionName, customName, newSessionName string) error
+	createFn   func(ctx context.Context, name, path, command string) error
+	moveFn     func(ctx context.Context, sessionName string, groupID int64, sortOrder int) error
+	toggleColFn func(ctx context.Context, groupID int64) error
 }
 
 func (m *mockMutationClient) KillSession(ctx context.Context, name string) error {
@@ -45,6 +46,13 @@ func (m *mockMutationClient) CreateSession(ctx context.Context, name, path, comm
 func (m *mockMutationClient) MoveSession(ctx context.Context, sessionName string, groupID int64, sortOrder int) error {
 	if m.moveFn != nil {
 		return m.moveFn(ctx, sessionName, groupID, sortOrder)
+	}
+	return nil
+}
+
+func (m *mockMutationClient) ToggleCollapse(ctx context.Context, groupID int64) error {
+	if m.toggleColFn != nil {
+		return m.toggleColFn(ctx, groupID)
 	}
 	return nil
 }
