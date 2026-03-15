@@ -88,9 +88,21 @@ Local 沒有 SSH/tunnel/hub-socket，也沒有 [t] [s] 按鍵。
 |------|------|------|
 | `r` | 所有主機 | 非同步執行 `hostcheck`，結果更新到畫面 |
 | `t` | remote 且焦點在中欄 | `ReconnectHost(host_id)` RPC → daemon 重啟該主機的 `runRemote` goroutine |
-| `s` | remote 且焦點在中欄 | 文字輸入，只接受 `tsm-hub-*` pattern，成功後 SSH 到遠端設定 `@tsm_hub_socket` |
+| `s` | remote 且焦點在中欄 | 文字輸入 hub-socket 路徑（見下方流程） |
 
 連線欄**不使用 draft**。[r] [t] 是立即執行，[s] 的文字輸入完成後立即生效。
+
+### [s] 設定 hub-socket 流程
+
+1. 按 [s] → 進入文字輸入模式，預填 `detectHubSocket()` 偵測到的路徑
+2. 使用者輸入或修改路徑（必須含 `tsm-hub-` pattern，否則顯示錯誤不執行）
+3. Enter 確認 → SSH 到遠端執行 `tmux set-option -g @tsm_hub_socket <path>`（復用 `remote.SetHubSocket`）
+4. 同時設定 `@tsm_hub_self`（復用 `remote.SetHubSelf`）
+5. 成功 → 更新連線欄 hub-sock 狀態為 ✓
+6. 失敗 → 顯示錯誤訊息（如「SSH 執行失敗」）
+7. Esc → 取消輸入，不執行
+
+注意：輸入的是**遠端主機上的**路徑。無法在本機做 `os.Stat` 驗證。由 SSH 執行結果判斷成功與否。
 
 ## 新增 RPC
 
@@ -115,20 +127,41 @@ daemon 端 `HubManager.ReconnectHost(hostID)`：
 3. 重新啟動新的 `runRemote` goroutine（完整流程）
 4. 對 local 主機回傳 error
 
+**實作前提**：目前 `hubHost` struct 沒有 per-host cancel func。所有 remote goroutine 共用 `remoteCancel` context。需要將 `hubHost` 擴充為：
+
+```go
+type hubHost struct {
+    config       config.HostEntry
+    status       tsmv1.HostStatus
+    snapshot     *tsmv1.StateSnapshot
+    lastErr      string
+    connectedAt  time.Time           // 新增
+    cancel       context.CancelFunc  // 新增：per-host cancel
+    done         chan struct{}        // 新增：goroutine 結束信號
+    // ... 現有欄位
+}
+```
+
+`StartRemoteHosts` 為每台主機建立獨立的 child context（從共用 parent 派生），存入 `hubHost.cancel`。`ReconnectHost` 呼叫 `cancel()` + `<-done` + 重啟。
+
+### Spoke 端的 [t] 行為
+
+hub-socket 模式（spoke）下，[t] 的 RPC 透過 reverse tunnel 送到 hub daemon，由 hub 執行重連。spoke 本身不執行任何連線操作。任何連到 hub daemon 的客戶端都可觸發 `ReconnectHost`，不做額外權限限制（hub daemon 是受信任的內部服務）。
+
 ### HostState 擴充
 
-在現有 `HostState` proto 加兩個欄位：
+現有 `HostState` 已使用 field 1-7（host_id, name, color, status, error, snapshot, address）。新增：
 
 ```protobuf
 message HostState {
-  string host_id = 1;
-  // ... 現有欄位 ...
-  string last_error = 7;
+  // ... 現有 field 1-7 ...
   google.protobuf.Timestamp last_connected = 8;
 }
 ```
 
-資料來源：`HubManager` 的 `hubHost` struct 已有 `lastErr` 和連線時間，只需暴露到 proto。
+注意：現有 `error`（field 5）已可表達最後錯誤，不需另加 `last_error`。連線欄的「錯誤」直接讀取 `HostState.error`。
+
+`last_connected` 資料來源：`HubManager` 的 `hubHost` struct 新增 `connectedAt time.Time`，在 `watchRemote` 成功連線時記錄。
 
 ## [i] 面板變化
 
@@ -149,6 +182,44 @@ message HostState {
 - `hubReconnectSock` 機制（被 `ReconnectHost` RPC 取代）
 
 [i] 變成純粹的唯讀資訊面板。
+
+## Hub 模式與非 Hub 模式
+
+`hostFocusCol` 和三欄佈局同時適用兩種模式。差異：
+
+| 面向 | Hub 模式 | 非 Hub 模式（HostMgr） |
+|------|----------|----------------------|
+| 左欄資料 | `visibleHubHosts()` → `[]config.HostEntry` | `deps.HostMgr.Hosts()` → `[]*hostmgr.Host` |
+| tunnel 狀態 | `hubHostSnap.Hosts` 的 `HostStatus` | `hostmgr.Host.Status()` |
+| 錯誤訊息 | `HostState.error` | `hostmgr.Host.LastError()` |
+| hub-sock | 從 snapshot 或 SSH 查詢 | 從 snapshot 或 SSH 查詢（相同） |
+| 儲存方式 | `UpdateHostConfig` RPC | `persistHostsWithSync()` 本地 config |
+| [t] 重建 | `ReconnectHost` RPC | `ReconnectHost` RPC（相同 daemon） |
+
+中欄和右欄的渲染邏輯統一——接收 host name/address/enabled 等共通資訊，不直接操作 `hostmgr.Host` 或 `config.HostEntry`。由 `hostpicker.go` 負責從不同資料來源組裝共通結構，傳給中欄/右欄。
+
+## 連線欄的 loading 狀態
+
+[r] 檢測和 [t] 重建是非同步操作。進行中的 UI：
+
+```
+── mlab 連線 ──
+  SSH:       ⠋ 檢測中...        ← [r] 觸發後顯示 spinner
+  tmux:      ⠋ 檢測中...
+  tunnel:    ⠋ 重建中...        ← [t] 觸發後顯示 spinner
+```
+
+使用 `hostcheck.StatusChecking` 狀態控制。結果回來後自動更新。
+
+## 時間格式
+
+「最後連線」使用相對時間：
+- < 1 分鐘 → 「剛剛」
+- < 1 小時 → 「N 分鐘前」
+- < 24 小時 → 「N 小時前」
+- 其他 → 「N 天前」
+
+復用 `tmux.Session.RelativeTime()` 的現有格式函式。
 
 ## 檔案拆分
 
@@ -202,16 +273,19 @@ hostpicker.go
 - Esc 從任何位置收合
 - 展開時 dimmed 非焦點欄
 
-**hub_test.go：**
+**internal/daemon/hub_test.go：**
 - ReconnectHost remote → 成功
 - ReconnectHost local → error
 - ReconnectHost unknown → error
 
-**client_test.go：**
+**internal/client/client_test.go：**
 - ReconnectHost RPC 呼叫
 
-**state_test.go：**
-- HostState 包含 last_error 和 last_connected
+**internal/daemon/state_test.go：**
+- HostState 包含 last_connected
+
+**internal/ui/hostconnection_test.go：**
+- hub-socket 模式下 [t] 透過 RPC 送到 hub daemon
 
 ### 不測
 
