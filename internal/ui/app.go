@@ -128,7 +128,7 @@ type Model struct {
 	hubHosts         []config.HostEntry       // hub-socket 模式：從 hub daemon 取得的主機設定
 
 	// host picker 右側面板
-	hostPanelOpen    bool
+	hostFocusCol     int              // 0=左欄, 1=中欄(連線), 2=右欄(設定)
 	hostPanelCursor  int                       // 0=[x]啟用, 1=bar_bg, 2=bar_fg, 3=badge_bg, 4=badge_fg
 	hostPanelEditing bool                      // 正在編輯某個色彩欄位
 	hostPanelDraft   map[string]hostDraftEntry // hostID → draft copy of color edits

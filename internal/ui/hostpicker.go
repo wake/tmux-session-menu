@@ -46,8 +46,11 @@ func isValidHexColor(s string) bool {
 	return s == "" || hexColorRe.MatchString(s)
 }
 
+// hostPanelOpen 回傳右側面板是否展開（相容性方法）。
+func (m Model) hostPanelOpen() bool { return m.hostFocusCol > 0 }
+
 // HostPanelOpen 回傳右側面板是否開啟（供測試使用）。
-func (m Model) HostPanelOpen() bool { return m.hostPanelOpen }
+func (m Model) HostPanelOpen() bool { return m.hostFocusCol > 0 }
 
 // HostPanelEditing 回傳右側面板是否正在編輯色彩欄位（供測試使用）。
 func (m Model) HostPanelEditing() bool { return m.hostPanelEditing }
@@ -145,7 +148,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "ctrl+s" {
 		m.applyHostDrafts()
 		m.persistHostsWithSync()
-		m.hostPanelOpen = false
+		m.hostFocusCol = 0
 		m.hostPanelEditing = false
 		m.hostSavedMsg = "已儲存"
 		return m, m.applyCurrentStatusBarCmd()
@@ -157,7 +160,7 @@ func (m Model) updateHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// 右側面板開啟時
-	if m.hostPanelOpen {
+	if m.hostPanelOpen() {
 		return m.updateHostPanelOpen(msg, hosts)
 	}
 
@@ -176,7 +179,7 @@ func (m Model) updateHostPickerLeft(msg tea.KeyMsg, hosts []*hostmgr.Host) (tea.
 		if m.hostPickerCursor < len(hosts) {
 			h := hosts[m.hostPickerCursor]
 			m.ensureDraft(h.ID())
-			m.hostPanelOpen = true
+			m.hostFocusCol = 2
 			m.hostPanelCursor = 0
 			m.hostPanelEditing = false
 			m.hostSavedMsg = "" // 清除舊的 flash
@@ -258,7 +261,7 @@ func (m Model) updateHostPanelOpen(msg tea.KeyMsg, hosts []*hostmgr.Host) (tea.M
 	switch msg.String() {
 	case "esc", "left", "h":
 		// 關閉面板（不儲存）
-		m.hostPanelOpen = false
+		m.hostFocusCol = 0
 		return m, nil
 	case "j", "down":
 		if m.hostPanelCursor < hostPanelFieldCount-1 {
@@ -445,7 +448,7 @@ func (m Model) renderHostPicker() string {
 	leftPanel := m.renderHostPickerLeft(hosts)
 
 	// 若面板未開啟，直接回傳左側
-	if !m.hostPanelOpen {
+	if !m.hostPanelOpen() {
 		return leftPanel
 	}
 
@@ -466,7 +469,7 @@ func (m Model) renderHostPickerLeft(hosts []*hostmgr.Host) string {
 		cfg := h.Config()
 		cursor := "  "
 		if i == m.hostPickerCursor {
-			if m.hostPanelOpen {
+			if m.hostPanelOpen() {
 				cursor = dimStyle.Render("► ")
 			} else {
 				cursor = selectedStyle.Render("► ")
@@ -500,13 +503,13 @@ func (m Model) renderHostPickerLeft(hosts []*hostmgr.Host) string {
 		}
 
 		line := fmt.Sprintf("  %s%s %s%s", cursor, status, name, stateStr)
-		if i == m.hostPickerCursor && !m.hostPanelOpen {
+		if i == m.hostPickerCursor && !m.hostPanelOpen() {
 			line = m.cursorLine(line)
 		}
 		b.WriteString(line + "\n")
 	}
 
-	if m.hostPanelOpen {
+	if m.hostPanelOpen() {
 		b.WriteString(fmt.Sprintf("\n  %s\n",
 			dimStyle.Render("[Enter/→] 設定  [Ctrl+S] 儲存  [esc/h] 關閉")))
 	} else {
@@ -799,7 +802,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				drafts[k] = v
 			}
 			c := m.deps.Client
-			m.hostPanelOpen = false
+			m.hostFocusCol = 0
 			m.hostPanelEditing = false
 			m.hostSavedMsg = "已儲存"
 			return m, func() tea.Msg {
@@ -829,7 +832,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.applyHubHostDrafts()
 		m.persistHubHosts()
 		m.rebuildHubItems()
-		m.hostPanelOpen = false
+		m.hostFocusCol = 0
 		m.hostPanelEditing = false
 		m.hostSavedMsg = "已儲存"
 		return m, m.applyCurrentStatusBarCmd()
@@ -841,7 +844,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// 右側面板開啟時
-	if m.hostPanelOpen {
+	if m.hostPanelOpen() {
 		return m.updateHubHostPanelOpen(msg, hosts)
 	}
 
@@ -855,7 +858,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.hostPickerCursor < len(hosts) {
 			h := hosts[m.hostPickerCursor]
 			m.ensureDraftFromEntry(h)
-			m.hostPanelOpen = true
+			m.hostFocusCol = 2
 			m.hostPanelCursor = 0
 			m.hostPanelEditing = false
 			m.hostSavedMsg = ""
@@ -996,7 +999,7 @@ func (m Model) updateHubHostPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateHubHostPanelOpen(msg tea.KeyMsg, hosts []config.HostEntry) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "left", "h":
-		m.hostPanelOpen = false
+		m.hostFocusCol = 0
 		return m, nil
 	case "j", "down":
 		if m.hostPanelCursor < hostPanelFieldCount-1 {
@@ -1092,7 +1095,7 @@ func (m Model) renderHubHostPicker() string {
 
 	leftPanel := m.renderHubHostPickerLeft(hosts)
 
-	if !m.hostPanelOpen {
+	if !m.hostPanelOpen() {
 		return leftPanel
 	}
 
@@ -1109,7 +1112,7 @@ func (m Model) renderHubHostPickerLeft(hosts []config.HostEntry) string {
 	for i, h := range hosts {
 		cursor := "  "
 		if i == m.hostPickerCursor {
-			if m.hostPanelOpen {
+			if m.hostPanelOpen() {
 				cursor = dimStyle.Render("► ")
 			} else {
 				cursor = selectedStyle.Render("► ")
@@ -1160,13 +1163,13 @@ func (m Model) renderHubHostPickerLeft(hosts []config.HostEntry) string {
 		}
 
 		line := fmt.Sprintf("  %s%s %s%s", cursor, status, name, stateStr)
-		if i == m.hostPickerCursor && !m.hostPanelOpen {
+		if i == m.hostPickerCursor && !m.hostPanelOpen() {
 			line = m.cursorLine(line)
 		}
 		b.WriteString(line + "\n")
 	}
 
-	if m.hostPanelOpen {
+	if m.hostPanelOpen() {
 		b.WriteString(fmt.Sprintf("\n  %s\n",
 			dimStyle.Render("[Enter/→] 設定  [Ctrl+S] 儲存  [esc/h] 關閉")))
 	} else {
