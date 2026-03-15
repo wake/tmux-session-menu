@@ -282,6 +282,58 @@ func (m *HubManager) CancelPendingAttach() {
 	m.pending = nil
 }
 
+// ReconnectHost 強制重建指定主機的連線。
+// cancel 現有 goroutine → 等待結束 → 重新啟動。
+func (m *HubManager) ReconnectHost(ctx context.Context, hostID string) error {
+	m.mu.Lock()
+	h, ok := m.hosts[hostID]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("unknown host: %s", hostID)
+	}
+	if h.isLocal {
+		m.mu.Unlock()
+		return fmt.Errorf("local 主機不需要重連")
+	}
+	if m.dialFn == nil {
+		m.mu.Unlock()
+		return fmt.Errorf("dial function not configured")
+	}
+	dialFn := m.dialFn
+
+	// Cancel 現有 goroutine
+	if h.cancel != nil {
+		h.cancel()
+	}
+	done := h.done
+	m.mu.Unlock()
+
+	// 等待 goroutine 結束
+	if done != nil {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	// 重新啟動
+	m.mu.Lock()
+	cfg := h.config
+	hctx, hcancel := context.WithCancel(context.Background())
+	h.cancel = hcancel
+	h.done = make(chan struct{})
+	h.status = tsmv1.HostStatus_HOST_STATUS_CONNECTING
+	h.lastErr = ""
+	m.remoteWg.Add(1)
+	newDone := h.done
+	m.mu.Unlock()
+
+	go m.runRemote(hctx, newDone, cfg, dialFn)
+
+	return nil
+}
+
 // StartRemoteHosts 為每台已啟用的非 local 主機啟動連線 goroutine。
 func (m *HubManager) StartRemoteHosts(ctx context.Context) {
 	m.mu.Lock()
