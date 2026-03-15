@@ -60,6 +60,7 @@ type HubManager struct {
 type pendingAttach struct {
 	HostID      string
 	SessionName string
+	SetAt       time.Time // 設定時間，供 TTL 檢查
 }
 
 // hubHost 記錄單台主機的設定、狀態與最新快照。
@@ -240,17 +241,23 @@ func (m *HubManager) SetPendingAttach(hostID, sessionName string) error {
 	if _, ok := m.hosts[hostID]; !ok {
 		return fmt.Errorf("unknown host: %s", hostID)
 	}
-	m.pending = &pendingAttach{HostID: hostID, SessionName: sessionName}
+	m.pending = &pendingAttach{HostID: hostID, SessionName: sessionName, SetAt: time.Now()}
 	return nil
 }
 
+// pendingTTL 是 pending attach 的存活時間，超過後自動丟棄。
+const pendingTTL = 60 * time.Second
+
 // TakePendingAttach 取得並清除 pending attach（read-and-clear）。
-// 無 pending 時回傳 nil。
+// 無 pending 或已超過 TTL 時回傳 nil。
 func (m *HubManager) TakePendingAttach() *pendingAttach {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p := m.pending
 	m.pending = nil
+	if p != nil && time.Since(p.SetAt) > pendingTTL {
+		return nil
+	}
 	return p
 }
 

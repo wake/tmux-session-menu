@@ -364,3 +364,33 @@ func TestHubManager_PendingAttach_UnknownHost(t *testing.T) {
 	err := mgr.SetPendingAttach("nonexistent", "dev")
 	assert.Error(t, err)
 }
+
+func TestHubManager_PendingAttach_TTL_Expired(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	err := mgr.SetPendingAttach("mlab", "dev")
+	require.NoError(t, err)
+
+	// 手動設定 SetAt 為 61 秒前
+	mgr.mu.Lock()
+	mgr.pending.SetAt = time.Now().Add(-61 * time.Second)
+	mgr.mu.Unlock()
+
+	got := mgr.TakePendingAttach()
+	assert.Nil(t, got, "expired pending should be discarded")
+}
+
+func TestHubManager_PendingAttach_TTL_Fresh(t *testing.T) {
+	mhub := NewMultiHostHub()
+	mgr := NewHubManager(mhub)
+	mgr.AddHost(config.HostEntry{Name: "mlab", Address: "mlab", Enabled: true})
+
+	err := mgr.SetPendingAttach("mlab", "dev")
+	require.NoError(t, err)
+
+	got := mgr.TakePendingAttach()
+	require.NotNil(t, got, "fresh pending should be returned")
+	assert.Equal(t, "mlab", got.HostID)
+}
