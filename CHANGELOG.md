@@ -2,6 +2,11 @@
 
 本檔案記錄 tsm (tmux session menu) 各版本的功能更替。格式基於 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.45.1] - 2026-03-15
+
+### Fixed
+- Hub 模式群組開合失效：`toggleCollapse` 改走 `ProxyMutation` 路由到目標主機，新增 `MUTATION_TOGGLE_COLLAPSE` 類型
+
 ## [0.45.0] - 2026-03-15
 
 ### Added
