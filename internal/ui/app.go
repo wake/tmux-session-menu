@@ -163,6 +163,7 @@ type Model struct {
 
 	// 連線欄 hostcheck 相關
 	hostCheckResults map[string]hostcheck.Result // hostID → 最新檢測結果
+	hostConnEditing  bool                        // 連線欄是否在編輯 hub-socket 路徑
 }
 
 // NewModel 建立初始 Model。

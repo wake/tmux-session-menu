@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -80,6 +81,11 @@ func setHubSocketCmd(host, socketPath, selfID string) tea.Cmd {
 
 // updateHostConnection 處理中欄（連線設定）的按鍵。
 func (m Model) updateHostConnection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// hub-socket 路徑編輯模式
+	if m.hostConnEditing {
+		return m.updateHostConnEditing(msg)
+	}
+
 	switch msg.String() {
 	case "esc":
 		m.hostFocusCol = 0
@@ -92,13 +98,88 @@ func (m Model) updateHostConnection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.hostPanelCursor = 0
 		m.hostPanelEditing = false
 		return m, nil
+	case "r":
+		// 觸發 hostcheck
+		name, addr, _ := m.currentConnectionHost()
+		if name != "" {
+			return m, checkHostCmd(name, addr)
+		}
+		return m, nil
+	case "t":
+		// 重建 tunnel（僅遠端主機）
+		name, _, isLocal := m.currentConnectionHost()
+		if !isLocal && m.deps.Client != nil {
+			return m, reconnectHostCmd(m.deps.Client, name)
+		}
+		return m, nil
+	case "s":
+		// 設定 hub-socket 路徑（僅遠端主機）
+		_, _, isLocal := m.currentConnectionHost()
+		if !isLocal {
+			m.hostConnEditing = true
+			m.textInput.SetValue("")
+			m.textInput.Focus()
+			return m, nil
+		}
+		return m, nil
 	}
 	return m, nil
 }
 
 // updateHubHostConnection 處理 hub 模式中欄的按鍵。
+// 共用同一個邏輯（currentConnectionHost 已處理 hub/非 hub 模式）。
 func (m Model) updateHubHostConnection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.updateHostConnection(msg)
+}
+
+// updateHostConnEditing 處理 hub-socket 路徑編輯模式的按鍵。
+func (m Model) updateHostConnEditing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		sockPath := strings.TrimSpace(m.textInput.Value())
+		if sockPath == "" || !strings.Contains(filepath.Base(sockPath), "tsm-hub-") {
+			m.err = fmt.Errorf("必須是 hub socket（tsm-hub-*.sock）")
+			m.hostConnEditing = false
+			return m, nil
+		}
+		m.hostConnEditing = false
+		name, addr, _ := m.currentConnectionHost()
+		// 使用 address（SSH 目標）；若為空則用 name
+		target := addr
+		if target == "" {
+			target = name
+		}
+		return m, setHubSocketCmd(target, sockPath, name)
+	case "esc":
+		m.hostConnEditing = false
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
+// currentConnectionHost 回傳目前連線欄對應的主機資訊。
+func (m Model) currentConnectionHost() (name, addr string, isLocal bool) {
+	// Hub 模式
+	if m.deps.HubMode {
+		hosts := m.visibleHubHosts()
+		if m.hostPickerCursor < len(hosts) {
+			h := hosts[m.hostPickerCursor]
+			return h.Name, h.Address, h.IsLocal()
+		}
+		return "", "", true
+	}
+	// HostMgr 模式
+	if m.deps.HostMgr != nil {
+		hosts := m.visibleHosts()
+		if m.hostPickerCursor < len(hosts) {
+			cfg := hosts[m.hostPickerCursor].Config()
+			return cfg.Name, cfg.Address, cfg.IsLocal()
+		}
+	}
+	return "", "", true
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +235,14 @@ func (m Model) renderHostConnection(hostName string, hostAddr string, isLocal bo
 
 	b.WriteString("\n")
 
+	// hub-socket 路徑編輯模式
+	if m.hostConnEditing && m.hostFocusCol == 1 {
+		b.WriteString("  " + label("路徑:") + " " + m.textInput.View() + "\n")
+		b.WriteString("\n")
+	}
+
 	// 操作提示（只在焦點在中欄時顯示）
-	if m.hostFocusCol == 1 {
+	if m.hostFocusCol == 1 && !m.hostConnEditing {
 		hints := keyStyle.Render("[r]") + dimStyle.Render(" 檢測")
 		if !isLocal {
 			hints += "  " + keyStyle.Render("[t]") + dimStyle.Render(" 重建 tunnel")
